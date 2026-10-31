@@ -32,6 +32,7 @@ jobs:
       - run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      - run: npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
       - run: npm run android:prepare
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -61,6 +62,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # the version must grow with every release so installed apps can update themselves
+      - run: npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
       - run: npm run dist:desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -71,6 +74,8 @@ jobs:
             release/*.exe
             release/*.dmg
             release/*.AppImage
+            release/*.blockmap
+            release/latest*.yml
           if-no-files-found: error
 
   release:
@@ -102,6 +107,8 @@ jobs:
             | 🍎 macOS (Intel) | `Another-Dino-mac-x64.dmg` |
             | 🐧 Linux | `Another-Dino-linux-x86_64.AppImage` |
 
+            **Multiplayer LAN:** toți jucătorii pe aceeași rețea Wi-Fi sau pe hotspot-ul unui telefon → MULTIPLAYER → unul creează camera, ceilalți intră.
+
             **Android:** descarcă APK-ul, deschide-l și permite „instalare din surse necunoscute” când telefonul întreabă.
-            **Windows:** dacă apare „Windows protected your PC”, apasă *More info → Run anyway* (aplicația nu e semnată cu certificat plătit).
+            **Windows:** dacă apare „Windows protected your PC”, apasă *More info → Run anyway* (aplicația nu e semnată cu certificat plătit). La primul multiplayer, Windows întreabă de firewall: permite accesul în rețeaua privată. Versiunea cu instalare se actualizează singură.
             **macOS:** prima dată deschide aplicația cu click-dreapta → *Open*.

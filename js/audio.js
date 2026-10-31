@@ -43,4 +43,33 @@ export class Sfx {
     this.tone(200, 0.25, { to: 60, type: 'sawtooth', vol: 0.1 });
     this.tone(90, 0.3, { to: 40, type: 'square', vol: 0.06, delay: 0.05 });
   }
+
+  coin() {
+    this.tone(1046, 0.05, { vol: 0.05 });
+    this.tone(1568, 0.08, { vol: 0.05, delay: 0.05 });
+  }
+
+  powerup() {
+    [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.07, { vol: 0.06, delay: i * 0.06 }));
+  }
+
+  shieldBreak() {
+    this.tone(900, 0.2, { to: 200, type: 'triangle', vol: 0.12 });
+  }
+
+  boom() {
+    this.tone(120, 0.35, { to: 30, type: 'sawtooth', vol: 0.12 });
+  }
+
+  doubleJump() {
+    this.tone(620, 0.08, { to: 1240, vol: 0.06 });
+  }
+
+  beep(high = false) {
+    this.tone(high ? 1320 : 660, 0.12, { vol: 0.07 });
+  }
+
+  reward() {
+    [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.1, { vol: 0.06, delay: i * 0.08, type: 'triangle' }));
+  }
 }

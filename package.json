@@ -15,6 +15,9 @@
     "android:prepare": "npm run build && cap add android && node scripts/android-setup.mjs && cap sync android",
     "android:apk": "npm run android:prepare && cd android && ./gradlew assembleDebug"
   },
+  "dependencies": {
+    "electron-updater": "6.8.10"
+  },
   "devDependencies": {
     "@capacitor/android": "8.5.3",
     "@capacitor/assets": "3.0.5",
@@ -71,6 +74,13 @@
       "category": "Game",
       "icon": "build/icon.png",
       "syncDesktopName": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Nekorak",
+        "repo": "Another-Dino"
+      }
+    ]
   }
 }
