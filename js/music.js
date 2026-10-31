@@ -2,15 +2,24 @@
 // generated from a fixed seed, played with pulse/triangle/noise voices.
 import { rng } from './voxel.js';
 
+// one song per biome, in the same order as BIOMES
 const SONGS = [
   // desert: A minor pentatonic, laid back
   { root: 57, scale: [0, 3, 5, 7, 10], chords: [0, 3, 2, 4], bpm: 132, lead: 0.25 },
   // jungle: D dorian, bouncy
   { root: 50, scale: [0, 2, 3, 5, 7, 9, 10], chords: [0, 3, 4, 3], bpm: 144, lead: 0.125 },
+  // beach: F lydian, sunny
+  { root: 53, scale: [0, 2, 4, 6, 7, 9, 11], chords: [0, 1, 4, 0], bpm: 128, lead: 0.25 },
   // snow: E major, bells
   { root: 52, scale: [0, 2, 4, 7, 9], chords: [0, 3, 1, 4], bpm: 120, lead: 0.5 },
+  // cave: B minor, slow and echoing
+  { root: 47, scale: [0, 2, 3, 5, 7, 8, 10], chords: [0, 5, 3, 4], bpm: 104, lead: 0.5 },
+  // city: G minor, punchy
+  { root: 55, scale: [0, 2, 3, 5, 7, 8, 10], chords: [0, 5, 6, 4], bpm: 140, lead: 0.125 },
   // volcano: C phrygian, driving
   { root: 48, scale: [0, 1, 3, 5, 7, 8, 10], chords: [0, 1, 5, 1], bpm: 156, lead: 0.25 },
+  // space: C whole-tone, floating
+  { root: 48, scale: [0, 2, 4, 6, 8, 10], chords: [0, 2, 1, 3], bpm: 112, lead: 0.5 },
 ];
 
 const midiHz = (m) => 440 * 2 ** ((m - 69) / 12);

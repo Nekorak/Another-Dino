@@ -1,7 +1,7 @@
 // Desktop shell: serves dist/ over a private app:// scheme (ES modules and
 // localStorage need a real origin, which file:// does not give), provides UDP
 // sockets for LAN play and installs updates from GitHub Releases on request.
-const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, ipcMain, nativeImage, net, protocol, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const dgram = require('node:dgram');
 const fs = require('node:fs');
@@ -194,6 +194,29 @@ async function startUpdate(version) {
   }
   throw new Error('updates are not available for this build');
 }
+
+// "Share record": save the picture to Pictures/Another Dino, copy it to the
+// clipboard (ready to paste into a chat) and show it in the file manager.
+ipcMain.handle('share:image', (_e, dataUrl) => {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) throw new Error('bad image');
+  const img = nativeImage.createFromDataURL(dataUrl);
+  const dir = path.join(app.getPath('pictures'), 'Another Dino');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `another-dino-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`);
+  fs.writeFileSync(file, img.toPNG());
+  // both are conveniences: the picture is already saved if they fail
+  try {
+    clipboard.writeImage(img);
+  } catch {
+    /* no clipboard */
+  }
+  try {
+    shell.showItemInFolder(file);
+  } catch {
+    /* no file manager */
+  }
+  return file;
+});
 
 ipcMain.handle('app:info', () => ({ version: app.getVersion(), platform: process.platform, mode: updateMode }));
 ipcMain.handle('update:start', (_e, version) => startUpdate(version));

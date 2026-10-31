@@ -9,6 +9,7 @@ const SRC = 'android/app/src/main/java/io/github/nekorak/anotherdino';
 copyFileSync('native/android/MainActivity.java', `${SRC}/MainActivity.java`);
 copyFileSync('native/android/LanPlugin.java', `${SRC}/LanPlugin.java`);
 copyFileSync('native/android/UpdaterPlugin.java', `${SRC}/UpdaterPlugin.java`);
+copyFileSync('native/android/SharePlugin.java', `${SRC}/SharePlugin.java`);
 
 // LAN multiplayer needs to see Wi-Fi state and receive broadcast packets;
 // the in-game update button needs to hand the new APK to the installer.

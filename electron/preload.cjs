@@ -23,4 +23,5 @@ contextBridge.exposeInMainWorld('desktop', {
     },
   },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  shareImage: (dataUrl) => ipcRenderer.invoke('share:image', dataUrl),
 });

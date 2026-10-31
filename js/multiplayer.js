@@ -19,6 +19,7 @@ export class LanSession {
     this.timers = [];
     this.raceSeed = null;
     this.hostSeen = 0;
+    this.mode = 'race'; // race | sabotage | elimination
   }
 
   async open() {
@@ -113,7 +114,7 @@ export class LanSession {
 
   publishLobby() {
     this.lobby = [...this.players.values()].map(({ id, name, skin, hat }) => ({ id, name, skin, hat }));
-    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state });
+    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode });
     this.on.lobby(this.lobby, true);
   }
 
@@ -124,8 +125,8 @@ export class LanSession {
     this.raceSeed = (Math.random() * 2 ** 31) | 0;
     this.peerStates.clear();
     for (const id of this.players.keys()) this.peerStates.set(id, { id, sc: 0, y: 0, d: 0, a: 1 });
-    for (let i = 0; i < 3; i++) setTimeout(() => this.toPeers({ t: 'go', seed: this.raceSeed }), i * 150);
-    this.on.start(this.raceSeed);
+    for (let i = 0; i < 3; i++) setTimeout(() => this.toPeers({ t: 'go', seed: this.raceSeed, mode: this.mode }), i * 150);
+    this.on.start(this.raceSeed, this.mode);
     this.relay = setInterval(() => this.toPeers({ t: 'all', s: [...this.peerStates.values()] }), 66);
   }
 
@@ -156,6 +157,30 @@ export class LanSession {
       this.on.end(results);
       this.publishLobby();
     }
+  }
+
+  setMode(mode) {
+    if (this.role !== 'host') return;
+    this.mode = mode;
+    this.publishLobby();
+  }
+
+  // sabotage: drop a boulder on everyone else's track
+  attack() {
+    if (this.role === 'host') this.toPeers({ t: 'atk', by: this.me.id });
+    else this.toHost({ t: 'atk' });
+  }
+
+  emote(e) {
+    this.on.emote(this.me.id, e);
+    if (this.role === 'host') this.toPeers({ t: 'emo', by: this.me.id, e });
+    else this.toHost({ t: 'emo', e });
+  }
+
+  // host: pass a client's attack / emote on to the other players
+  relayFrom(m, from) {
+    const data = this.pack({ ...m, by: from });
+    for (const p of this.players.values()) if (p.addr && p.id !== from) this.t.send(p.addr, p.port, data);
   }
 
   others() {
@@ -191,6 +216,13 @@ export class LanSession {
       } else if (m.t === 's' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
         if (this.state === 'race') this.peerStates.set(m.from, { ...m.s, id: m.from });
+      } else if (m.t === 'atk' && this.players.has(m.from) && this.state === 'race') {
+        this.relayFrom({ t: 'atk' }, m.from);
+        this.on.attack(m.from);
+      } else if (m.t === 'emo' && this.players.has(m.from)) {
+        const e = String(m.e).slice(0, 8);
+        this.relayFrom({ t: 'emo', e }, m.from);
+        this.on.emote(m.from, e);
       } else if (m.t === 'bye') {
         this.players.delete(m.from);
         this.peerStates.delete(m.from);
@@ -204,15 +236,17 @@ export class LanSession {
       switch (m.t) {
         case 'lobby':
           this.lobby = m.players;
+          this.mode = m.mode || 'race';
           if (m.st === 'lobby' && this.state === 'race') this.state = 'lobby';
           this.on.lobby(m.players, false);
           break;
         case 'go':
           if (this.raceSeed !== m.seed) {
             this.raceSeed = m.seed;
+            this.mode = m.mode || 'race';
             this.state = 'race';
             this.peerStates.clear();
-            this.on.start(m.seed);
+            this.on.start(m.seed, this.mode);
           }
           break;
         case 'all':
@@ -225,6 +259,12 @@ export class LanSession {
             this.state = 'lobby';
             this.on.end(m.r);
           }
+          break;
+        case 'atk':
+          if (m.by !== this.me.id) this.on.attack(m.by);
+          break;
+        case 'emo':
+          if (m.by !== this.me.id) this.on.emote(m.by, String(m.e).slice(0, 8));
           break;
         case 'close':
           this.role = 'idle';
