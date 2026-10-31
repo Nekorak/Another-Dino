@@ -1,18 +1,31 @@
-// Voxel models. Everything is built once and the geometries are reused.
+// Voxel models for the dino (skins + hats), pterodactyl, coins and power-ups.
+// Geometries are built once and reused.
 import * as THREE from 'three';
-import { VOX, VoxelSet, voxelMesh, buildGeometry, voxelMaterial, extrude, rng } from './voxel.js';
+import { VOX, VoxelSet, buildGeometry, voxelMaterial, extrude } from './voxel.js';
 
-const C = {
-  body: '#5fae3e',
-  bodyDark: '#467f2c',
-  belly: '#cfe39a',
-  eye: '#ffffff',
-  pupil: '#1b1b1b',
-  mouth: '#2b4a1c',
-  foot: '#3b6b26',
+// ---------------------------------------------------------------- skins
+export const SKINS = {
+  classic: { price: 0, body: '#5fae3e', dark: '#467f2c', belly: '#cfe39a', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#2b4a1c', foot: '#3b6b26' },
+  red: { price: 100, body: '#d9483b', dark: '#a8322a', belly: '#f6c2ae', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#5a1a14', foot: '#86271f' },
+  blue: { price: 150, body: '#3f7fd9', dark: '#2c5ea6', belly: '#c4e2ff', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#16305a', foot: '#24508e' },
+  pink: { price: 200, body: '#f27db5', dark: '#c45a8d', belly: '#ffe0ef', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6e2148', foot: '#a8457a' },
+  gold: { price: 500, body: '#e8b923', dark: '#b38b12', belly: '#fff1a8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6e520a', foot: '#9a760c', shiny: true },
+  shadow: { price: 600, body: '#2d2740', dark: '#1b1728', belly: '#5d4c85', eye: '#d58bff', pupil: '#ffffff', mouth: '#120f1c', foot: '#16121f' },
+  skeleton: { price: 800, body: '#ebe5d2', dark: '#b9b09a', belly: '#d2c9b1', eye: '#1b1b1b', pupil: '#e04040', mouth: '#3a3a3a', foot: '#a89f88', pattern: 'ribs' },
+  robot: { price: 1000, body: '#a9b4c0', dark: '#6d7884', belly: '#d3dbe3', eye: '#ff3b30', pupil: '#ffd2cf', mouth: '#38404a', foot: '#56606b', pattern: 'panels' },
 };
 
-// ---------------------------------------------------------------- Dino
+export const HATS = {
+  none: { price: 0 },
+  party: { price: 100 },
+  cowboy: { price: 150 },
+  shades: { price: 200 },
+  tophat: { price: 250 },
+  headphones: { price: 300 },
+  crown: { price: 750 },
+};
+
+// ---------------------------------------------------------------- dino grids
 // Facing +x. 'A' arm (only on the outer layers), 'B' belly, 'W'/'K' eye, 'M' mouth.
 const DINO_STAND = [
   '             GGGGGGGG ',
@@ -50,36 +63,41 @@ const DINO_DUCK = [
   '        GGGGGGGGGG            ',
 ];
 
-const LEG = [
-  'GGG  ',
-  'GGG  ',
-  ' GG  ',
-  ' GG  ',
-  ' FFFF',
-];
-
+const LEG = ['GGG  ', 'GGG  ', ' GG  ', ' GG  ', ' FFFF'];
 const LEG_H = LEG.length;
 
-function dinoColor(ch, z, half) {
+// Where hats sit (voxel units, relative to the dino origin): top-centre of the head.
+const HEAD = {
+  stand: { x: 6, y: LEG_H + 20, eyeX: 4 },
+  duck: { x: 10, y: LEG_H + 10, eyeX: 8 },
+};
+
+function skinColor(s, ch, x, y, z, half) {
+  let c;
   switch (ch) {
     case 'A':
-      return z === -3 || z === 3 ? C.body : null;
+      return z === -3 || z === 3 ? s.body : null;
     case 'B':
-      return Math.abs(z) <= 1 ? C.belly : C.body;
+      c = Math.abs(z) <= 1 ? s.belly : s.body;
+      if (s.pattern === 'ribs' && c === s.belly && y % 2 === 0) c = s.dark;
+      return c;
     case 'W':
-      return z === -half || z === half ? C.eye : C.body;
+      return z === -half || z === half ? s.eye : s.body;
     case 'K':
-      return z === -half || z === half ? C.pupil : C.body;
+      return z === -half || z === half ? s.pupil : s.body;
     case 'M':
-      return C.mouth;
+      return s.mouth;
     case 'F':
-      return C.foot;
+      return s.foot;
     default:
-      return C.body;
+      c = s.body;
+      if (s.pattern === 'panels' && ((x + y) % 5 === 0 || y % 6 === 0)) c = s.dark;
+      if (s.pattern === 'ribs' && x > 3 && x < 12 && y > 9 && y < 18 && x % 2 === 0) c = s.dark;
+      return c;
   }
 }
 
-function dinoBody(grid, headFromX, headRows, originX, deadEye) {
+function bodyVoxels(grid, headFromX, headRows, skin) {
   const vs = new VoxelSet();
   const H = grid.length;
   const half = (x, r) => (r <= headRows && x >= headFromX ? 2 : x <= 2 ? 1 : x <= 5 ? 2 : 3);
@@ -88,148 +106,195 @@ function dinoBody(grid, headFromX, headRows, originX, deadEye) {
       const h = half(x, H - 1 - y);
       return [-h, h];
     },
-    color: (ch, x, y, z) => dinoColor(ch, z, half(x, H - 1 - y)),
+    color: (ch, x, y, z) => skinColor(skin, ch, x, y + LEG_H, z, half(x, H - 1 - y)),
     dy: LEG_H,
   });
-  // Spine ridge: darken the top-most voxel of each column on the centre line.
+  // darker ridge along the spine
   for (const v of vs.map.values()) {
-    if (v.z === 0 && !vs.has(v.x, v.y + 1, v.z) && v.color === C.body) v.color = C.bodyDark;
+    if (v.z === 0 && !vs.has(v.x, v.y + 1, v.z) && v.color === skin.body) v.color = skin.dark;
   }
-  const body = voxelMesh(vs, [originX, 0, 0.5]);
-
-  // "X" eyes shown on game over.
-  const dead = new VoxelSet();
-  const [ex, ey] = deadEye;
-  const X = [[0, 2], [2, 2], [1, 1], [0, 0], [2, 0]];
-  for (const z of [-3, 3]) for (const [a, b] of X) dead.set(ex + a, ey + b, z, '#1b1b1b');
-  const deadMesh = voxelMesh(dead, [originX, 0, 0.5], { jitter: 0 });
-  deadMesh.visible = false;
-  return { body, deadMesh };
+  return vs;
 }
 
-function legGeometry(zFrom, zTo) {
+function deadEyeGeometry(ex, ey, originX) {
+  const dead = new VoxelSet();
+  const X = [[0, 2], [2, 2], [1, 1], [0, 0], [2, 0]];
+  for (const z of [-3, 3]) for (const [a, b] of X) dead.set(ex + a, ey + b, z, '#1b1b1b');
+  return buildGeometry(dead, [originX, 0, 0.5], { jitter: 0 });
+}
+
+function legGeometry(skin, z0, z1) {
   const vs = new VoxelSet();
-  extrude(vs, LEG, null, {
-    depth: () => [zFrom, zTo],
-    color: (ch) => (ch === 'F' ? C.foot : C.body),
-  });
+  extrude(vs, LEG, null, { depth: () => [z0, z1], color: (ch) => (ch === 'F' ? skin.foot : skin.body) });
   return buildGeometry(vs, [1, LEG_H, 0.5]);
 }
 
-export function createDino() {
+// ---------------------------------------------------------------- hats
+// Built around the top-centre of the head (x=0 centre, y=0 top surface, z centred).
+function hatVoxels(id) {
+  const vs = new VoxelSet();
+  const box = (x0, x1, y0, y1, z0, z1, c) => {
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) vs.set(x, y, z, typeof c === 'function' ? c(x, y, z) : c);
+  };
+  switch (id) {
+    case 'party':
+      for (let i = 0; i < 6; i++) {
+        const r = 2 - Math.floor(i / 2);
+        box(-1 - r, -1 + r, i, i, -r, r, i % 2 ? '#ffd23f' : '#ff4f9a');
+      }
+      vs.set(-1, 6, 0, '#4fd1ff');
+      break;
+    case 'cowboy':
+      box(-5, 3, 0, 0, -4, 4, '#8a5a2b');
+      box(-3, 1, 1, 3, -2, 2, '#a06a35');
+      box(-3, 1, 1, 1, -2, 2, '#3b2412');
+      box(-2, 0, 3, 3, -1, 1, '#8a5a2b');
+      break;
+    case 'tophat':
+      box(-4, 2, 0, 0, -3, 3, '#1f1f24');
+      box(-3, 1, 1, 6, -2, 2, '#2a2a31');
+      box(-3, 1, 1, 1, -2, 2, '#c8303a');
+      break;
+    case 'crown':
+      box(-3, 2, 0, 1, -2, 2, '#f2c230');
+      for (const [x, z] of [[-3, -2], [2, -2], [-3, 2], [2, 2], [0, -2], [0, 2], [-3, 0], [2, 0]]) vs.set(x, 2, z, '#ffd94f');
+      vs.set(0, 1, -3, '#e0304a');
+      vs.set(0, 1, 3, '#3a7bff');
+      vs.set(3, 1, 0, '#2ec27e');
+      break;
+    case 'headphones':
+      box(-3, -2, 0, 0, -4, 4, '#2b2b33');
+      box(-4, -1, -5, -2, -4, -4, '#e04848');
+      box(-4, -1, -5, -2, 4, 4, '#e04848');
+      box(-3, -2, -2, -1, -4, -4, '#2b2b33');
+      box(-3, -2, -2, -1, 4, 4, '#2b2b33');
+      break;
+    case 'shades':
+      box(-4, -1, -4, -3, -3, -3, (x, y) => (x === -1 && y === -3 ? '#8fd3ff' : '#111114'));
+      box(-4, -1, -4, -3, 3, 3, (x, y) => (x === -1 && y === -3 ? '#8fd3ff' : '#111114'));
+      box(-6, -6, -3, -3, -3, 3, '#111114');
+      box(-5, -5, -3, -3, -3, -3, '#111114');
+      box(-5, -5, -3, -3, 3, 3, '#111114');
+      break;
+    default:
+      return null;
+  }
+  return vs;
+}
+
+// Front view of a hat as pixels, for the shop cards.
+export function hatPixels(id) {
+  const vs = hatVoxels(id);
+  if (!vs) return [];
+  const best = new Map();
+  for (const v of vs.map.values()) {
+    const k = v.x + ',' + v.y;
+    const b = best.get(k);
+    if (!b || v.z > b.z) best.set(k, v);
+  }
+  return [...best.values()];
+}
+
+const hatCache = new Map();
+function hatGeometry(id) {
+  if (!hatCache.has(id)) {
+    const vs = hatVoxels(id);
+    hatCache.set(id, vs ? buildGeometry(vs, [0, 0, 0.5]) : null);
+  }
+  return hatCache.get(id);
+}
+
+// ---------------------------------------------------------------- dino
+const dinoCache = new Map();
+function dinoGeometries(skinId) {
+  if (dinoCache.has(skinId)) return dinoCache.get(skinId);
+  const skin = SKINS[skinId] || SKINS.classic;
+  const standVs = bodyVoxels(DINO_STAND, 12, 8, skin);
+  const duckVs = bodyVoxels(DINO_DUCK, 20, 5, skin);
+  const g = {
+    stand: buildGeometry(standVs, [11, 0, 0.5]),
+    duck: buildGeometry(duckVs, [15, 0, 0.5]),
+    standDead: deadEyeGeometry(13, LEG_H + 20 - 1 - 4, 11),
+    duckDead: deadEyeGeometry(21, LEG_H + 10 - 1 - 4, 15),
+    legs: [legGeometry(skin, -2, -1), legGeometry(skin, 1, 2)],
+    // coarse voxel list used for the shatter effect
+    pieces: piecesFrom(standVs, [11, 0, 0.5]),
+  };
+  dinoCache.set(skinId, g);
+  return g;
+}
+
+function piecesFrom(vs, origin) {
+  const groups = new Map();
+  for (const v of vs.map.values()) {
+    const k = `${v.x >> 1},${v.y >> 1},${v.z >> 1}`;
+    if (!groups.has(k)) groups.set(k, { x: 0, y: 0, z: 0, n: 0, color: v.color });
+    const g = groups.get(k);
+    g.x += v.x;
+    g.y += v.y;
+    g.z += v.z;
+    g.n++;
+  }
+  return [...groups.values()].map((g) => ({
+    x: (g.x / g.n + 0.5 - origin[0]) * VOX,
+    y: (g.y / g.n + 0.5 - origin[1]) * VOX,
+    z: (g.z / g.n + 0.5 - origin[2]) * VOX,
+    color: g.color,
+  }));
+}
+
+export function createDino(skinId = 'classic', hatId = 'none', material = voxelMaterial) {
+  const g = dinoGeometries(skinId);
+  const mk = (geo) => {
+    const m = new THREE.Mesh(geo, material);
+    m.castShadow = material === voxelMaterial;
+    m.receiveShadow = material === voxelMaterial;
+    return m;
+  };
   const root = new THREE.Group();
-
-  // Standing: origin column 11, eye at cols 14-15 / rows 2-3.
   const stand = new THREE.Group();
-  const s = dinoBody(DINO_STAND, 12, 8, 11, [13, LEG_H + 20 - 1 - 4]);
-  stand.add(s.body, s.deadMesh);
-
-  // Ducking: origin column 15 so the legs stay at the same spot.
   const duck = new THREE.Group();
-  const d = dinoBody(DINO_DUCK, 20, 5, 15, [21, LEG_H + 10 - 1 - 4]);
-  duck.add(d.body, d.deadMesh);
+  const standDead = mk(g.standDead);
+  const duckDead = mk(g.duckDead);
+  standDead.visible = duckDead.visible = false;
+  stand.add(mk(g.stand), standDead);
+  duck.add(mk(g.duck), duckDead);
   duck.visible = false;
 
-  const legs = [];
-  for (const [z0, z1] of [[-2, -1], [1, 2]]) {
-    const leg = new THREE.Mesh(legGeometry(z0, z1), voxelMaterial);
-    leg.castShadow = leg.receiveShadow = true;
+  const hat = hatGeometry(hatId);
+  if (hat) {
+    for (const [grp, h] of [[stand, HEAD.stand], [duck, HEAD.duck]]) {
+      const m = mk(hat);
+      m.position.set(h.x * VOX, h.y * VOX, 0);
+      grp.add(m);
+    }
+  }
+
+  const legs = g.legs.map((geo) => {
+    const leg = mk(geo);
     leg.position.set(-4 * VOX, LEG_H * VOX, 0);
     root.add(leg);
-    legs.push(leg);
-  }
-
+    return leg;
+  });
   root.add(stand, duck);
-  return {
-    root,
-    stand,
-    duck,
-    legs,
-    deadMeshes: [s.deadMesh, d.deadMesh],
-    // Hitboxes in voxel units, relative to the origin (feet, centre).
-    boxes: {
-      stand: [
-        { x0: 2, x1: 10, y0: 16, y1: 24 },
-        { x0: -6, x1: 6, y0: 5, y1: 15 },
-        { x0: -5, x1: 0, y0: 0.5, y1: 5 },
-      ],
-      duck: [
-        { x0: 6, x1: 14, y0: 9, y1: 14 },
-        { x0: -10, x1: 6, y0: 5, y1: 10 },
-        { x0: -5, x1: 0, y0: 0.5, y1: 5 },
-      ],
-    },
-  };
+  return { root, stand, duck, legs, deadMeshes: [standDead, duckDead], pieces: g.pieces, skin: SKINS[skinId] || SKINS.classic };
 }
 
-// ------------------------------------------------------------ Cactus
-const CACTUS = ['#3f8f3a', '#2f6e2c', '#56a84a'];
+// Hitboxes in voxel units, relative to the origin (feet, centre).
+export const DINO_BOXES = {
+  stand: [
+    { x0: 2, x1: 10, y0: 16, y1: 24 },
+    { x0: -6, x1: 6, y0: 5, y1: 15 },
+    { x0: -5, x1: 0, y0: 0.5, y1: 5 },
+  ],
+  duck: [
+    { x0: 6, x1: 14, y0: 9, y1: 14 },
+    { x0: -10, x1: 6, y0: 5, y1: 10 },
+    { x0: -5, x1: 0, y0: 0.5, y1: 5 },
+  ],
+};
 
-function cactusVoxels(r, H, armChance) {
-  const vs = new VoxelSet();
-  let xMin = -1;
-  let xMax = 1;
-  let armTop = 0; // top of arms that stick out along the run direction
-  const put = (x, y, z) => {
-    const rib = (x + z + 100) % 2 === 0;
-    let c = rib ? CACTUS[0] : CACTUS[1];
-    if (r() < 0.05) c = CACTUS[2];
-    vs.set(x, y, z, c);
-    xMin = Math.min(xMin, x);
-    xMax = Math.max(xMax, x);
-    if (Math.abs(x) > 1) armTop = Math.max(armTop, y + 1);
-  };
-  for (let y = 0; y < H; y++) {
-    for (let x = -1; x <= 1; x++)
-      for (let z = -1; z <= 1; z++) {
-        if (y === H - 1 && x !== 0 && z !== 0) continue; // rounded top
-        put(x, y, z);
-      }
-  }
-  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const used = new Set();
-  const nArms = H > 8 ? (r() < armChance ? 1 + (r() < 0.5 ? 1 : 0) : 0) : 0;
-  for (let i = 0; i < nArms; i++) {
-    let di = Math.floor(r() * 4);
-    while (used.has(di)) di = (di + 1) % 4;
-    used.add(di);
-    const [ax, az] = dirs[di];
-    const ya = Math.floor(H * (0.3 + r() * 0.25));
-    const up = 2 + Math.floor(r() * Math.max(1, H * 0.35));
-    // Horizontal stub out of the trunk (2x2 section)...
-    for (let d = 2; d <= 3; d++)
-      for (let t = 0; t <= 1; t++)
-        for (let k = 0; k <= 1; k++) put(ax !== 0 ? ax * d : t, ya + k, az !== 0 ? az * d : t);
-    // ...then the arm turns upwards.
-    for (let y = ya; y < ya + up; y++)
-      for (let t = 0; t <= 1; t++)
-        for (let s = 0; s <= 1; s++) {
-          const x = ax !== 0 ? ax * (3 + s) : t;
-          const z = az !== 0 ? az * (3 + s) : t;
-          if (y === ya + up - 1 && s === 1 && t === 1) continue;
-          put(x, y, z);
-        }
-  }
-  if (r() < 0.35) vs.set(0, H, 0, r() < 0.5 ? '#ff6fa8' : '#ffd23f');
-  return { vs, xMin, xMax, armTop };
-}
-
-const cactusCache = { small: [], large: [] };
-
-export function cactusGeometry(size, index) {
-  const list = cactusCache[size];
-  if (!list[index]) {
-    const r = rng(1000 + index * 77 + (size === 'large' ? 5000 : 0));
-    const H = size === 'large' ? 15 + Math.floor(r() * 6) : 8 + Math.floor(r() * 4);
-    const { vs, xMin, xMax, armTop } = cactusVoxels(r, H, size === 'large' ? 0.9 : 0.5);
-    list[index] = { geo: buildGeometry(vs, [0.5, 0, 0.5]), H, xMin, xMax, armTop };
-  }
-  return list[index];
-}
-
-export const CACTUS_VARIANTS = 6;
-
-// ------------------------------------------------------------ Pterodactyl
+// ---------------------------------------------------------------- pterodactyl
 const PTERO = [
   '   PPPPPP          ',
   '  PPPPP            ',
@@ -247,15 +312,9 @@ function pteroGeometries() {
   const vs = new VoxelSet();
   const H = PTERO.length;
   extrude(vs, PTERO, PC, {
-    depth: (ch, x, y) => {
-      const r = H - 1 - y;
-      if (ch === 'O' || r === 0 || x >= 17) return [0, 0];
-      return [-1, 1];
-    },
+    depth: (ch, x, y) => (ch === 'O' || H - 1 - y === 0 || x >= 17 ? [0, 0] : [-1, 1]),
     color: (ch, x, y, z) => (ch === 'W' ? (Math.abs(z) === 1 ? PC.W : PC.P) : PC[ch]),
   });
-  const body = buildGeometry(vs, [9, 0, 0.5]);
-
   const wing = (sign) => {
     const w = new VoxelSet();
     for (let d = 0; d <= 8; d++) {
@@ -265,7 +324,7 @@ function pteroGeometries() {
     }
     return buildGeometry(w, [9, 0, sign > 0 ? 0 : 1]);
   };
-  pteroGeo = { body, right: wing(1), left: wing(-1) };
+  pteroGeo = { body: buildGeometry(vs, [9, 0, 0.5]), right: wing(1), left: wing(-1) };
   return pteroGeo;
 }
 
@@ -288,87 +347,53 @@ export function createPtero() {
   return { root, wings, box: { x0: -8, x1: 8, y0: 1, y1: 6 } };
 }
 
-// ------------------------------------------------------------ Scenery
-export function rockGeometry(seed) {
-  const r = rng(seed);
+// ---------------------------------------------------------------- coins & power-ups
+export const glowMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+
+let boneGeo = null;
+export function boneGeometry() {
+  if (boneGeo) return boneGeo;
   const vs = new VoxelSet();
-  const cols = ['#9c8b74', '#8a7a65', '#b3a189'];
-  const n = 1 + Math.floor(r() * 3);
-  for (let i = 0; i < n; i++) {
-    const cx = Math.floor((r() - 0.5) * 4);
-    const cz = Math.floor((r() - 0.5) * 4);
-    const rad = 1.2 + r() * 2;
-    for (let x = -4; x <= 4; x++)
-      for (let y = 0; y <= 4; y++)
-        for (let z = -4; z <= 4; z++) {
-          const dx = x - cx;
-          const dz = z - cz;
-          if (dx * dx + y * y * 1.8 + dz * dz <= rad * rad) vs.set(x, y, z, cols[Math.floor(r() * 3)]);
-        }
-  }
-  return buildGeometry(vs, [0.5, 0, 0.5]);
+  const W = '#fbf6e6';
+  const S = '#ded5bb';
+  // a cartoon bone: shaft with two round knobs at each end
+  for (let x = -3; x <= 3; x++) for (let z = 0; z <= 1; z++) vs.set(x, 0, z, W);
+  for (const x of [-5, -4, 4, 5])
+    for (const y of [-1, 1])
+      for (let z = 0; z <= 1; z++) vs.set(x, y, z, Math.abs(x) === 5 ? S : W);
+  for (const x of [-4, 4]) for (let z = 0; z <= 1; z++) vs.set(x, 0, z, W);
+  boneGeo = buildGeometry(vs, [0.5, 0.5, 1], { jitter: 0.02, scale: VOX * 1.3 });
+  return boneGeo;
 }
 
-export function bushGeometry(seed) {
-  const r = rng(seed);
+export const POWERUPS = ['shield', 'magnet', 'slow', 'double'];
+export const POWERUP_COLOR = { shield: '#4fc3ff', magnet: '#ff5a5a', slow: '#b388ff', double: '#ffd23f' };
+
+const puCache = new Map();
+export function powerupGeometry(type) {
+  if (puCache.has(type)) return puCache.get(type);
   const vs = new VoxelSet();
-  const cols = ['#a57c45', '#8d6838', '#c29455'];
-  for (let i = 0; i < 6; i++) {
-    let x = 0;
-    let z = 0;
-    const ax = (r() - 0.5) * 1.6;
-    const az = (r() - 0.5) * 1.6;
-    for (let y = 0; y < 3 + r() * 3; y++) {
-      vs.set(Math.round(x), y, Math.round(z), cols[Math.floor(r() * 3)]);
-      x += ax;
-      z += az;
+  const put = (x, y, c) => {
+    vs.set(x, y, 0, c);
+    vs.set(x, y, 1, c);
+  };
+  const c = POWERUP_COLOR[type];
+  const art = {
+    shield: [' ##### ', '#######', '##+#+##', '#######', ' ##### ', '  ###  ', '   #   '],
+    magnet: ['##   ##', '##   ##', '##   ##', '##   ##', '##   ##', '#######', ' ##### '],
+    slow: ['#######', ' ##### ', '  ###  ', '   #   ', '  ###  ', ' ##### ', '#######'],
+    double: ['   #   ', '  ###  ', ' ##### ', '   #   ', '  ###  ', ' ##### ', '#######'],
+  }[type];
+  art.forEach((row, r) => {
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] === ' ') continue;
+      let col = c;
+      if (row[x] === '+') col = '#ffffff';
+      if (type === 'magnet' && r === 0) col = '#e8eef3';
+      put(x, art.length - 1 - r, col);
     }
-  }
-  return buildGeometry(vs, [0.5, 0, 0.5]);
-}
-
-const MESA = ['#c96f4a', '#b65f3e', '#dc8b5f', '#a9553a'];
-export function mesaGeometry(seed) {
-  const r = rng(seed);
-  const vs = new VoxelSet();
-  const W = 8 + Math.floor(r() * 10);
-  const D = 4 + Math.floor(r() * 4);
-  const H = 4 + Math.floor(r() * 7);
-  for (let x = -W; x <= W; x++)
-    for (let z = -D; z <= D; z++) {
-      const edge = Math.max(Math.abs(x) - W + 3, Math.abs(z) - D + 2, 0);
-      const h = H - edge * (1 + Math.floor(r() * 2)) - (r() < 0.15 ? 1 : 0);
-      for (let y = 0; y < h; y++) vs.set(x, y, z, MESA[(y + (r() < 0.1 ? 1 : 0)) % MESA.length]);
-    }
-  return buildGeometry(vs, [0.5, 0, 0.5], { scale: VOX * 5 });
-}
-
-export function cloudGeometry(seed) {
-  const r = rng(seed);
-  const vs = new VoxelSet();
-  const n = 3 + Math.floor(r() * 3);
-  for (let i = 0; i < n; i++) {
-    const cx = Math.floor((r() - 0.5) * 10);
-    const w = 3 + Math.floor(r() * 4);
-    const h = 1 + Math.floor(r() * 3);
-    const d = 2 + Math.floor(r() * 3);
-    for (let x = cx - w; x <= cx + w; x++)
-      for (let y = 0; y < h; y++) for (let z = -d; z <= d; z++) vs.set(x, y, z, '#ffffff');
-  }
-  return buildGeometry(vs, [0.5, 0, 0.5], { scale: VOX * 4, jitter: 0.02 });
-}
-
-export function moonMesh() {
-  const vs = new VoxelSet();
-  for (let x = -6; x <= 6; x++)
-    for (let y = -6; y <= 6; y++) {
-      const inA = x * x + y * y <= 36;
-      const inB = (x - 3) * (x - 3) + (y - 1) * (y - 1) <= 26;
-      if (inA && !inB) vs.set(x, y, 0, (x + y) % 5 === 0 ? '#e9e4b4' : '#fbf8dc');
-    }
-  const m = new THREE.Mesh(
-    buildGeometry(vs, [0.5, 0.5, 0.5], { scale: VOX * 6, jitter: 0.02 }),
-    new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, transparent: true }),
-  );
-  return m;
+  });
+  const geo = buildGeometry(vs, [3.5, 3.5, 1], { jitter: 0.03 });
+  puCache.set(type, geo);
+  return geo;
 }
