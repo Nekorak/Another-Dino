@@ -1,0 +1,8 @@
+{
+  "appId": "io.github.nekorak.anotherdino",
+  "appName": "Another Dino",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#9fdcff"
+  }
+}

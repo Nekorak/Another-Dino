@@ -41,7 +41,7 @@ const TXT = RO
 
 // ------------------------------------------------------------------ tuning
 const START_SPEED = 13;
-const MAX_SPEED = 32;
+const MAX_SPEED = 28;
 const ACCEL = 0.16;
 const GRAVITY = 80;
 const JUMP_V = 25;
@@ -78,7 +78,16 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 // ------------------------------------------------------------------ renderer
 const canvas = $('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+} catch (err) {
+  $('start-msg').textContent = RO
+    ? 'Dispozitivul nu suportă WebGL, de care jocul are nevoie.'
+    : 'This device does not support WebGL, which the game needs.';
+  $('start-msg').classList.remove('blink');
+  throw err;
+}
 renderer.setPixelRatio(1);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.BasicShadowMap; // hard, pixelated shadows
@@ -595,6 +604,11 @@ function updateCamera(dt) {
   const t = clamp((camera.aspect - 0.7) / (1.35 - 0.7), 0, 1); // 0 = portrait, 1 = landscape
   camPos.lerpVectors(RIG.tall.pos, RIG.wide.pos, t);
   camLook.lerpVectors(RIG.tall.look, RIG.wide.look, t);
+  // On less wide screens (16:9 monitors) slide the side view so the dino stays fully in frame.
+  const halfW = Math.tan(THREE.MathUtils.degToRad(RIG.wide.fov / 2)) * camera.aspect * 12.6;
+  const dx = Math.min(0, halfW * 0.62 - RIG.wide.look.x) * t;
+  camPos.x += dx;
+  camLook.x += dx;
   camLook.y += player.y * 0.25;
   camPos.y += player.y * 0.12;
   const speedT = (speed - START_SPEED) / (MAX_SPEED - START_SPEED);

@@ -1,5 +1,5 @@
 // Offline support: serve from cache, refresh the cache in the background.
-const CACHE = 'another-dino-v1';
+const CACHE = 'another-dino-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,8 @@ const ASSETS = [
   './js/models.js',
   './js/audio.js',
   './vendor/three.module.min.js',
+  './vendor/fonts/press-start-2p-latin-400-normal.woff2',
+  './vendor/fonts/press-start-2p-latin-ext-400-normal.woff2',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',

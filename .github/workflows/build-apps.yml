@@ -1,0 +1,107 @@
+name: Build apps
+
+# Builds the Android APK and the Windows / macOS / Linux desktop apps,
+# then publishes them all as a GitHub Release.
+on:
+  push:
+    branches: [main, ccr-0cf66460-2dghg2]
+    paths-ignore: ['README.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apps-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      - run: npm run android:prepare
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/Another-Dino-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*.apk
+          if-no-files-found: error
+
+  desktop:
+    name: Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run dist:desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Another Dino v1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: out/*
+          body: |
+            ## Descărcare
+
+            | Sistem | Fișier |
+            | --- | --- |
+            | 📱 Android | `Another-Dino-android.apk` |
+            | 🪟 Windows (instalare) | `Another-Dino-win-x64.exe` |
+            | 🪟 Windows (fără instalare) | `Another-Dino-windows-portable.exe` |
+            | 🍎 macOS (Apple M1/M2/M3…) | `Another-Dino-mac-arm64.dmg` |
+            | 🍎 macOS (Intel) | `Another-Dino-mac-x64.dmg` |
+            | 🐧 Linux | `Another-Dino-linux-x86_64.AppImage` |
+
+            **Android:** descarcă APK-ul, deschide-l și permite „instalare din surse necunoscute” când telefonul întreabă.
+            **Windows:** dacă apare „Windows protected your PC”, apasă *More info → Run anyway* (aplicația nu e semnată cu certificat plătit).
+            **macOS:** prima dată deschide aplicația cu click-dreapta → *Open*.
