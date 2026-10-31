@@ -16,8 +16,11 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   update: {
     info: () => ipcRenderer.invoke('app:info'),
-    onStatus: (cb) => ipcRenderer.on('update:status', (_e, s) => cb(s)),
-    install: () => ipcRenderer.invoke('update:install'),
+    start: (version) => ipcRenderer.invoke('update:start', version),
+    onProgress: (cb) => {
+      ipcRenderer.removeAllListeners('update:progress');
+      ipcRenderer.on('update:progress', (_e, pct) => cb(pct));
+    },
   },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 });

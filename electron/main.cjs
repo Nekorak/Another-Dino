@@ -1,8 +1,10 @@
 // Desktop shell: serves dist/ over a private app:// scheme (ES modules and
 // localStorage need a real origin, which file:// does not give), provides UDP
-// sockets for LAN play and keeps the app up to date from GitHub Releases.
+// sockets for LAN play and installs updates from GitHub Releases on request.
 const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require('electron');
+const { spawn } = require('node:child_process');
 const dgram = require('node:dgram');
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -110,26 +112,94 @@ ipcMain.handle('lan:addresses', () => localAddresses());
 ipcMain.handle('lan:stop', () => closeSocket());
 
 // ------------------------------------------------------------------ updates
-// electron-updater works for the Windows installer and the Linux AppImage; the
-// portable .exe and the unsigned macOS build only get a "new version" banner.
-const canAutoUpdate = app.isPackaged && ((process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_DIR) || (process.platform === 'linux' && !!process.env.APPIMAGE));
+// The in-game update button calls update:start. How the new version is put in
+// place depends on how the game was installed:
+//   nsis / appimage  electron-updater downloads it and restarts into it
+//   portable         download the new .exe, swap it in after we quit, relaunch
+//   dmg              unsigned Mac apps cannot replace themselves: download the
+//                    .dmg and open it so the player drags it to Applications
+const PORTABLE = process.env.PORTABLE_EXECUTABLE_FILE;
+const updateMode = !app.isPackaged
+  ? 'none'
+  : process.platform === 'win32'
+    ? PORTABLE
+      ? 'portable'
+      : 'nsis'
+    : process.platform === 'linux'
+      ? process.env.APPIMAGE
+        ? 'appimage'
+        : 'none'
+      : process.platform === 'darwin'
+        ? 'dmg'
+        : 'none';
 
-ipcMain.handle('app:info', () => ({ version: app.getVersion(), platform: process.platform, autoUpdate: canAutoUpdate }));
-ipcMain.handle('update:install', () => {
-  if (canAutoUpdate) require('electron-updater').autoUpdater.quitAndInstall();
-});
+const sendToPage = (channel, value) => win && win.webContents.send(channel, value);
+
+async function downloadTo(url, file) {
+  const res = await net.fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const total = Number(res.headers.get('content-length')) || 0;
+  const out = fs.createWriteStream(file);
+  const reader = res.body.getReader();
+  let done = 0;
+  let last = -1;
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    if (!out.write(Buffer.from(chunk.value))) await new Promise((r) => out.once('drain', r));
+    done += chunk.value.length;
+    const pct = total ? Math.floor((done * 100) / total) : -1;
+    if (pct !== last) sendToPage('update:progress', (last = pct));
+  }
+  await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
+}
+
+async function startUpdate(version) {
+  if (!/^\d+\.\d+\.\d+$/.test(String(version))) throw new Error('bad version');
+  const base = `${RELEASES}/download/v${version}`;
+  if (updateMode === 'nsis' || updateMode === 'appimage') {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = false;
+    autoUpdater.removeAllListeners('download-progress');
+    autoUpdater.on('download-progress', (p) => sendToPage('update:progress', Math.floor(p.percent)));
+    await autoUpdater.checkForUpdates();
+    await autoUpdater.downloadUpdate();
+    setTimeout(() => autoUpdater.quitAndInstall(true, true), 300);
+    return 'restarting';
+  }
+  if (updateMode === 'portable') {
+    const target = PORTABLE;
+    let fresh = path.join(path.dirname(target), 'Another-Dino-update.exe');
+    try {
+      fs.accessSync(path.dirname(target), fs.constants.W_OK);
+    } catch {
+      fresh = path.join(os.tmpdir(), 'Another-Dino-update.exe');
+    }
+    await downloadTo(`${base}/Another-Dino-windows-portable.exe`, fresh);
+    const script = path.join(os.tmpdir(), 'another-dino-update.cmd');
+    fs.writeFileSync(
+      script,
+      ['@echo off', 'ping 127.0.0.1 -n 3 > nul', `move /y "${fresh}" "${target}" > nul`, `start "" "${target}"`, 'del "%~f0"'].join('\r\n'),
+    );
+    spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    setTimeout(() => app.quit(), 300);
+    return 'restarting';
+  }
+  if (updateMode === 'dmg') {
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const file = path.join(app.getPath('downloads'), `Another-Dino-mac-${arch}.dmg`);
+    await downloadTo(`${base}/Another-Dino-mac-${arch}.dmg`, file);
+    await shell.openPath(file);
+    return 'opened';
+  }
+  throw new Error('updates are not available for this build');
+}
+
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), platform: process.platform, mode: updateMode }));
+ipcMain.handle('update:start', (_e, version) => startUpdate(version));
 ipcMain.handle('open-external', (_e, url) => {
   if (typeof url === 'string' && url.startsWith(RELEASES)) shell.openExternal(url);
 });
-
-function startAutoUpdate() {
-  if (!canAutoUpdate) return;
-  const { autoUpdater } = require('electron-updater');
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('update-downloaded', () => win && win.webContents.send('update:status', 'downloaded'));
-  autoUpdater.on('error', () => {});
-  autoUpdater.checkForUpdates().catch(() => {});
-}
 
 // ------------------------------------------------------------------ boot
 app.whenReady().then(() => {
@@ -141,7 +211,6 @@ app.whenReady().then(() => {
   });
   Menu.setApplicationMenu(null);
   createWindow();
-  startAutoUpdate();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

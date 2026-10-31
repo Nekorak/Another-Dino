@@ -56,7 +56,14 @@ Jocul există și ca aplicație normală, nu doar în browser. Ultima versiune s
 Aplicațiile merg complet offline. Pe desktop, `F11` (sau `Alt+Enter`) comută ecranul complet.
 Pe Android jocul rulează pe tot ecranul și ecranul nu se stinge cât joci.
 
-**Actualizări:** installerul de Windows și AppImage-ul de Linux se actualizează singure. Celelalte (Android, macOS, Windows portabil) arată în meniu un banner „Versiune nouă” cu link de descărcare. Ambele mecanisme citesc Releases-ul repo-ului, așa că repo-ul trebuie să fie **public** ca să funcționeze.
+**Actualizări dintr-o apăsare:** când apare o versiune nouă, în meniu apare **„Versiune nouă → ACTUALIZEAZĂ”**. Același buton e și în **Setări → Versiunea**. Apeși și restul se face singur:
+
+| Sistem | Ce face butonul |
+| --- | --- |
+| Android | descarcă APK-ul și deschide instalarea; apeși **Actualizează** în fereastra Android (prima dată Android cere să permiți „Instalare aplicații” pentru joc) |
+| Windows (installer) / Linux (AppImage) | descarcă, instalează și repornește jocul singur |
+| Windows portabil | descarcă noul `.exe`, îl pune în locul celui vechi și repornește |
+| macOS | descarcă `.dmg`-ul și îl deschide; tragi jocul în Applications (macOS nu permite mai mult aplicațiilor nesemnate) |
 
 Aplicațiile sunt construite automat de GitHub Actions (`.github/workflows/build-apps.yml`) la fiecare push:
 Android cu [Capacitor](https://capacitorjs.com), desktop cu [Electron](https://www.electronjs.org).

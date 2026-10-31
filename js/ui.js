@@ -3,6 +3,9 @@ import { t, LANGS } from './i18n.js';
 import { SKINS, HATS, POWERUP_COLOR, hatPixels } from './models.js';
 import { save, resetProgress } from './save.js';
 import { missionProgress, ACHIEVEMENTS } from './missions.js';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const Updater = registerPlugin('Updater');
 
 const $ = (id) => document.getElementById(id);
 const pad5 = (n) => String(Math.floor(n)).padStart(5, '0');
@@ -301,7 +304,7 @@ export class UI {
   }
   banner(text, action, fn) {
     const b = $('banner');
-    b.replaceChildren(el('span', { text }), el('button', { text: action, onclick: fn }));
+    b.replaceChildren(el('span', { text }), el('button', { text: action, onclick: () => fn() }));
     b.classList.remove('hidden');
   }
 
@@ -491,8 +494,15 @@ export class UI {
       cycle('style', ['normal', 'outline', 'gameboy', 'crt'], (v) => t('style_' + v)),
       cycle('pixel', [0, 1, 2], (v) => 'PX' + (v + 1)),
       toggle('ghost'),
+      this.g.isApp ? this.updateRow() : null,
       reset,
     );
+  }
+  updateRow() {
+    const row = this.row(t('set_version', { v: this.version || '…' }), this.updating ? '…' : t('updateCheck'), () => this.checkUpdates(true));
+    row.querySelector('.val').id = 'upd-btn';
+    if (!this.version) this.currentVersion().then(() => this.panel === 'settings' && this.renderPanel());
+    return row;
   }
   row(label, value, fn) {
     return el('div', { class: 'row' }, el('span', { text: label }), el('button', { class: 'val', text: value, onclick: fn }));
@@ -661,41 +671,81 @@ export class UI {
   }
 
   // ------------------------------------------------------------ updates
-  async checkUpdates() {
-    if (!this.g.isApp) return;
-    let current = '0.0.0';
-    try {
-      current = (await (await fetch('version.json')).json()).version;
-    } catch {
-      return;
+  // The installed apps compare their version with the latest GitHub release and
+  // offer a one-tap update (download + install, no browser needed).
+  async currentVersion() {
+    if (!this.version) {
+      try {
+        this.version = (await (await fetch('version.json')).json()).version;
+      } catch {
+        this.version = null;
+      }
     }
-    const desktop = window.desktop;
-    if (desktop && desktop.update) {
-      desktop.update.onStatus((s) => {
-        if (s === 'downloaded') this.banner(t('updateReady'), t('updateRestart'), () => desktop.update.install());
-      });
-      const info = await desktop.update.info();
-      if (info.autoUpdate) return; // electron-updater handles it
-    }
+    return this.version;
+  }
+
+  async checkUpdates(manual = false) {
+    if (!this.g.isApp || this.updating) return;
+    const current = await this.currentVersion();
+    if (!current) return;
+    let latest = null;
     try {
       const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
-      const j = await res.json();
-      const latest = String(j.tag_name || '').replace(/^v/, '');
-      const newer = (a, b) => {
-        const pa = a.split('.').map(Number);
-        const pb = b.split('.').map(Number);
-        for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
-        return false;
-      };
-      if (!latest || !newer(latest, current)) return;
-      const android = !desktop;
-      const url = android ? `https://github.com/${REPO}/releases/latest/download/Another-Dino-android.apk` : `https://github.com/${REPO}/releases/latest`;
-      this.banner(t('updateAvail', { v: 'v' + latest }), t('updateGet'), () => {
-        if (desktop) desktop.openExternal(url);
-        else location.href = url; // Capacitor opens external links in the system browser
-      });
+      if (res.ok) latest = String((await res.json()).tag_name || '').replace(/^v/, '');
     } catch {
       /* offline */
     }
+    if (!latest) {
+      if (manual) this.toast(t('updateFailed', { msg: 'offline' }), 'red');
+      return;
+    }
+    if (!newerVersion(latest, current)) {
+      if (manual) this.toast(t('updateLatest', { v: current }), 'gold');
+      return;
+    }
+    this.latest = latest;
+    this.banner(t('updateAvail', { v: 'v' + latest }), t('updateNow'), () => this.runUpdate());
+    if (manual) this.runUpdate();
+  }
+
+  updateStatus(text) {
+    const b = $('banner');
+    b.replaceChildren(el('span', { text }));
+    b.classList.remove('hidden');
+    const s = $('upd-btn');
+    if (s) s.textContent = text;
+  }
+
+  async runUpdate() {
+    if (this.updating || !this.latest) return;
+    this.updating = true;
+    const progress = (p) => this.updateStatus(t('updateDownloading', { p: p < 0 ? '…' : p + '%' }));
+    progress(0);
+    try {
+      if (window.desktop && window.desktop.update) {
+        window.desktop.update.onProgress(progress);
+        const r = await window.desktop.update.start(this.latest);
+        this.updateStatus(r === 'opened' ? t('updateMacOpen') : t('updateInstalling'));
+      } else if (Capacitor.getPlatform() === 'android') {
+        const handle = await Updater.addListener('progress', (e) => progress(e.percent));
+        const url = `https://github.com/${REPO}/releases/download/v${this.latest}/Another-Dino-android.apk`;
+        const r = await Updater.install({ url });
+        handle.remove();
+        this.updateStatus(r.status === 'permission' ? t('updatePermission') : t('updateInstalling'));
+      }
+    } catch (err) {
+      this.toast(t('updateFailed', { msg: (err && err.message) || String(err) }), 'red');
+      this.banner(t('updateAvail', { v: 'v' + this.latest }), t('updateNow'), () => this.runUpdate());
+    } finally {
+      this.updating = false;
+    }
   }
 }
+
+function newerVersion(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+}
+

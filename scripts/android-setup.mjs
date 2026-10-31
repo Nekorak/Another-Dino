@@ -8,11 +8,13 @@ import { join } from 'node:path';
 const SRC = 'android/app/src/main/java/io/github/nekorak/anotherdino';
 copyFileSync('native/android/MainActivity.java', `${SRC}/MainActivity.java`);
 copyFileSync('native/android/LanPlugin.java', `${SRC}/LanPlugin.java`);
+copyFileSync('native/android/UpdaterPlugin.java', `${SRC}/UpdaterPlugin.java`);
 
-// LAN multiplayer needs to see Wi-Fi state and receive broadcast packets.
+// LAN multiplayer needs to see Wi-Fi state and receive broadcast packets;
+// the in-game update button needs to hand the new APK to the installer.
 const manifestFile = 'android/app/src/main/AndroidManifest.xml';
 let manifest = readFileSync(manifestFile, 'utf8');
-const perms = ['ACCESS_WIFI_STATE', 'ACCESS_NETWORK_STATE', 'CHANGE_WIFI_MULTICAST_STATE'];
+const perms = ['ACCESS_WIFI_STATE', 'ACCESS_NETWORK_STATE', 'CHANGE_WIFI_MULTICAST_STATE', 'REQUEST_INSTALL_PACKAGES'];
 for (const p of perms) {
   const tag = `<uses-permission android:name="android.permission.${p}" />`;
   if (!manifest.includes(tag)) manifest = manifest.replace('</manifest>', `    ${tag}\n</manifest>`);
