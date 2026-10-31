@@ -27,7 +27,7 @@ Aleargă prin patru lumi (deșert, junglă, zăpadă și vulcan), sari peste cac
 - **Efecte**: când te lovești, dinozaurul se sparge în cubulețe 3D, cu slow-motion. Mai sunt praf, ciclu zi/noapte, lună și stele.
 - **Muzică chiptune** generată de joc, diferită în fiecare lume, care se grăbește odată cu viteza.
 - **Stiluri grafice**: Normal, Contur, Game Boy (4 nuanțe de verde, cu dithering) și Ecran CRT.
-- Interfață în **română și engleză** (automat după limba telefonului, sau la alegere).
+- Interfață în **română, rusă și engleză** (automat după limba telefonului, sau la alegere din Setări).
 
 ## Multiplayer LAN (fără internet)
 
@@ -111,7 +111,7 @@ js/audio.js           efecte sonore sintetizate
 js/ui.js              meniuri, magazin, misiuni, statistici, setări, LAN
 js/save.js            progresul salvat (oase, skin-uri, statistici, fantoma)
 js/missions.js        misiuni și realizări
-js/i18n.js            textele în română și engleză
+js/i18n.js            textele în română, rusă și engleză (cu pluralul corect)
 js/net.js             transport UDP (Android / desktop / test în browser)
 js/multiplayer.js     protocolul LAN: camere, lobby, cursă, rezultate
 sw.js                 service worker pentru offline

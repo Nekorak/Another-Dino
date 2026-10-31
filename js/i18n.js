@@ -1,4 +1,4 @@
-// Romanian / English texts. t('key', {n: 5}) fills in {n}.
+// Romanian / Russian / English texts. t('key', {n: 5}) fills in {n}.
 const STR = {
   ro: {
     play: 'JOACĂ',
@@ -164,6 +164,171 @@ const STR = {
     updateGet: 'DESCARCĂ',
     updateReady: 'Actualizare descărcată',
     updateRestart: 'REPORNEȘTE',
+  },
+  ru: {
+    play: 'ИГРАТЬ',
+    multiplayer: 'МУЛЬТИПЛЕЕР',
+    shop: 'МАГАЗИН',
+    missions: 'ЗАДАНИЯ',
+    stats: 'СТАТИСТИКА',
+    settings: 'НАСТРОЙКИ',
+    back: 'НАЗАД',
+    menu: 'МЕНЮ',
+    again: 'ЕЩЁ РАЗ',
+    tapAgain: 'Коснись экрана, чтобы сыграть снова',
+    keyAgain: 'SPACE, чтобы сыграть снова',
+    best: 'РЕКОРД',
+    controlsKey: 'SPACE / ↑ прыжок · ↓ пригнуться · P пауза · F11 полный экран',
+    jump: 'ПРЫЖОК',
+    duck: 'ВНИЗ',
+    record: 'НОВЫЙ РЕКОРД!',
+    paused: 'ПАУЗА',
+    resume: 'Коснись, чтобы продолжить',
+    coinsEarned: '+{n} косточек',
+    noWebgl: 'Устройство не поддерживает WebGL, а он нужен для игры.',
+
+    biome_desert: 'ПУСТЫНЯ',
+    biome_jungle: 'ДЖУНГЛИ',
+    biome_snow: 'СНЕГА',
+    biome_volcano: 'ВУЛКАН',
+
+    pu_shield: 'ЩИТ',
+    pu_magnet: 'МАГНИТ',
+    pu_slow: 'ЗАМЕДЛЕНИЕ',
+    pu_double: 'ДВОЙНОЙ ПРЫЖОК',
+    shieldSaved: 'ЩИТ ТЕБЯ СПАС!',
+
+    tutJump: 'Коснись СПРАВА, чтобы перепрыгнуть кактус!',
+    tutJumpKey: 'Нажми SPACE, чтобы перепрыгнуть кактус!',
+    tutDuck: 'Держи СЛЕВА, чтобы пригнуться!',
+    tutDuckKey: 'Держи ↓, чтобы пригнуться!',
+    tutCoins: 'Собирай косточки и покупай скины в МАГАЗИНЕ!',
+
+    shopSkins: 'СКИНЫ',
+    shopHats: 'АКСЕССУАРЫ',
+    owned: 'ЕСТЬ',
+    equipped: 'НАДЕТО',
+    buy: '{n}',
+    notEnough: 'Не хватает косточек',
+    bought: 'Куплено!',
+
+    skin_classic: 'Классика',
+    skin_red: 'Красный',
+    skin_blue: 'Синий',
+    skin_pink: 'Розовый',
+    skin_gold: 'Золотой',
+    skin_shadow: 'Тень',
+    skin_skeleton: 'Скелет',
+    skin_robot: 'Робот',
+    hat_none: 'Ничего',
+    hat_party: 'Колпак',
+    hat_cowboy: 'Ковбойская шляпа',
+    hat_shades: 'Тёмные очки',
+    hat_tophat: 'Цилиндр',
+    hat_headphones: 'Наушники',
+    hat_crown: 'Корона',
+
+    missionsTitle: 'ЗАДАНИЯ',
+    achievementsTitle: 'ДОСТИЖЕНИЯ',
+    missionDone: 'ЗАДАНИЕ ВЫПОЛНЕНО! +{n}',
+    achievementDone: 'ДОСТИЖЕНИЕ: {name} +{n}',
+    m_score: 'Набери {n} очков за забег',
+    m_jumps: 'Прыгни {n} раз за забег',
+    m_coins: 'Собери {n} косточек за забег',
+    m_obstacles: 'Пройди {n} препятствий за забег',
+    m_ducks: 'Пригнись под {n} птеродактилями за забег',
+    m_powerups: 'Подбери {n} бонуса за забег',
+    m_biome: 'Доберись до мира №{n} за забег',
+    m_coinsTotal: 'Собери всего {n} косточек',
+    m_games: 'Сыграй {n} забегов',
+    m_distance: 'Набери всего {n} очков',
+
+    a_first: 'Первые шаги',
+    a_score1k: '1000 очков',
+    a_score2k5: '2500 очков',
+    a_score5k: '5000 очков',
+    a_jungle: 'Исследователь: джунгли',
+    a_snow: 'Исследователь: снега',
+    a_volcano: 'Исследователь: вулкан',
+    a_coins100: '100 косточек',
+    a_coins1k: '1000 косточек',
+    a_shopper: 'Первая покупка',
+    a_collector: 'Коллекционер (4 скина)',
+    a_powerups: '25 бонусов',
+    a_meteors: 'Увернулся от 10 метеоритов',
+    a_jumps: '1000 прыжков',
+    a_games50: '50 забегов',
+    a_lan: 'Первая гонка по LAN',
+    a_lanWin: 'Победитель по LAN',
+
+    st_best: 'Рекорд',
+    st_games: 'Забегов',
+    st_distance: 'Всего очков',
+    st_jumps: 'Прыжков',
+    st_ducks: 'Приседаний',
+    st_coins: 'Косточек собрано',
+    st_obstacles: 'Препятствий пройдено',
+    st_powerups: 'Бонусов',
+    st_meteors: 'Метеоритов позади',
+    st_time: 'Время в игре',
+    st_mpGames: 'Гонок по LAN',
+    st_mpWins: 'Побед по LAN',
+    top10: 'ТОП-10',
+    noScores: 'Ты ещё не сыграл ни одного забега.',
+
+    set_lang: 'Язык',
+    set_music: 'Музыка',
+    set_sfx: 'Звуки',
+    set_vibration: 'Вибрация',
+    set_lefty: 'Поменять стороны (для левшей)',
+    set_style: 'Стиль графики',
+    set_pixel: 'Размер пикселей',
+    set_ghost: 'Призрак рекорда',
+    set_reset: 'Стереть весь прогресс',
+    set_resetConfirm: 'Точно? Нажми ещё раз',
+    set_resetDone: 'Прогресс стёрт',
+    on: 'ВКЛ',
+    off: 'ВЫКЛ',
+    lang_auto: 'Авто',
+    style_normal: 'Обычный',
+    style_outline: 'Контур',
+    style_gameboy: 'Game Boy',
+    style_crt: 'ЭЛТ-экран',
+
+    mpTitle: 'МУЛЬТИПЛЕЕР LAN',
+    mpIntro: 'Играйте в одной сети Wi-Fi или через точку доступа телефона. Один создаёт комнату, остальные заходят.',
+    mpWebOnly: 'Мультиплеер по LAN работает только в приложении (Android или ПК). Скачай его на странице Releases.',
+    mpName: 'Твоё имя',
+    mpHost: 'СОЗДАТЬ КОМНАТУ',
+    mpSearching: 'Ищу комнаты в сети…',
+    mpNoRooms: 'Комнат пока нет. Проверь, что вы в одной сети.',
+    mpJoin: 'ВОЙТИ',
+    mpManual: 'Подключиться по IP',
+    mpConnect: 'ПОДКЛЮЧИТЬ',
+    mpLobby: 'КОМНАТА',
+    mpYourIp: 'Твой IP: {ip}',
+    mpPlayers: 'Игроки ({n}/4)',
+    mpStart: 'СТАРТ',
+    mpWaitHost: 'Ждём, пока хозяин начнёт…',
+    mpLeave: 'ВЫЙТИ',
+    mpHostTag: 'хозяин',
+    mpYou: 'ты',
+    mpWaitOthers: 'Ждём остальных игроков…',
+    mpResults: 'РЕЗУЛЬТАТЫ',
+    mpWinner: '{name} побеждает!',
+    mpYouWon: 'ТЫ ПОБЕДИЛ!',
+    mpHostLost: 'Связь с хозяином потеряна.',
+    mpClosed: 'Хозяин закрыл комнату.',
+    mpPortError: 'Не удаётся открыть сеть: {msg}',
+    mpFull: 'полная',
+    mpRacing: 'в гонке',
+    mpNeed2: 'Подожди ещё хотя бы одного игрока',
+    mpHotspotTip: 'Нет Wi-Fi? Включи точку доступа на одном телефоне и подключи к ней остальных.',
+
+    updateAvail: 'Новая версия: {v}',
+    updateGet: 'СКАЧАТЬ',
+    updateReady: 'Обновление загружено',
+    updateRestart: 'ПЕРЕЗАПУСК',
   },
   en: {
     play: 'PLAY',
@@ -335,7 +500,10 @@ const STR = {
 let lang = 'ro';
 
 export function setLang(pref) {
-  lang = pref === 'auto' || !STR[pref] ? ((navigator.language || '').toLowerCase().startsWith('ro') ? 'ro' : 'en') : pref;
+  if (pref === 'auto' || !STR[pref]) {
+    const nav = (navigator.language || '').toLowerCase().slice(0, 2);
+    lang = STR[nav] ? nav : 'en';
+  } else lang = pref;
   document.documentElement.lang = lang;
 }
 
@@ -343,8 +511,33 @@ export function t(key, vars) {
   let s = STR[lang][key] ?? STR.en[key] ?? key;
   if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
   // the pixel font has ş/Ş (cedilla) but not ș/Ș (comma below)
-  if (lang === 'ro') s = s.replace(/ș/g, 'ş').replace(/Ș/g, 'Ş');
+  if (lang === 'ro') {
+    // 1 os, 5 oase, 25 de oase
+    s = s.replace(/(\d+) (?:de )?oase/g, (_, n) => {
+      const v = Number(n);
+      const r = v % 100;
+      return v === 1 ? '1 os' : v >= 20 && (r === 0 || r >= 20) ? `${n} de oase` : `${n} oase`;
+    });
+    s = s.replace(/ș/g, 'ş').replace(/Ș/g, 'Ş');
+  }
+  if (lang === 'ru') s = s.replace(RU_COUNTED, (_, n, word) => n + ' ' + ruPlural(Number(n), RU_FORMS[word]));
   return s;
 }
 
-export const LANGS = ['auto', 'ro', 'en'];
+// Russian nouns change with the number: 1 косточка, 2 косточки, 5 косточек.
+const RU_FORMS = {
+  косточек: ['косточка', 'косточки', 'косточек'],
+  бонуса: ['бонус', 'бонуса', 'бонусов'],
+  очков: ['очко', 'очка', 'очков'],
+  забегов: ['забег', 'забега', 'забегов'],
+};
+const RU_COUNTED = new RegExp(`(\\d+) (${Object.keys(RU_FORMS).join('|')})`, 'g');
+function ruPlural(n, [one, few, many]) {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return one;
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return few;
+  return many;
+}
+
+export const LANGS = ['auto', 'ro', 'ru', 'en'];
