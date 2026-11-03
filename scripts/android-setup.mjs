@@ -21,6 +21,9 @@ for (const p of perms) {
   const tag = `<uses-permission android:name="android.permission.${p}" />`;
   if (!manifest.includes(tag)) manifest = manifest.replace('</manifest>', `    ${tag}\n</manifest>`);
 }
+// the camera is optional: phones and tablets without one still install the game
+const feature = '<uses-feature android:name="android.hardware.camera" android:required="false" />';
+if (!manifest.includes(feature)) manifest = manifest.replace('</manifest>', `    ${feature}\n</manifest>`);
 writeFileSync(manifestFile, manifest);
 
 // Every build is signed with the same (debug) key so a new APK installs over the old one.

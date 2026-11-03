@@ -162,9 +162,11 @@ export function giveSeasonGift(season) {
   const key = season + '-' + new Date().getFullYear();
   if (profile.seasonGifts.includes(key)) return null;
   profile.seasonGifts.push(key);
-  if (!profile.owned.hat.includes(hat)) profile.owned.hat.push(hat);
+  // Christmas and New Year give the same hat: only announce it the first time
+  const fresh = !profile.owned.hat.includes(hat);
+  if (fresh) profile.owned.hat.push(hat);
   save();
-  return hat;
+  return fresh ? hat : null;
 }
 
 function box(vs, x0, x1, y0, y1, z0, z1, c) {
@@ -235,4 +237,74 @@ export function seasonPropGeometry(season, seed) {
     seasonCache.set(key, buildGeometry(vs, [0.5, 0, 0.5]));
   }
   return seasonCache.get(key);
+}
+
+// New Year fireworks: short-lived glowing sparks. Bursts are placed through the camera
+// (a point in the upper part of the screen), so they show in portrait and landscape alike.
+const FW_COLORS = ['#ff4f5a', '#ffd23f', '#4fc3ff', '#5fd35a', '#ff6fd8', '#ffffff'];
+export class Fireworks {
+  constructor(scene, max = 240) {
+    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshBasicMaterial({ fog: false }), max);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.frustumCulled = false;
+    this.mesh.count = 0;
+    scene.add(this.mesh);
+    this.parts = [];
+    this.max = max;
+    this.tmp = new THREE.Object3D();
+    this.color = new THREE.Color();
+    this.v = new THREE.Vector3();
+  }
+  burst(camera) {
+    // a random spot in the top half of the screen, 22-34 units away
+    this.v.set((Math.random() - 0.5) * 1.3, 0.35 + Math.random() * 0.45, 0.5).unproject(camera).sub(camera.position).normalize();
+    const d = 22 + Math.random() * 12;
+    const ox = camera.position.x + this.v.x * d;
+    const oy = camera.position.y + this.v.y * d;
+    const oz = camera.position.z + this.v.z * d;
+    const c = FW_COLORS[Math.floor(Math.random() * FW_COLORS.length)];
+    const c2 = Math.random() < 0.4 ? FW_COLORS[Math.floor(Math.random() * FW_COLORS.length)] : c;
+    for (let i = 0; i < 40; i++) {
+      if (this.parts.length >= this.max) this.parts.shift();
+      // even spread on a sphere
+      const u = Math.random() * 2 - 1;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(1 - u * u);
+      const s = 4.5 + Math.random() * 1.5;
+      this.parts.push({ x: ox, y: oy, z: oz, vx: r * Math.cos(a) * s, vy: u * s, vz: r * Math.sin(a) * s, life: 1.3 + Math.random() * 0.4, c: i % 3 ? c : c2 });
+    }
+  }
+  update(dt) {
+    const t = this.tmp;
+    let i = 0;
+    for (let n = this.parts.length - 1; n >= 0; n--) {
+      const p = this.parts[n];
+      p.life -= dt;
+      if (p.life <= 0) {
+        this.parts.splice(n, 1);
+        continue;
+      }
+      const drag = Math.exp(-2.2 * dt);
+      p.vx *= drag;
+      p.vy = p.vy * drag - 2.5 * dt;
+      p.vz *= drag;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      t.position.set(p.x, p.y, p.z);
+      t.rotation.set(0, 0, 0);
+      t.scale.setScalar(Math.min(1, p.life * 1.4) * (p.life < 0.5 && Math.random() < 0.3 ? 0.2 : 1));
+      t.updateMatrix();
+      this.mesh.setMatrixAt(i, t.matrix);
+      this.mesh.setColorAt(i, this.color.set(p.c));
+      i++;
+    }
+    this.mesh.count = i;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+  }
+  clear() {
+    this.parts.length = 0;
+    this.mesh.count = 0;
+  }
 }

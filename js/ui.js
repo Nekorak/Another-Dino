@@ -367,12 +367,14 @@ export class UI {
     this.overShownAt = performance.now() / 1000;
     $('win-title').textContent = adv.boss ? t('bossDefeated') : t('advWin');
     $('win-stars').replaceChildren(...[0, 1, 2].map((i) => el('span', { class: 'star' + (i < stars ? ' on' : '') })));
-    $('win-details').replaceChildren(
+    // replaceChildren would print a null as the text "null"
+    const lines = [
       el('p', { text: t('advBones', { a: coins, b: spawned }) }),
       el('p', { text: hits ? t('advHits', { n: hits }) : t('advNoHits') }),
       reward ? el('p', { class: 'mission-done', text: t('coinsEarned', { n: reward }) }) : null,
       xp ? el('p', { class: 'small', text: t('xpGained', { n: xp }) }) : null,
-    );
+    ];
+    $('win-details').replaceChildren(...lines.filter(Boolean));
     const hasNext = this.nextLevelOf(adv) != null;
     $('btn-win-next').classList.toggle('hidden', !hasNext);
     $('win').classList.remove('hidden');
@@ -428,6 +430,7 @@ export class UI {
   }
   showPaused(on, mode) {
     $('paused').classList.toggle('hidden', !on);
+    document.body.classList.toggle('paused', !!on);
     $('btn-zen-end').classList.toggle('hidden', mode !== 'zen');
   }
   showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode }) {
@@ -905,6 +908,9 @@ export class UI {
       return el('div', { class: 'xfer' }, el('p', { text: t('xferPinIs') }), el('p', { class: 'pin', text: this.xferPin || '…' }), el('p', { class: 'small muted blink', text: t('xferWaiting') }));
     }
     const pin = el('input', { id: 'xfer-pin', inputmode: 'numeric', maxlength: 4, placeholder: '1234', autocomplete: 'off' });
+    // the device list refreshes every second; keep what was typed
+    pin.value = this.xferPinTyped || '';
+    pin.addEventListener('input', () => (this.xferPinTyped = pin.value.replace(/\D/g, '').slice(0, 4)));
     const list = (this.xferDevices || []).map((d) =>
       el(
         'div',
@@ -965,6 +971,7 @@ export class UI {
     this.sync = null;
     this.xferRole = null;
     this.xferDevices = [];
+    this.xferPinTyped = '';
   }
 
   // ------------------------------------------------------------ missions

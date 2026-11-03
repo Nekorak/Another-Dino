@@ -27,7 +27,7 @@ import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD } 
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
 import { levelDef, scoreLevel, saveLevel, BotBrain } from './modes.js';
-import { Trail, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
+import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession } from './multiplayer.js';
 import { UI } from './ui.js';
 
@@ -248,6 +248,7 @@ scene.add(stars);
 const dust = new Dust(scene);
 const shatter = new Shatter(scene);
 const trail = new Trail(scene);
+const fireworks = new Fireworks(scene);
 const flame = new Dust(scene, 40); // rocket exhaust
 flame.setColor('#ff8a2a');
 const weather = new Weather(scene);
@@ -896,6 +897,7 @@ function resetRun(seed) {
   clearTrack();
   shatter.clear();
   trail.clear();
+  fireworks.clear();
   endEvent(true);
   endBoss(true);
   R = seed != null ? rng(seed) : Math.random;
@@ -1178,6 +1180,7 @@ function toMenu() {
   clearTrack();
   shatter.clear();
   trail.clear();
+  fireworks.clear();
   clearRivals();
   endEvent(true);
   endBoss(true);
@@ -2260,21 +2263,14 @@ function updateEmotes(dt) {
 // New Year (and Christmas nights): fireworks over the track
 let fireworkT = 2;
 function updateSeason(dt) {
+  fireworks.update(dt);
   if (!season || state === 'menu' || state === 'photo') return;
   const show = season === 'newyear' || (season === 'christmas' && night > 0.5);
   if (!show) return;
   fireworkT -= dt;
   if (fireworkT > 0) return;
   fireworkT = 1.2 + Math.random() * 1.8;
-  const cols = ['#ff4f5a', '#ffd23f', '#4fc3ff', '#5fd35a', '#ff6fd8', '#ffffff'];
-  const c = cols[Math.floor(Math.random() * cols.length)];
-  const pieces = [];
-  for (let i = 0; i < 36; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const r = Math.random() * 0.4;
-    pieces.push({ x: Math.cos(a) * r, y: Math.sin(a) * r + 1.4, z: (Math.random() - 0.5) * 0.4, color: c });
-  }
-  shatter.burst(pieces, 6 + Math.random() * 20, 9 + Math.random() * 5, -8 - Math.random() * 10, 1.6, 0);
+  fireworks.burst(isSplit() ? cams[0] : camera);
   sfx.tone(180 + Math.random() * 120, 0.25, { to: 60, type: 'triangle', vol: 0.05 });
 }
 

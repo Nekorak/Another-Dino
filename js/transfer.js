@@ -142,6 +142,10 @@ export function mergeProgress(d) {
 }
 
 // ------------------------------------------------------------------ QR
+// the library's default byte encoder keeps only the low 8 bits of every character,
+// which breaks names written in Cyrillic or with diacritics; jsQR reads UTF-8 back
+qrcode.stringToBytes = (s) => Array.from(new TextEncoder().encode(s));
+
 export function qrCanvas(text, px = 4) {
   const q = qrcode(0, 'L');
   q.addData(text, 'Byte');
@@ -293,9 +297,11 @@ export class LanSync {
     }, 1000);
   }
   send(device, pin, text) {
+    this.answered = false; // one toast per attempt, although every packet is sent three times
+    const a = (this.attempt = Math.random().toString(36).slice(2, 8)); // late replies to an older attempt are ignored
     const n = Math.ceil(text.length / CHUNK);
     const msgs = [];
-    for (let i = 0; i < n; i++) msgs.push(this.pack({ t: 'data', pin, i, n, d: text.slice(i * CHUNK, (i + 1) * CHUNK) }));
+    for (let i = 0; i < n; i++) msgs.push(this.pack({ t: 'data', a, pin, i, n, d: text.slice(i * CHUNK, (i + 1) * CHUNK) }));
     // UDP can drop packets, so everything is sent three times
     for (let r = 0; r < 3; r++) setTimeout(() => msgs.forEach((m) => this.t.send(device.addr, device.port, m)), r * 250);
   }
@@ -310,13 +316,14 @@ export class LanSync {
     if (this.role === 'send' && m.t === 'wait') {
       this.devices.set(m.from, { id: m.from, name: String(m.name).slice(0, 16), addr: address, port, seen: Date.now() });
       this.on.devices([...this.devices.values()]);
-    } else if (this.role === 'send' && m.t === 'ok') {
-      this.on.sent();
-    } else if (this.role === 'send' && m.t === 'badpin') {
-      this.on.error('xferBadPin');
+    } else if (this.role === 'send' && (m.t === 'ok' || m.t === 'badpin')) {
+      if (this.answered || m.a !== this.attempt) return;
+      this.answered = true;
+      if (m.t === 'ok') this.on.sent();
+      else this.on.error('xferBadPin');
     } else if (this.role === 'receive' && m.t === 'data') {
       if (String(m.pin) !== this.pin) {
-        this.t.send(address, port, this.pack({ t: 'badpin' }));
+        this.t.send(address, port, this.pack({ t: 'badpin', a: m.a }));
         return;
       }
       const key = m.from;
@@ -325,7 +332,7 @@ export class LanSync {
       arr[m.i] = m.d;
       if (arr.filter((x) => x != null).length === m.n && !this.done) {
         this.done = true;
-        this.t.send(address, port, this.pack({ t: 'ok' }));
+        this.t.send(address, port, this.pack({ t: 'ok', a: m.a }));
         this.on.received(arr.join(''));
       }
     }

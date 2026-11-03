@@ -611,7 +611,8 @@ body.playing #runcoins {
   z-index: 60;
 }
 
-body.over #toasts {
+body.over #toasts,
+body.paused #toasts {
   top: auto;
   bottom: max(16px, env(safe-area-inset-bottom));
   flex-direction: column-reverse;
@@ -1119,6 +1120,7 @@ body.panel-open .score-block {
 .tab {
   font-size: 8px;
   min-width: 0;
+  flex: 1 0 auto; /* grow to fill a row, but wrap instead of squeezing the words */
 }
 
 /* two players on one screen */
@@ -1359,14 +1361,16 @@ body.big-text #hud {
   #over .big-score {
     font-size: 20px !important;
   }
-  body.over #toasts {
-    top: calc(max(12px, env(safe-area-inset-top)) + 56px);
-    bottom: auto;
+  /* bottom-left corner: clear of the centred titles and buttons */
+  body.over #toasts,
+  body.paused #toasts {
+    top: auto;
+    bottom: max(10px, env(safe-area-inset-bottom));
     left: max(16px, env(safe-area-inset-left));
     transform: none;
-    width: 28vw;
+    width: 26vw;
     align-items: flex-start;
-    flex-direction: column;
+    flex-direction: column-reverse;
   }
 }
 

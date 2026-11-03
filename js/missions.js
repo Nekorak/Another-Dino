@@ -1,6 +1,10 @@
 // Missions (3 active at a time, replaced when done) and permanent achievements.
 import { profile, save } from './save.js';
 import { levelOf } from './progress.js';
+import { SKINS, HATS } from './models.js';
+
+// skins and hats that were bought (gifts from levels, seasons and the album do not count)
+const bought = () => profile.owned.skin.filter((id) => SKINS[id]?.price > 0).length + profile.owned.hat.filter((id) => HATS[id]?.price > 0).length;
 
 // scope 'run': counted within one run; 'total': counted since the mission was given
 const TEMPLATES = [
@@ -74,7 +78,7 @@ export const ACHIEVEMENTS = [
   { id: 'space', test: (s) => s.maxBiome >= 7 },
   { id: 'coins100', test: (s) => s.coins >= 100 },
   { id: 'coins1k', test: (s) => s.coins >= 1000 },
-  { id: 'shopper', test: () => profile.owned.skin.length + profile.owned.hat.length > 2 },
+  { id: 'shopper', test: () => bought() >= 1 },
   { id: 'collector', test: () => profile.owned.skin.length >= 4 },
   { id: 'powerups', test: (s) => s.powerups >= 25 },
   { id: 'meteors', test: (s) => s.meteors >= 10 },

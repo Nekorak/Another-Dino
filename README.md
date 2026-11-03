@@ -148,6 +148,10 @@ GitHub Pages pe un repo privat cere un cont plătit. Pe un repo public e gratuit
 
 Pe telefon, deschide link-ul și alege „Adaugă pe ecranul principal” pentru a-l avea ca aplicație full-screen.
 
+## Ce urmează
+
+Ideile pentru versiunile viitoare sunt în [PlanViitor.md](PlanViitor.md).
+
 ## Structură
 
 ```
