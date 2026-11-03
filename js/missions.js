@@ -2,6 +2,7 @@
 import { profile, save } from './save.js';
 import { levelOf } from './progress.js';
 import { SKINS, HATS } from './models.js';
+import { allFossils } from './collection.js';
 
 // skins and hats that were bought (gifts from levels, seasons and the album do not count)
 const bought = () => profile.owned.skin.filter((id) => SKINS[id]?.price > 0).length + profile.owned.hat.filter((id) => HATS[id]?.price > 0).length;
@@ -96,7 +97,7 @@ export const ACHIEVEMENTS = [
   { id: 'boss', test: (s) => s.bosses >= 1 },
   { id: 'combo5', test: (s) => s.bestCombo >= 5 },
   { id: 'bot', test: (s) => s.botWins >= 1 },
-  { id: 'album', test: () => profile.fossils.length >= 24 },
+  { id: 'album', test: () => allFossils().every((f) => profile.fossils.includes(f)) },
 ];
 export const ACHIEVEMENT_REWARD = 25;
 

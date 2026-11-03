@@ -9,6 +9,7 @@ import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImag
 import { save, resetProgress } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
+import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS } from './missions.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -227,6 +228,8 @@ export class UI {
     });
     btn('btn-share', () => this.share());
     btn('btn-replay', () => this.showReplay());
+    btn('chest-open', () => this.doOpenChest());
+    btn('chest-ok', () => $('chest').classList.add('hidden'));
     btn('btn-replay-close', () => this.hideReplay());
     btn('btn-replay-gif', () => this.saveReplay());
     btn('btn-challenge', () => this.openPanel('challenge'));
@@ -268,6 +271,7 @@ export class UI {
       ['missions', () => this.openPanel('missions')],
       ['album', () => this.openPanel('album')],
       ['stats', () => this.openPanel('stats')],
+      ['pass', () => this.openPanel('pass')],
       ['settings', () => this.openPanel('settings')],
     ];
     for (const [key, fn, cls] of items) {
@@ -476,6 +480,102 @@ export class UI {
     $('menu').classList.remove('hidden');
     this.setCoins();
     this.refreshTexts();
+    this.passBadge();
+    // the daily chest waits on the menu (not during the very first tutorial run)
+    if (this.p.tutorial && chestInfo().available) setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
+  }
+
+  // ------------------------------------------------------------ daily chest
+  showChest() {
+    const info = chestInfo();
+    if (!info.available) return;
+    $('chest-title').textContent = t('chestTitle', { n: info.day });
+    $('chest-days').replaceChildren(
+      ...CHEST_DAYS.map((b, i) => el('span', { class: 'cday' + (i + 1 < info.day ? ' got' : i + 1 === info.day ? ' now' : '') }, el('b', { text: String(i + 1) }), bone(), document.createTextNode(String(b)))),
+    );
+    $('chest-result').replaceChildren();
+    $('chest-open').classList.remove('hidden');
+    $('chest-ok').classList.add('hidden');
+    $('chest').classList.remove('hidden', 'open');
+  }
+  doOpenChest() {
+    const r = openChest();
+    if (!r) return $('chest').classList.add('hidden');
+    const box = $('chest');
+    box.classList.add('shaking');
+    this.g.sfx.beep();
+    $('chest-open').classList.add('hidden');
+    setTimeout(() => {
+      box.classList.remove('shaking');
+      box.classList.add('open');
+      this.g.sfx.reward();
+      $('chest-result').replaceChildren(el('p', {}, bone(), ' +' + r.bones), el('p', { class: 'small', text: '+' + r.xp + ' XP' }));
+      for (const l of r.levelUps) this.toast(t('levelUp', { n: l }), 'gold');
+      $('chest-ok').classList.remove('hidden');
+      this.setCoins();
+      this.passBadge();
+    }, 900);
+  }
+
+  // ------------------------------------------------------------ season pass
+  passBadge() {
+    const b = $('menu-pass');
+    if (b) b.classList.toggle('badge', passState().unclaimed.length > 0);
+  }
+  passView() {
+    const st = passState();
+    const SEASONS = ['passWinter', 'passSpring', 'passSummer', 'passAutumn'];
+    const head = el(
+      'div',
+      { class: 'pass-head' },
+      el('b', { text: t(SEASONS[st.q]) }),
+      el('span', { class: 'small muted', text: t('passLeft', { n: st.daysLeft }) }),
+      el('p', { class: 'small', text: st.tier >= PASS_TIERS ? t('passDone') : t('passTier', { n: st.tier, total: PASS_TIERS }) }),
+      el('div', { class: 'bar' }, el('i', { style: `width:${st.tier >= PASS_TIERS ? 100 : Math.round((st.into / PASS_XP) * 100)}%` })),
+      el('p', { class: 'small muted', text: t('passHelp', { n: PASS_XP }) }),
+    );
+    const claimAll = st.unclaimed.length
+      ? el('button', {
+          class: 'menu-btn primary',
+          text: t('passClaimAll', { n: st.unclaimed.length }),
+          onclick: () => {
+            for (const n of st.unclaimed) this.claimPassTier(n, true);
+            this.g.sfx.reward();
+            this.renderPanel();
+          },
+        })
+      : null;
+    const tiers = el('div', { class: 'pass-tiers' });
+    for (let n = 1; n <= PASS_TIERS; n++) {
+      const r = passReward(n);
+      const got = this.p.pass.claimed.includes(n);
+      const ready = n <= st.tier && !got;
+      // the exclusive items always show themselves, even once claimed (or owned from an earlier season)
+      const sp = PASS_SPECIAL[n];
+      const icon = sp ? (sp[0] === 'skin' ? dinoIcon(sp[1]) : sp[0] === 'hat' ? hatIcon(sp[1]) : trailIcon(sp[1])) : null;
+      const card = el(
+        'button',
+        { class: 'tier' + (got ? ' got' : ready ? ' ready' : ' locked') + (icon ? ' special' : '') },
+        el('span', { class: 'tier-n', text: String(n) }),
+        icon || el('span', { class: 'tier-bones' }, bone(), ' ' + r.n),
+        el('span', { class: 'tier-tag', text: got ? '✓' : ready ? t('passClaim') : '' }),
+      );
+      card.addEventListener('click', () => {
+        if (!ready) return this.toast(sp ? t(sp[0] + '_' + sp[1]) : t('passLocked', { n }), 'gold');
+        this.claimPassTier(n);
+        this.renderPanel();
+      });
+      tiers.append(card);
+    }
+    return el('div', {}, head, claimAll, tiers);
+  }
+  claimPassTier(n, quiet) {
+    const r = claimTier(n);
+    if (!r) return;
+    if (!quiet) this.g.sfx.reward();
+    this.toast(r.kind === 'bones' ? t('passGotBones', { n: r.n }) : t('passGotItem', { name: t(r.kind + '_' + r.id) }), 'gold');
+    this.setCoins();
+    this.passBadge();
   }
   showPaused(on, mode) {
     $('paused').classList.toggle('hidden', !on);
@@ -693,7 +793,7 @@ export class UI {
     if (!silent && this.g.state === 'menu') $('menu').classList.remove('hidden');
   }
   renderPanel() {
-    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle' };
+    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
@@ -708,6 +808,7 @@ export class UI {
       album: () => this.albumView(),
       transfer: () => this.transferView(),
       challenge: () => this.challengeView(),
+      pass: () => this.passView(),
       editor: () =>
         skinEditorView(this, () => {
           this.shopTab = 'skin';
@@ -747,7 +848,7 @@ export class UI {
       if (item.hidden) continue;
       const have = owned.includes(id);
       const status = item.editor && have ? t('edOpen') : id === p[kind] ? t('equipped') : have ? t('owned') : null;
-      if ((item.season || item.album) && !have) continue; // gifts are shown once you have them
+      if ((item.season || item.album || item.pass) && !have) continue; // gifts are shown once you have them
       const icon =
         kind === 'skin' ? dinoIcon(id) : kind === 'hat' ? hatIcon(id) : kind === 'pet' ? petIcon(id) : kind === 'dance' ? danceIcon(id, p.skin) : kind === 'theme' ? themeIcon(id) : trailIcon(id);
       const price = item.level

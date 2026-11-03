@@ -28,11 +28,12 @@ import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD } 
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
 import { levelDef, scoreLevel, saveLevel, BotBrain } from './modes.js';
-import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial } from './extras.js';
+import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession } from './multiplayer.js';
 import { UI } from './ui.js';
 import { Recorder } from './replay.js';
+import { addPassXp } from './rewards.js';
 import { encodeChallenge } from './transfer.js';
 
 setCustomSkin(profile.customSkin); // the dino painted in the skin editor
@@ -48,6 +49,8 @@ const CUT_V = 9; // releasing jump early caps upward speed -> short hop
 const MIN_JUMP_H = 1.5;
 const FAST_FALL = 3.5;
 const GLIDE_FALL = 3.2; // max falling speed while gliding
+const SWIM_V = 9.5; // upward speed of one swimming stroke
+const SWIM_TOP = 4.8; // the dino can't swim higher than this
 const SPAWN_X = 42;
 const DESPAWN_X = -16;
 const NIGHT_EVERY = 700;
@@ -290,11 +293,11 @@ const cur = {
   cloud: new THREE.Color(),
 };
 // biome features that fade in and out
-const feat = { dark: 0, sea: 0, stars: 0, noClouds: 0, gravity: 1, jump: 1 };
+const feat = { dark: 0, sea: 0, stars: 0, noClouds: 0, gravity: 1, jump: 1, swim: 0, water: 0 };
 const env = { biome: 0, weatherOn: false, weatherTimer: 8 };
 
 function featTarget(b) {
-  return { dark: b.dark ? 1 : 0, sea: b.sea ? 1 : 0, stars: b.stars ? 1 : 0, noClouds: b.noClouds ? 1 : 0, gravity: b.gravity || 1, jump: b.jump || 1 };
+  return { dark: b.dark ? 1 : 0, sea: b.sea ? 1 : 0, stars: b.stars ? 1 : 0, noClouds: b.noClouds ? 1 : 0, gravity: b.gravity || 1, jump: b.jump || 1, swim: b.swim ? 1 : 0, water: b.water ? 1 : 0 };
 }
 
 function setBiome(i, instant) {
@@ -480,6 +483,15 @@ const weatherNotes = new Set(); // weather effects already announced this run
 const boneGeo = boneGeometry();
 const lanes = () => players.map((p) => p.lane);
 
+// under the sea the flying enemies are fish
+function createFish() {
+  const root = new THREE.Group();
+  const m = new THREE.Mesh(fishGeometry(), voxelMaterial);
+  m.castShadow = true;
+  root.add(m);
+  return { root, wings: null, box: FISH_BOX };
+}
+
 function groundObstacle(biomeId, forceSmall) {
   const large = !forceSmall && R() < 0.45;
   const maxN = Math.min(3, 1 + Math.floor((speed - START_SPEED) / 3.5));
@@ -504,7 +516,7 @@ function groundObstacle(biomeId, forceSmall) {
 }
 
 function bird(heightIndex) {
-  const b = createPtero();
+  const b = BIOMES[env.biome].id === 'ocean' ? createFish() : createPtero();
   if (profile.settings.highlight) b.root.traverse((o) => o.isMesh && (o.material = highlightMat));
   const heights = [0.75, 2.05, 3.35];
   const hi = heightIndex ?? Math.floor(R() * 3);
@@ -781,11 +793,13 @@ function spawnNext() {
     if (s > 150 && biomeId === 'desert') opts.push(['tumble', 0.16]);
     if (s > 500) opts.push(['meteor', biomeId === 'volcano' ? 0.4 : 0.06]);
     if (event && event.type === 'meteors') opts.push(['meteor', 2.5]);
-    if (s > 350 && biomeId !== 'space') opts.push(['pit', 0.12]);
+    const solidFloor = biomeId === 'space' || biomeId === 'ocean';
+    if (s > 350 && !solidFloor) opts.push(['pit', 0.12]);
     // moving obstacles
     if (s > 650) opts.push(['riser', 0.12]);
     if (s > 900) opts.push(['zig', 0.1]);
-    if (s > 750 && biomeId !== 'space') opts.push(['platform', 0.07]);
+    if (s > 750 && !solidFloor) opts.push(['platform', 0.07]);
+    if (biomeId === 'ocean') opts.push(['bird', 0.4], ['zig', 0.25]); // fish and jellyfish
     let pick = R() * opts.reduce((a, b) => a + b[1], 0);
     let kind = forceKind || 'ground';
     if (forceKind) pick = Infinity;
@@ -1171,6 +1185,7 @@ function recordRun(pts) {
   run.score = s;
   const missionsDone = R2.missions ? checkMissions(run) : [];
   const xp = addXp((s / 10 + run.coins * 2 + missionsDone.length * 20) * (mode === 'zen' ? 0.5 : 1));
+  addPassXp(xp.gained); // the same XP fills the season pass
   const ach = checkAchievements();
   save();
   ui.setHi(st.best);
@@ -1502,7 +1517,21 @@ function jumpDown(p = player) {
     p.jumpBuffer = p.slip + 0.1; // jumps as soon as the slide on the ice ends
     return;
   }
-  if (p.onGround) {
+  if (feat.swim > 0.5 && !p.inPit) {
+    // under the sea every tap is a stroke upwards
+    p.onGround = false;
+    p.plat = null;
+    p.vy = Math.max(p.vy, SWIM_V);
+    p.jumpReleased = true;
+    p.fullJump = true;
+    p.gliding = false;
+    sfx.tone(520, 0.06, { to: 760, type: 'triangle', vol: 0.04 });
+    for (let i = 0; i < 3; i++) dust.puff(-0.3, p.y + 0.6, p.lane + (Math.random() - 0.5) * 0.5, -speed * 0.2, 1 + Math.random(), (Math.random() - 0.5) * 1.5);
+    if (p === player) {
+      run.jumps++;
+      profile.stats.jumps++;
+    }
+  } else if (p.onGround) {
     doJump(p);
     p.fullJump = tutorialJump; // a quick tap in the tutorial still clears the cactus
   } else if (p.power.double > 0 && p.airJumps === 0 && !p.inPit) {
@@ -1912,8 +1941,8 @@ function updateWorld(dt, v) {
   const dusk = Math.sin(Math.PI * clamp(n, 0, 1)) * (1 - feat.stars); // orange sky on the way into the night and out of it
   scene.background.copy(cur.sky).lerp(SUNSET_SKY, dusk * 0.55).lerp(RAIN_SKY, rain * 0.35).lerp(STORM_SKY, storm * 0.45).lerp(nightSky, n * n).lerp(BONUS_SKY, bonusTint * 0.5);
   scene.fog.color.copy(scene.background);
-  scene.fog.near = lerp(lerp(40, 12, storm), 8, feat.dark);
-  scene.fog.far = lerp(lerp(120, 50, storm), 42, feat.dark);
+  scene.fog.near = lerp(lerp(lerp(40, 12, storm), 8, feat.dark), 16, feat.water);
+  scene.fog.far = lerp(lerp(lerp(120, 50, storm), 42, feat.dark), 70, feat.water);
   groundMat.color.copy(cur.ground);
   pathMat.color.copy(cur.path);
   hemi.groundColor.copy(cur.hemiGround);
@@ -2053,8 +2082,13 @@ function updatePlayer(p, dt) {
     }
     if (p.jumpReleased && !p.fullJump && p.vy > CUT_V * feat.jump && p.y > MIN_JUMP_H) p.vy = CUT_V * feat.jump;
     p.vy -= g * dt;
+    if (feat.swim > 0.5) p.vy = Math.max(p.vy, p.input.duck ? -14 : -5.5); // water slows the fall
     const prevY = p.y;
     p.y += p.vy * dt;
+    if (feat.swim > 0.5 && p.y > SWIM_TOP) {
+      p.y = SWIM_TOP;
+      p.vy = Math.min(p.vy, 0);
+    }
     const pl = p.vy <= 0 && !p.inPit ? platformUnder(p) : null;
     if (pl && p.y <= pl.top && prevY >= pl.top - 0.3) {
       // landed on a moving platform (only from above)
@@ -2700,6 +2734,7 @@ function update(rawDt) {
     // sandstorm: gusts of wind push the world faster and slower
     const storm = weather.type === 'sand' ? weather.intensity : 0;
     if (storm > 0.5) note('weatherWind');
+    if (feat.swim > 0.5 && state === 'running') note('swimHint');
     const gust = 1 + storm * 0.14 * Math.sin(time * 1.7);
     v = speed * slowK * speedBoost * gust;
     runTime += dt;

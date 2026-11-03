@@ -16,6 +16,8 @@ export const FOSSIL_TINT = {
   city: '#c4c0b8',
   volcano: '#e8a070',
   space: '#d0d4e0',
+  ocean: '#cfe8e0',
+  candy: '#ffe0f0',
 };
 export const FOSSIL_WORLD_REWARD = 100;
 
@@ -79,6 +81,8 @@ export const TRAILS = {
   hearts: { price: 200, colors: ['#ff6fa8', '#ff4f7a', '#ffd6e6'], motion: 'float' },
   rainbow: { price: 250, colors: ['#ff4f5a', '#ff9a2a', '#ffd23f', '#5fd35a', '#3f8fff', '#9a5ad8'], motion: 'line' },
   fire: { price: 300, colors: ['#ff3b1a', '#ff8a1a', '#ffd23f'], motion: 'rise' },
+  // season pass, tier 20
+  confetti: { pass: true, colors: ['#ff4f8a', '#4fc3ff', '#ffd23f', '#5fd35a', '#c86fff', '#ffffff'], motion: 'twinkle' },
 };
 
 export class Trail {

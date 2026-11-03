@@ -20,6 +20,8 @@ export const SKINS = {
   rainbow: { level: 20, body: '#ff4f5a', dark: '#c8303a', belly: '#ffffff', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#3a3a3a', foot: '#5a5a5a', pattern: 'rainbow' },
   // reward for completing the fossil album
   fossil: { album: true, body: '#e8d8a8', dark: '#b8a070', belly: '#fff4d0', eye: '#1b1b1b', pupil: '#ffd23f', mouth: '#5a4a2a', foot: '#a89060', pattern: 'ribs' },
+  // the last tier of the season pass
+  champion: { pass: true, body: '#7a3ab8', dark: '#552880', belly: '#ffd23f', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#2a1040', foot: '#ffd23f', pattern: 'galaxy' },
   // painted by the player in the skin editor (colours and paint come from the profile)
   custom: { price: 300, editor: true, body: '#5fae3e', dark: '#467f2c', belly: '#cfe39a', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#2b4a1c', foot: '#3b6b26', paint: {} },
   // the giant that chases you during the T-rex event (not in the shop)
@@ -64,6 +66,8 @@ export const HATS = {
   // gifts from seasonal events, not for sale
   pumpkin: { season: 'halloween' },
   santa: { season: 'christmas' },
+  // season pass, tier 10
+  laurel: { pass: true },
 };
 
 // ---------------------------------------------------------------- dino grids
@@ -237,6 +241,16 @@ function hatVoxels(id) {
           }
       for (const [y, z] of [[3, -1], [3, 1], [1, -1], [1, 0], [1, 1]]) vs.set(3, y, z, '#ffe066');
       box(-1, -1, 5, 6, 0, 0, '#4a7a2a');
+      break;
+    case 'laurel':
+      // a wreath of leaves around the head, with a gold berry in front
+      for (let x = -5; x <= 1; x++)
+        for (const z of [-4, 4]) if ((x + 10) % 2 === 0 || x === -5 || x === 1) vs.set(x, 0, z, (x + z) % 3 ? '#4f9a32' : '#3f8a2a');
+      for (let z = -4; z <= 4; z++) {
+        vs.set(-5, 1, z, z % 2 ? '#4f9a32' : '#5fae3e');
+        vs.set(1, 1, z, z % 2 ? '#5fae3e' : '#4f9a32');
+      }
+      vs.set(2, 1, 0, '#ffd23f');
       break;
     case 'santa':
       box(-4, 2, 0, 0, -3, 3, '#ffffff');

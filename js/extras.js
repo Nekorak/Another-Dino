@@ -74,3 +74,35 @@ export function platformGeometry() {
 // ------------------------------------------------------------------ golden bone
 export const GOLD_BONE_VALUE = 10;
 export const goldMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, color: '#ffd23f', emissive: '#7a4a00', emissiveIntensity: 0.6 });
+
+// ------------------------------------------------------------------ fish (the "pterodactyls" under the sea)
+// facing -x like the pterodactyl, so it swims towards the dino
+const FISH = [
+  '     OOO        ',
+  '   OOWWOO   O   ',
+  ' OOKWOOWOO OO   ',
+  'OOOWOOWOOOOOO   ',
+  ' OOOWOOWOO OO   ',
+  '   OOWWOO   O   ',
+  '     OOO        ',
+];
+const FISH_COL = { O: '#ff7a1a', W: '#ffffff', K: '#1b1b1b' };
+export const FISH_BOX = { x0: -8, x1: 5, y0: 0, y1: 7 }; // voxels, like the pterodactyl's box
+
+let fishGeo = null;
+export function fishGeometry() {
+  if (fishGeo) return fishGeo;
+  const vs = new VoxelSet();
+  const H = FISH.length;
+  FISH.forEach((row, r) => {
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === ' ') continue;
+      const y = H - 1 - r;
+      const thick = x < 10 ? 2 : 0; // body is round, the tail is flat
+      for (let z = -thick; z <= thick; z++) vs.set(x, y, z, ch === 'K' && Math.abs(z) !== thick ? FISH_COL.O : FISH_COL[ch]);
+    }
+  });
+  fishGeo = buildGeometry(vs, [8, 0, 0.5]);
+  return fishGeo;
+}

@@ -136,6 +136,8 @@ const WEATHER = {
   drip: { color: '#8fd3ff', size: 2, n: 160 },
   dust: { color: '#b8b4aa', size: 2, n: 300 },
   shooting: { color: '#ffffff', size: 2, n: 90 },
+  bubbles: { color: '#dff6ff', size: 2, n: 220 },
+  sprinkles: { color: '#ff8ad0', size: 2, n: 360 },
   none: { color: '#ffffff', size: 1, n: 0 },
 };
 
@@ -167,7 +169,7 @@ export class Weather {
   respawn(i, anywhere) {
     const p = this.geo.attributes.position.array;
     p[i * 3] = -14 + Math.random() * 56;
-    p[i * 3 + 1] = anywhere ? Math.random() * 16 : this.type === 'embers' ? -0.2 : this.type === 'sand' || this.type === 'dust' ? Math.random() * 5 : 16;
+    p[i * 3 + 1] = anywhere ? Math.random() * 16 : this.type === 'embers' || this.type === 'bubbles' ? -0.2 : this.type === 'sand' || this.type === 'dust' ? Math.random() * 5 : 16;
     p[i * 3 + 2] = -16 + Math.random() * 28;
     if ((this.type === 'sand' || this.type === 'dust') && !anywhere) p[i * 3] = 42;
     if (this.type === 'shooting') {
@@ -217,6 +219,15 @@ export class Weather {
         case 'dust':
           x -= (worldV * 0.4 + 2 + s * 2) * dt;
           y += Math.sin(time * 1.5 + s * 25) * 0.3 * dt;
+          break;
+        case 'bubbles':
+          // rising and wobbling, carried back slowly by the current
+          y += (1.6 + s * 2) * dt;
+          x -= (worldV * 0.35 + Math.sin(time * 3 + s * 40) * 0.8) * dt;
+          break;
+        case 'sprinkles':
+          y -= (2 + s * 1.5) * dt;
+          x -= (worldV * 0.3 + Math.sin(time * 2 + s * 30) * 0.6) * dt;
           break;
         case 'shooting':
           // high in the sky, streaking down and to the left

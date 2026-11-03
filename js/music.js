@@ -20,6 +20,10 @@ const SONGS = [
   { root: 48, scale: [0, 1, 3, 5, 7, 8, 10], chords: [0, 1, 5, 1], bpm: 156, lead: 0.25 },
   // space: C whole-tone, floating
   { root: 48, scale: [0, 2, 4, 6, 8, 10], chords: [0, 2, 1, 3], bpm: 112, lead: 0.5 },
+  // ocean: E dorian, slow and wavy
+  { root: 52, scale: [0, 2, 3, 5, 7, 9, 10], chords: [0, 4, 3, 1], bpm: 100, lead: 0.5 },
+  // candy: C major, sugary and quick
+  { root: 60, scale: [0, 2, 4, 5, 7, 9, 11], chords: [0, 5, 3, 4], bpm: 152, lead: 0.125 },
 ];
 
 const midiHz = (m) => 440 * 2 ** ((m - 69) / 12);
