@@ -348,16 +348,16 @@ export class LanSync {
       else this.on.error('xferBadPin');
     } else if (this.role === 'receive' && m.t === 'data') {
       if (String(m.pin) !== this.pin) {
-        this.t.send(address, port, this.pack({ t: 'badpin', a: m.a }));
+        for (let i = 0; i < 3; i++) this.t.send(address, port, this.pack({ t: 'badpin', a: m.a })); // UDP: say it three times
         return;
       }
-      const key = m.from;
+      const key = m.from + ':' + m.a; // chunks of different attempts never mix
       if (!this.parts.has(key)) this.parts.set(key, new Array(m.n));
       const arr = this.parts.get(key);
       arr[m.i] = m.d;
       if (arr.filter((x) => x != null).length === m.n && !this.done) {
         this.done = true;
-        this.t.send(address, port, this.pack({ t: 'ok', a: m.a }));
+        for (let i = 0; i < 3; i++) this.t.send(address, port, this.pack({ t: 'ok', a: m.a }));
         this.on.received(arr.join(''));
       }
     }

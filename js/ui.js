@@ -785,6 +785,17 @@ export class UI {
   panelOpen() {
     return this.panel;
   }
+  // a window on top of the menu (chest, egg, replay, controls editor): keys must not start a run behind it
+  modalOpen() {
+    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay'].some((id) => !$(id).classList.contains('hidden'));
+  }
+  closeModal() {
+    const ed = document.getElementById('ctl-editor');
+    if (ed) return ed.querySelector('.ctl-bar .ctl-row:last-child .menu-btn:not(.primary)')?.click();
+    if (!$('replay').classList.contains('hidden')) return this.hideReplay();
+    if (!$('chest').classList.contains('hidden') && !$('chest').classList.contains('shaking')) return $('chest').classList.add('hidden');
+    if (!$('egg').classList.contains('hidden') && $('egg').classList.contains('open')) $('egg').classList.add('hidden');
+  }
   openPanel(name) {
     this.panel = name;
     $('menu').classList.add('hidden');

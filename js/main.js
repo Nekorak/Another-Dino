@@ -51,7 +51,7 @@ const MIN_JUMP_H = 1.5;
 const FAST_FALL = 3.5;
 const GLIDE_FALL = 3.2; // max falling speed while gliding
 const SWIM_V = 9.5; // upward speed of one swimming stroke
-const SWIM_TOP = 4.8; // the dino can't swim higher than this
+const SWIM_TOP = 3.4; // the dino can't swim higher than this (so the high fish must be dodged too)
 const SPAWN_X = 42;
 const DESPAWN_X = -16;
 const NIGHT_EVERY = 700;
@@ -65,7 +65,9 @@ const RIVAL_LANES = [-2.4, -4.8, -7.2, -9.6, -12, -14.4, -16.8]; // up to 7 othe
 const LANES = [0, -3.2, -6.4, -9.6]; // lanes for local multiplayer and the robot rival
 const REVIVE_COST = 50;
 const REVIVE_TIME = 5;
-const EVENT_TIME = { meteors: 8, trex: 9, bonus: 7 };
+// how long events last, in points of distance (not seconds: a shared track must stay the
+// same for a player who slowed time down)
+const EVENT_LEN = { meteors: 130, trex: 150, bonus: 110 };
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -468,6 +470,7 @@ const obstacles = [];
 const coins = [];
 const items = [];
 let R = Math.random; // gameplay randomness (seeded in LAN races and the daily challenge)
+let IR = Math.random; // randomness for items (see resetRun)
 let gapLeft = 0;
 let nextPowerAt = 300;
 let nextBombAt = 250;
@@ -837,15 +840,15 @@ function spawnNext() {
   if (players.some((p) => p.alive && p.power.rocket > 1)) for (let x = SPAWN_X; x < SPAWN_X + gap - 1; x += 1.2) addCoin(x, 4.4);
   // a power-up roughly every 300-600 points, floating in the gap
   if (!tutorial && rules().powerups && score > nextPowerAt && gap > o.width + 5) {
-    nextPowerAt = score + (300 + R() * 300) * powerGapK();
-    addItem(POWERUPS[Math.floor(R() * POWERUPS.length)], SPAWN_X + o.width + gap * 0.5, 1.1);
+    nextPowerAt = score + (300 + IR() * 300) * powerGapK();
+    addItem(POWERUPS[Math.floor(IR() * POWERUPS.length)], SPAWN_X + o.width + gap * 0.5, 1.1);
   } else if (!tutorial && mode !== 'lan' && !isLocal() && score > nextFossilAt && gap > o.width + 5) {
     // a rare fossil for the album
-    nextFossilAt = score + 700 + R() * 600;
+    nextFossilAt = score + 700 + IR() * 600;
     const id = mode === 'challenge' ? null : missingFossil(biomeId, Math.random); // depends on the album, so not seeded
     if (id) addItem('fossil', SPAWN_X + o.width + gap * 0.5, 1.6, id);
   } else if (mode === 'lan' && lanMode === 'sabotage' && score > nextBombAt && gap > o.width + 5) {
-    nextBombAt = score + 220 + R() * 120;
+    nextBombAt = score + 220 + IR() * 120;
     addItem('bomb', SPAWN_X + o.width + gap * 0.5, 1.1);
   }
 }
@@ -996,6 +999,9 @@ function resetRun(seed) {
   endEvent(true);
   endBoss(true);
   R = seed != null ? rng(seed) : Math.random;
+  // power-ups, fossils and bombs have their own stream: how often they come depends on the
+  // player's "luck" upgrade, and that must not change the obstacles of a shared track
+  IR = seed != null ? rng((seed ^ 0x5bd1e995) >>> 0) : Math.random;
   speed = adv ? adv.startSpeed : START_SPEED;
   score = 0;
   runTime = 0;
@@ -1003,10 +1009,10 @@ function resetRun(seed) {
   lastNight = 0;
   nightTimer = 0;
   gapLeft = 14;
-  nextPowerAt = (250 + R() * 150) * powerGapK();
-  nextBombAt = 200 + R() * 100;
+  nextPowerAt = (250 + IR() * 150) * powerGapK();
+  nextBombAt = 200 + IR() * 100;
   nextEventAt = 900 + R() * 600;
-  nextFossilAt = 350 + R() * 500;
+  nextFossilAt = 350 + IR() * 500;
   nextBossAt = MINI_BOSS_EVERY;
   slowK = 1;
   speedBoost = 1;
@@ -1361,7 +1367,7 @@ function toMenu() {
 function startEvent() {
   const types = ['meteors', 'trex', 'bonus'];
   const type = types[Math.floor(R() * types.length)];
-  event = { type, t: EVENT_TIME[type] };
+  event = { type, end: score + EVENT_LEN[type] };
   ui.toast(t('ev_' + type), type === 'bonus' ? 'gold' : 'red');
   if (type === 'trex') {
     trex = createDino('trex', 'none');
@@ -1429,8 +1435,18 @@ function updateBoss(dt) {
   ui.bossBar(Math.max(0, boss.t / boss.dur));
   if (boss.drop <= 0 && boss.t > 1.5) {
     boss.drop = 1.1 + Math.random() * 0.7;
-    // far enough ahead that the red warning is visible before the rock lands
-    addObstacle(meteor(), 32 + Math.random() * 8);
+    // far enough ahead that the red warning is visible before the rock lands, and never
+    // right before or after another obstacle (two jumps in a row with no room between)
+    // (everything moves together, so today's distances are the distances when it lands)
+    const room = Math.max(worldV, speed * 0.5) * 0.42 + 2;
+    for (let k = 0; k < 6; k++) {
+      const x = 32 + Math.random() * 8;
+      const nextSpawn = SPAWN_X + gapLeft; // where the next obstacle will be when it appears
+      if (nextSpawn - x < room + 1) continue;
+      if (obstacles.some((o) => o.kind !== 'finish' && x > o.x - room && x < o.x + o.width + room)) continue;
+      addObstacle(meteor(), x);
+      break;
+    }
   }
   if (boss.t <= 0) {
     const mini = boss.mini;
@@ -1452,9 +1468,9 @@ function updateEvent(dt) {
   if (!event) {
     if (!tutorial && !adv && !boss && score > nextEventAt && (mode !== 'lan' || lanMode !== 'elimination')) startEvent();
   } else {
-    event.t -= dt;
+
     if (event.type === 'trex') speedBoost = 1.15;
-    if (event.t <= 0) endEvent(false);
+    if (score >= event.end) endEvent(false);
   }
   if (trex) {
     const tx = trex.leaving ? -40 : -1.5;
@@ -1500,7 +1516,7 @@ function tutorialRelease(action) {
 }
 
 function canRestart() {
-  return state === 'over' && mode !== 'lan' && now() - ui.overShownAt > 0.5;
+  return state === 'over' && mode !== 'lan' && now() - ui.overShownAt > 0.8; // a moment to see the score before a mashed jump restarts
 }
 
 function jumpDown(p = player) {
@@ -1668,6 +1684,10 @@ addEventListener('keydown', (e) => {
   if (tgt) e.preventDefault();
   if (e.repeat) return;
   sfx.unlock();
+  if (ui.modalOpen()) {
+    if (e.code === 'Escape') ui.closeModal();
+    return;
+  }
   if (e.code === 'Escape' && ui.panelOpen()) return ui.closePanel();
   if (state === 'photo') {
     if (e.code === 'Escape' || e.code === 'KeyP') endPhoto();
@@ -1712,7 +1732,7 @@ function pollGamepads() {
     const s = b(9);
     if (j && !st.j) {
       sfx.unlock();
-      if (state === 'menu' && !ui.panelOpen()) startSolo();
+      if (state === 'menu' && !ui.panelOpen() && !ui.modalOpen()) startSolo();
       else jumpDown(p);
     }
     if (!j && st.j) jumpUp(p);
@@ -2638,7 +2658,7 @@ function beginCountdown(seed, m) {
     lane++;
   }
   state = 'countdown';
-  countdown = 3.999;
+  countdown = now() + 3.999; // wall-clock time, so a slow phone starts the race together with the others
   ui.hideScreens();
   ui.setPlaying(true, 'lan', lanMode);
   ui.countdown('3');
@@ -2671,7 +2691,7 @@ function updateRivals(dt) {
   const list = [{ id: lan.me.id, name: lan.me.name, sc: Math.floor(myPts), a: meAlive }];
   for (const s of states.values()) list.push({ id: s.id, name: lan.nameOf(s.id), sc: s.pt ?? s.sc, a: !!s.a });
   ui.mpHud(list.sort((a, b) => b.sc - a.sc), lan.me.id);
-  if (['running', 'over', 'dying', 'spectate'].includes(state)) lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive });
+  if (['countdown', 'running', 'over', 'dying', 'spectate'].includes(state)) lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive });
   // my own dino stays where it fell while the camera follows the others
   if (!player.alive) player.dino.root.position.x = clamp((player.final - score) / 0.75, -30, 40);
 }
@@ -2750,7 +2770,7 @@ function update(rawDt) {
     if (storm > 0.5) note('weatherWind');
     if (feat.swim > 0.5 && state === 'running') note('swimHint');
     const gust = 1 + storm * 0.14 * Math.sin(time * 1.7);
-    v = speed * slowK * speedBoost * gust;
+    v = speed * slowK * speedBoost * gust * (1 - 0.2 * feat.swim); // water slows everything down
     worldV = v;
     runTime += dt;
     const ds = v * dt * 0.75;
@@ -2828,15 +2848,15 @@ function update(rawDt) {
   } else if (state === 'running' && frozen) {
     updatePlayer(player, 0); // tutorial pause: the world waits, the player can still act
   } else if (state === 'countdown') {
-    countdown -= rawDt;
-    if (countdown <= 0) {
+    const left = countdown - now();
+    if (left <= 0) {
       ui.countdown(null);
       state = 'running';
       music.biome = 0;
       music.start();
       sfx.beep(true);
-    } else if (String(Math.ceil(countdown)) !== ui.countdownText()) {
-      ui.countdown(String(Math.ceil(countdown)));
+    } else if (String(Math.ceil(left)) !== ui.countdownText()) {
+      ui.countdown(String(Math.ceil(left)));
       sfx.beep();
     }
   }

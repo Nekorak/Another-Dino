@@ -7,7 +7,7 @@ const MAX_PLAYERS = 8;
 export const TOUR_RACES = 5;
 // tournament points for 1st, 2nd, 3rd... place in each race
 const TOUR_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
-const TIMEOUT = 6000;
+const TIMEOUT = 4500; // players send something at least every second (heartbeat)
 
 export class LanSession {
   constructor(transport, me, on) {
@@ -36,8 +36,11 @@ export class LanSession {
   }
 
   async close() {
-    if (this.role === 'host') this.toPeers({ t: 'close' });
-    else if (this.role === 'client') this.toHost({ t: 'bye' });
+    for (let i = 0; i < 3; i++) {
+      if (this.role === 'host') this.toPeers({ t: 'close' });
+      else if (this.role === 'client') this.toHost({ t: 'bye' });
+    }
+    clearInterval(this.relay);
     this.timers.forEach(clearInterval);
     this.timers = [];
     this.role = 'idle';
@@ -109,6 +112,8 @@ export class LanSession {
       this.on.rooms([...this.rooms.values()]);
     } else if (this.role === 'client') {
       if (this.state !== 'race') this.sendJoin();
+      // a heartbeat in case the game sends nothing for a while (a very slow frame rate, the results screen…)
+      else if (performance.now() - (this.lastSend || 0) > 1000) this.toHost({ t: 'hb' });
       if (now - this.hostSeen > TIMEOUT) {
         this.role = 'idle';
         this.on.error('hostLost');
@@ -119,13 +124,17 @@ export class LanSession {
   publishLobby() {
     this.lobby = [...this.players.values()].map(({ id, name, skin, hat }) => ({ id, name, skin, hat }));
     const tour = this.tour ? { race: this.tour.race, total: this.tour.total } : null;
-    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode, tour });
+    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode, tour, last: this.lastEnd || null });
     this.on.lobby(this.lobby, true);
   }
 
   // -------------------------------------------------------------- race
   startRace() {
     if (this.role !== 'host') return;
+    // a double tap on START must not start two races (the first one's relay would keep running)
+    if (this.state === 'race' && performance.now() - (this.startedAt || 0) < 1500) return;
+    this.startedAt = performance.now();
+    clearInterval(this.relay);
     // a tournament is a series of races; a new one starts after the last race
     if (this.mode === 'tournament' && (!this.tour || this.tour.race >= this.tour.total)) this.tour = { race: 0, total: TOUR_RACES, pts: new Map() };
     if (this.mode !== 'tournament') this.tour = null;
@@ -135,7 +144,8 @@ export class LanSession {
     for (const id of this.players.keys()) this.peerStates.set(id, { id, sc: 0, y: 0, d: 0, a: 1 });
     for (let i = 0; i < 3; i++) setTimeout(() => this.toPeers({ t: 'go', seed: this.raceSeed, mode: this.mode }), i * 150);
     this.on.start(this.raceSeed, this.mode);
-    this.relay = setInterval(() => this.toPeers({ t: 'all', s: [...this.peerStates.values()] }), 66);
+    // the seed rides along, so a player who lost every 'go' packet still finds the race
+    this.relay = setInterval(() => this.toPeers({ t: 'all', s: [...this.peerStates.values()], seed: this.raceSeed, mode: this.mode }), 66);
   }
 
   // called by the game every frame (throttled here)
@@ -172,6 +182,7 @@ export class LanSession {
         tour = { race: tr.race, total: tr.total, table, done: tr.race >= tr.total };
       }
       const end = { t: 'end', r: results, seed: this.raceSeed, tour };
+      this.lastEnd = end; // repeated in every lobby message for anyone who missed it
       this.toPeers(end);
       for (let i = 1; i < 3; i++) setTimeout(() => this.toPeers(end), i * 150);
       this.on.end(results, tour);
@@ -234,6 +245,8 @@ export class LanSession {
         }
         Object.assign(p, { name: String(m.name).slice(0, 12), skin: m.skin, hat: m.hat, addr: address, port, seen: Date.now() });
         this.publishLobby();
+      } else if (m.t === 'hb' && this.players.has(m.from)) {
+        this.players.get(m.from).seen = Date.now();
       } else if (m.t === 's' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
         if (this.state === 'race') this.peerStates.set(m.from, { ...m.s, id: m.from });
@@ -258,8 +271,25 @@ export class LanSession {
         case 'lobby':
           this.lobby = m.players;
           this.mode = m.mode || 'race';
+          // the race of ours ended but the 'end' packets were all lost: the lobby brings the results
+          if (m.last && m.last.seed === this.raceSeed && this.endedSeed !== m.last.seed) {
+            this.endedSeed = m.last.seed;
+            this.state = 'lobby';
+            this.on.end(m.last.r, m.last.tour || null);
+          }
           if (m.st === 'lobby' && this.state === 'race') this.state = 'lobby';
           this.on.lobby(m.players, false);
+          break;
+        case 'all':
+          // a race is running that we never heard start (all 'go' packets lost): join it now
+          if (m.seed != null && this.raceSeed !== m.seed && this.endedSeed !== m.seed && m.s.some((x) => x.id === this.me.id)) {
+            this.raceSeed = m.seed;
+            this.mode = m.mode || 'race';
+            this.state = 'race';
+            this.peerStates.clear();
+            this.on.start(m.seed, this.mode);
+          }
+          for (const x of m.s) this.peerStates.set(x.id, x);
           break;
         case 'go':
           if (this.raceSeed !== m.seed) {
@@ -269,9 +299,6 @@ export class LanSession {
             this.peerStates.clear();
             this.on.start(m.seed, this.mode);
           }
-          break;
-        case 'all':
-          for (const s of m.s) this.peerStates.set(s.id, s);
           break;
         case 'end':
           // keyed by race so repeats are ignored but a late 'end' still shows the results
