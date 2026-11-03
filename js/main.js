@@ -479,6 +479,7 @@ let tutorial = null;
 let nextFossilAt = 600;
 let nextBossAt = MINI_BOSS_EVERY;
 let forceKind = null; // testing: always spawn this kind of obstacle
+let worldV = 0; // testing: how fast the track moves right now
 const weatherNotes = new Set(); // weather effects already announced this run
 
 const boneGeo = boneGeometry();
@@ -2750,6 +2751,7 @@ function update(rawDt) {
     if (feat.swim > 0.5 && state === 'running') note('swimHint');
     const gust = 1 + storm * 0.14 * Math.sin(time * 1.7);
     v = speed * slowK * speedBoost * gust;
+    worldV = v;
     runTime += dt;
     const ds = v * dt * 0.75;
     score += ds;
@@ -3128,6 +3130,9 @@ window.__dino = {
   RIG,
   night: (on) => (nightTimer = on ? 999 : 0),
   force: (k) => (forceKind = k),
+  get vel() {
+    return worldV;
+  },
   set nextBossAt(v) {
     nextBossAt = v;
   },
