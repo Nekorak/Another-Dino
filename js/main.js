@@ -26,6 +26,8 @@ import { t, setLang } from './i18n.js';
 import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD } from './missions.js';
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
+import { levelDef, scoreLevel, saveLevel, BotBrain } from './modes.js';
+import { Trail, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession } from './multiplayer.js';
 import { UI } from './ui.js';
 
@@ -44,10 +46,10 @@ const DESPAWN_X = -16;
 const NIGHT_EVERY = 700;
 const NIGHT_LEN = 12;
 const PIXEL_LEVELS = [110, 160, 240]; // render pixels along the short screen side
-const BASE_POWER_TIME = { shield: 15, magnet: 10, slow: 6, double: 12 };
+const BASE_POWER_TIME = { shield: 15, magnet: 10, slow: 6, double: 12, rocket: 5, giant: 6, rain: 6 };
 const GHOST_STEP = 0.05;
 const RIVAL_LANES = [-2.4, -4.8, -7.2];
-const LANE2 = -3.2; // second player's lane in local two-player mode
+const LANES = [0, -3.2, -6.4, -9.6]; // lanes for local multiplayer and the robot rival
 const REVIVE_COST = 50;
 const REVIVE_TIME = 5;
 const EVENT_TIME = { meteors: 8, trex: 9, bonus: 7 };
@@ -58,7 +60,9 @@ const lerp = (a, b, k) => a + (b - a) * k;
 const now = () => performance.now() / 1000;
 const powerTime = () => {
   const k = powerTimeK();
-  return { shield: BASE_POWER_TIME.shield * k, magnet: BASE_POWER_TIME.magnet * k, slow: BASE_POWER_TIME.slow * k, double: BASE_POWER_TIME.double * k };
+  const out = {};
+  for (const [id, v] of Object.entries(BASE_POWER_TIME)) out[id] = v * k;
+  return out;
 };
 
 setLang(profile.settings.lang);
@@ -83,13 +87,24 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color();
 scene.fog = new THREE.Fog('#ffffff', 40, 120);
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300);
-const camera2 = new THREE.PerspectiveCamera(40, 1, 0.1, 300); // second player's half of the screen
-// Each lane's dino, obstacles and bones live on their own render layer (lane 1 = layer 1,
-// lane 2 = layer 2) so the bottom half of a split screen does not show player 1 in front of the camera.
-camera.layers.enable(1);
-camera.layers.enable(2);
-camera2.layers.enable(2);
+// one camera per player in local multiplayer (split screen)
+const cams = [camera, ...[1, 2, 3].map(() => new THREE.PerspectiveCamera(40, 1, 0.1, 300))];
+// Each lane's dino, obstacles and bones live on their own render layer (lane i = layer i + 1),
+// so a split-screen view does not show the other players right in front of its camera.
 const laneLayer = (obj, index) => obj.traverse((o) => o.layers.set(index + 1));
+function setCameraLayers(count, split) {
+  cams.forEach((c, i) => {
+    c.layers.set(0);
+    if (!split) {
+      for (let k = 1; k <= 4; k++) c.layers.enable(k); // one view shows every lane
+    } else {
+      c.layers.enable(i + 1);
+      // in two-player mode the top view also shows player 2's lane behind
+      if (count === 2 && i === 0) c.layers.enable(2);
+    }
+  });
+}
+setCameraLayers(1, false);
 
 const hemi = new THREE.HemisphereLight('#e6f6ff', '#d8b27a', 1.7);
 scene.add(hemi);
@@ -103,7 +118,7 @@ sun.position.set(-4, 18, 12);
 sun.target.position.set(6, 0, 0);
 scene.add(sun, sun.target);
 // the dino's lantern, used in the cave
-const lanterns = [0, 1].map(() => {
+const lanterns = [0, 1, 2, 3].map(() => {
   const l = new THREE.PointLight('#ffcf7a', 0, 18, 1.2);
   scene.add(l);
   return l;
@@ -153,7 +168,7 @@ groundTex.repeat.set(GROUND_W / (TEX * VOX), GROUND_D / (TEX * VOX));
 scene.add(ground);
 const pathMat = new THREE.MeshLambertMaterial({ map: pathTex });
 pathTex.repeat.set(GROUND_W / (TEX * VOX), PATH_D / (TEX * VOX));
-const paths = [0, LANE2].map((z) => {
+const paths = LANES.map((z) => {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_W, PATH_D), pathMat);
   m.rotation.x = -Math.PI / 2;
   m.position.set(40, 0.01, z);
@@ -161,7 +176,7 @@ const paths = [0, LANE2].map((z) => {
   scene.add(m);
   return m;
 });
-paths[1].visible = false;
+for (let i = 1; i < paths.length; i++) paths[i].visible = false;
 
 // ocean behind the beach
 const seaMat = new THREE.MeshLambertMaterial({ color: '#3f9fe0', transparent: true, opacity: 0, emissive: '#1f5fa0', emissiveIntensity: 0.3 });
@@ -171,6 +186,7 @@ sea.position.set(40, 0.04, -62);
 scene.add(sea);
 
 // ------------------------------------------------------------------ scenery
+const season = currentSeason(); // halloween | christmas | newyear | null
 const near = [];
 const NEAR_Z = [[-22, -5], [-8, -5], [3, 9]];
 for (let i = 0; i < 36; i++) {
@@ -183,8 +199,9 @@ for (let i = 0; i < 36; i++) {
 function placeNear(p, x, biomeId) {
   const kind = Math.floor(Math.random() * NEAR_KINDS);
   const g = nearPropGeometry(biomeId, kind, p.seed % 12);
-  p.mesh.geometry = g.geo;
-  p.mesh.material = g.glow ? glowMaterial : voxelMaterial;
+  const sp = Math.random() < 0.22 ? seasonPropGeometry(season, p.seed + Math.floor(Math.random() * 6)) : null;
+  p.mesh.geometry = sp || g.geo;
+  p.mesh.material = !sp && g.glow ? glowMaterial : voxelMaterial;
   p.mesh.position.x = x;
   const [a, b] = NEAR_Z[Math.floor(Math.random() * NEAR_Z.length)];
   p.mesh.position.z = lerp(a, b, Math.random());
@@ -230,6 +247,9 @@ scene.add(stars);
 
 const dust = new Dust(scene);
 const shatter = new Shatter(scene);
+const trail = new Trail(scene);
+const flame = new Dust(scene, 40); // rocket exhaust
+flame.setColor('#ff8a2a');
 const weather = new Weather(scene);
 
 // ------------------------------------------------------------------ biome colours
@@ -435,7 +455,10 @@ let nextBombAt = 250;
 let nextEventAt = 900;
 let event = null; // { type, t }
 let trex = null;
+let boss = null; // adventure boss: { mesh, t, drop }
 let tutorial = null;
+let nextFossilAt = 600;
+const weatherNotes = new Set(); // weather effects already announced this run
 
 const boneGeo = boneGeometry();
 const lanes = () => players.map((p) => p.lane);
@@ -593,25 +616,27 @@ function syncViews(o) {
   }
 }
 
-function addCoin(x, y) {
+function addCoin(x, y, vy = 0, only = null) {
   const mat = profile.settings.highlight ? coinHighlightMat : voxelMaterial;
+  if (adv) adv.bonesSpawned++;
   for (const p of players) {
+    if (only && p !== only) continue;
     const m = new THREE.Mesh(boneGeo, mat);
     m.castShadow = true;
     m.position.set(x, y, p.lane);
     laneLayer(m, p.index);
     scene.add(m);
-    coins.push({ m, x, y, owner: p.index });
+    coins.push({ m, x, y, vy, owner: p.index });
   }
 }
 
-function addItem(type, x, y) {
+function addItem(type, x, y, fossil) {
   for (const p of players) {
-    const m = new THREE.Mesh(powerupGeometry(type), glowMaterial);
+    const m = new THREE.Mesh(type === 'fossil' ? fossilGeometry(fossil) : powerupGeometry(type), type === 'fossil' ? voxelMaterial : glowMaterial);
     m.position.set(x, y, p.lane);
     laneLayer(m, p.index);
     scene.add(m);
-    items.push({ m, type, x, y, t: 0, owner: p.index });
+    items.push({ m, type, x, y, t: 0, owner: p.index, fossil });
   }
 }
 
@@ -628,8 +653,46 @@ function coinWave(x0, len) {
   for (let x = x0; x < x0 + len; x += 0.9) addCoin(x, 1.4 + Math.sin(x * 0.5 + phase) * 1.1);
 }
 
+function finishLine() {
+  // a chequered arch across the track
+  const root = new THREE.Group();
+  const mat1 = new THREE.MeshLambertMaterial({ color: '#ffffff' });
+  const mat2 = new THREE.MeshLambertMaterial({ color: '#1b1b1b' });
+  for (const z of [-1.9, 1.9]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4.4, 0.3), mat1);
+    post.position.set(0, 2.2, z);
+    root.add(post);
+  }
+  for (let i = 0; i < 12; i++) {
+    for (let j = 0; j < 2; j++) {
+      const sq = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 0.32), (i + j) % 2 ? mat1 : mat2);
+      sq.position.set(0, 4.2 + j * 0.32, -1.76 + i * 0.32);
+      root.add(sq);
+    }
+  }
+  return { kind: 'finish', root, boxes: [], width: 0.3, y: 0, extra: 0 };
+}
+
 function spawnNext() {
   const biomeId = BIOMES[env.biome].id;
+  if (adv) {
+    // the finish line, then nothing more
+    const toFinish = (adv.finishAt ?? adv.length) - score;
+    if (adv.finishSpawned) return void (gapLeft = 50);
+    if (toFinish * (4 / 3) <= SPAWN_X + 2 && (!adv.boss || adv.bossDone)) {
+      adv.finishSpawned = true;
+      addObstacle(finishLine(), Math.max(4, toFinish / 0.75));
+      gapLeft = 50;
+      return;
+    }
+    if (boss) {
+      // during the boss fight only a few small obstacles, the rocks do the rest
+      gapLeft = speed * 2.2;
+      if (R() < 0.5) addObstacle(groundObstacle(biomeId, true));
+      coinWave(SPAWN_X + 4, 6);
+      return;
+    }
+  }
   if (event && event.type === 'bonus') {
     // bonus zone: no obstacles, just waves of bones
     coinWave(SPAWN_X, 10);
@@ -677,10 +740,17 @@ function spawnNext() {
     const x1 = SPAWN_X + gap - 3;
     for (let x = x0; x < x1 && x < x0 + 8; x += 0.95) addCoin(x, 0.75);
   }
+  // bones up high for whoever is flying with the rocket
+  if (players.some((p) => p.alive && p.power.rocket > 1)) for (let x = SPAWN_X; x < SPAWN_X + gap - 1; x += 1.2) addCoin(x, 4.4);
   // a power-up roughly every 300-600 points, floating in the gap
-  if (!tutorial && score > nextPowerAt && gap > o.width + 5) {
+  if (!tutorial && rules().powerups && score > nextPowerAt && gap > o.width + 5) {
     nextPowerAt = score + (300 + R() * 300) * powerGapK();
     addItem(POWERUPS[Math.floor(R() * POWERUPS.length)], SPAWN_X + o.width + gap * 0.5, 1.1);
+  } else if (!tutorial && mode !== 'lan' && !isLocal() && score > nextFossilAt && gap > o.width + 5) {
+    // a rare fossil for the album
+    nextFossilAt = score + 700 + R() * 600;
+    const id = missingFossil(biomeId, R);
+    if (id) addItem('fossil', SPAWN_X + o.width + gap * 0.5, 1.6, id);
   } else if (mode === 'lan' && lanMode === 'sabotage' && score > nextBombAt && gap > o.width + 5) {
     nextBombAt = score + 220 + R() * 120;
     addItem('bomb', SPAWN_X + o.width + gap * 0.5, 1.1);
@@ -689,16 +759,31 @@ function spawnNext() {
 
 function collides(p, o) {
   const boxes = p.ducking ? DINO_BOXES.duck : DINO_BOXES.stand;
+  const k = VOX * p.giantK; // the giant power-up makes the dino (and its hitbox) bigger
   for (const b of boxes) {
-    const ax0 = b.x0 * VOX;
-    const ax1 = b.x1 * VOX;
-    const ay0 = p.y + b.y0 * VOX;
-    const ay1 = p.y + b.y1 * VOX;
+    const ax0 = b.x0 * k;
+    const ax1 = b.x1 * k;
+    const ay0 = p.y + b.y0 * k;
+    const ay1 = p.y + b.y1 * k;
     for (const c of o.boxes) {
       if (ax0 < o.x + c.x1 && ax1 > o.x + c.x0 && ay0 < o.y + c.y1 && ay1 > o.y + c.y0) return true;
     }
   }
   return false;
+}
+
+// vertical room between the dino and an obstacle it is passing (for "perfect" jumps)
+function clearance(p, o) {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const c of o.boxes) {
+    lo = Math.min(lo, o.y + c.y0);
+    hi = Math.max(hi, o.y + c.y1);
+  }
+  const top = p.y + (p.ducking ? 1.7 : 2.9) * p.giantK;
+  if (p.y >= hi) return p.y - hi;
+  if (lo >= top) return lo - top;
+  return 99;
 }
 
 // true when both feet are over a hole
@@ -711,7 +796,10 @@ function overPit() {
 const sfx = new Sfx();
 const music = new Music(sfx);
 let state = 'menu'; // menu | countdown | running | paused | dying | revive | over | spectate
-let mode = 'solo'; // solo | daily | lan | local2
+let mode = 'solo'; // solo | daily | zen | hardcore | adventure | bot | local | lan
+let localCount = 2;
+const isLocal = () => mode === 'local';
+const isSplit = () => mode === 'local' && players.length > 1;
 let lanMode = 'race';
 let speed = START_SPEED;
 let score = 0; // distance of the world (= the score of everyone still running)
@@ -734,30 +822,84 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
 const isApp = !!(window.desktop || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()));
 
 function newRunStats() {
-  return { score: 0, jumps: 0, coins: 0, obstacles: 0, ducks: 0, powerups: 0, biome: 1, meteors: 0 };
+  return { score: 0, jumps: 0, coins: 0, obstacles: 0, ducks: 0, powerups: 0, biome: 1, meteors: 0, perfects: 0 };
 }
 
+// gameplay rules for each mode
+const RULES = {
+  solo: { revive: true, powerups: true, bones: 1, missions: true, record: true },
+  daily: { revive: true, powerups: true, bones: 1, missions: true, record: true },
+  zen: { revive: false, powerups: true, bones: 0.25, missions: false, record: false, noDeath: true },
+  hardcore: { revive: false, powerups: false, bones: 2, missions: true, record: true },
+  adventure: { revive: true, powerups: true, bones: 1, missions: true, record: false },
+  bot: { revive: false, powerups: true, bones: 1, missions: true, record: true },
+  local: { revive: false, powerups: true, bones: 1, missions: false, record: false },
+  lan: { revive: false, powerups: true, bones: 1, missions: true, record: true },
+};
+const rules = () => RULES[mode] || RULES.solo;
+
 function resetPlayer(p) {
-  Object.assign(p, { y: 0, vy: 0, onGround: true, ducking: false, jumpBuffer: 0, jumpReleased: true, airJumps: 0, inPit: false, fullJump: false, gliding: false, pounding: false, invuln: 0, alive: true, final: 0, revived: false, bombs: 0 });
+  Object.assign(p, {
+    y: 0,
+    vy: 0,
+    onGround: true,
+    ducking: false,
+    jumpBuffer: 0,
+    jumpReleased: true,
+    airJumps: 0,
+    inPit: false,
+    fullJump: false,
+    gliding: false,
+    pounding: false,
+    invuln: 0,
+    alive: true,
+    final: 0,
+    finalPts: 0,
+    revived: false,
+    bombs: 0,
+    points: 0,
+    chain: 0,
+    slip: 0,
+    giantK: 1,
+  });
   p.input.jump = p.input.duck = false;
   for (const k of Object.keys(p.power)) p.power[k] = 0;
   p.dino.root.visible = true;
   p.dino.root.position.set(0, 0, p.lane);
+  p.dino.root.scale.setScalar(1);
   for (const m of p.dino.deadMeshes) m.visible = false;
+  p.brain = mode === 'bot' && p.index === 1 ? new BotBrain(profile.settings.botLevel) : null;
 }
 
 function setPlayerCount(n) {
   while (players.length > n) removePlayer(players.pop());
-  if (n === 2 && players.length === 1) players.push(makePlayer(1, LANE2, profile.skin === 'red' ? 'blue' : 'red', 'none'));
-  paths[1].visible = n === 2;
+  const extraSkins = ['red', 'blue', 'pink', 'gold'].filter((k) => k !== profile.skin);
+  while (players.length < n) {
+    const i = players.length;
+    players.push(makePlayer(i, LANES[i], mode === 'bot' ? 'robot' : extraSkins[i - 1], 'none'));
+  }
+  // the robot always wears its own skin; local players get distinct colours
+  if (players[1]) {
+    const want = mode === 'bot' ? 'robot' : extraSkins[0];
+    if (players[1].skin !== want) rebuildDino(players[1], want, 'none');
+  }
+  paths.forEach((m, i) => (m.visible = i < n));
+  setCameraLayers(n, mode === 'local' && n > 1);
 }
+
+// combo multiplier: x1 .. x5, one step every 10 obstacles in a row (perfect jumps count double)
+const comboMult = (p) => 1 + Math.min(4, Math.floor(p.chain / 10));
+
+let adv = null; // adventure level being played
 
 function resetRun(seed) {
   clearTrack();
   shatter.clear();
+  trail.clear();
   endEvent(true);
+  endBoss(true);
   R = seed != null ? rng(seed) : Math.random;
-  speed = START_SPEED;
+  speed = adv ? adv.startSpeed : START_SPEED;
   score = 0;
   runTime = 0;
   lastMilestone = 0;
@@ -767,20 +909,26 @@ function resetRun(seed) {
   nextPowerAt = (250 + R() * 150) * powerGapK();
   nextBombAt = 200 + R() * 100;
   nextEventAt = 900 + R() * 600;
+  nextFossilAt = 350 + R() * 500;
   slowK = 1;
   speedBoost = 1;
   for (const p of players) resetPlayer(p);
-  if (upgradeLevel('shieldStart')) for (const p of players) p.power.shield = powerTime().shield;
+  if (upgradeLevel('shieldStart') && rules().powerups) for (const p of players) p.power.shield = powerTime().shield;
   run = newRunStats();
   ghostRec = [];
   ghostClock = 0;
-  if (env.biome !== 0) setBiome(0, true);
+  const startBiome = adv ? adv.world : 0;
+  if (env.biome !== startBiome) setBiome(startBiome, true);
   tutorial = mode === 'solo' && !profile.tutorial ? { plan: ['cactus', 'bird'], freeze: null, done: false } : null;
+  weatherNotes.clear();
   ui.setRunCoins(0);
   ui.setScore(0);
+  ui.setCombo(1, false);
   ui.setPowerups(player.power, powerTime());
   ui.setBombs(mode === 'lan' && lanMode === 'sabotage' ? 0 : null);
   ui.spectate(null);
+  ui.advProgress(adv ? 0 : null);
+  ui.bossBar(null);
 }
 
 function setupGhost() {
@@ -799,50 +947,42 @@ function startRun(seed) {
   state = 'running';
   ui.hideScreens();
   ui.setPlaying(true, mode);
-  music.biome = 0;
+  music.biome = env.biome;
   music.start();
 }
 
-function startSolo() {
+// m: solo | daily | zen | hardcore | adventure | bot | local
+function startMode(m, opts = {}) {
   sfx.unlock();
   if (lan) leaveLan();
-  mode = 'solo';
-  daily = null;
+  mode = m;
+  daily = m === 'daily' ? dailyInfo() : null;
+  adv = m === 'adventure' ? { ...levelDef(opts.world, opts.level), bonesSpawned: 0, hits: 0, bossDone: false, finishSpawned: false } : null;
+  if (m === 'local') localCount = clamp(opts.count || localCount, 2, 4);
   clearRivals();
-  setPlayerCount(1);
-  startRun(null);
+  setPlayerCount(m === 'local' ? localCount : m === 'bot' ? 2 : 1);
+  startRun(daily ? daily.seed : adv ? adv.seed : null);
+  if (daily) ui.toast(t('dailyGoal', { n: daily.target }), 'gold');
+  if (adv) ui.toast(t('advLevelTitle', { w: t('biome_' + adv.biome), n: adv.level + 1 }), 'biome');
+  if (m === 'zen' || m === 'hardcore') ui.toast(t('mode_' + m), 'gold');
+  if (m === 'bot') ui.toast(t('botStart', { lvl: t('bot_' + profile.settings.botLevel) }), 'gold');
 }
 
-function startDaily() {
-  sfx.unlock();
-  if (lan) leaveLan();
-  mode = 'daily';
-  daily = dailyInfo();
-  clearRivals();
-  setPlayerCount(1);
-  startRun(daily.seed);
-  ui.toast(t('dailyGoal', { n: daily.target }), 'gold');
-}
-
-function startLocal2() {
-  sfx.unlock();
-  if (lan) leaveLan();
-  mode = 'local2';
-  daily = null;
-  clearRivals();
-  setPlayerCount(2);
-  startRun(null);
-}
+const startSolo = () => startMode('solo');
+const startDaily = () => startMode('daily');
+const startLocal2 = (count = 2) => startMode('local', { count });
 
 function restart() {
-  if (mode === 'daily') startDaily();
-  else if (mode === 'local2') startLocal2();
-  else startSolo();
+  if (mode === 'adventure' && adv) startMode('adventure', { world: adv.world, level: adv.level });
+  else if (mode === 'lan') return;
+  else startMode(mode, { count: localCount });
 }
 
 function killPlayer(p, o) {
+  if (rules().noDeath) return zenBump(p, o);
   p.alive = false;
   p.final = score;
+  p.finalPts = p.points;
   p.shield.visible = false;
   if (o) {
     p.dino.root.visible = false;
@@ -853,14 +993,29 @@ function killPlayer(p, o) {
   sfx.hit();
   vibrate([60, 40, 90]);
   shake = 0.45;
-  if (players.some((q) => q.alive)) return; // the other player keeps running
+  if (mode === 'bot' && p.index === 1 && player.alive) ui.toast(t('botDown'), 'gold');
+  if (players.some((q) => q.alive && !q.brain)) return; // someone (human) is still running
   state = 'dying';
   deathTimer = 0.9;
   music.stop(0.4);
 }
 
+// zen mode: nothing can stop you; a hit only breaks the obstacle and slows you down
+function zenBump(p, o) {
+  if (o) breakObstacle(o, p.index);
+  if (p.y < 0 || p.inPit) {
+    p.y = 0;
+    p.vy = JUMP_V * feat.jump;
+    p.inPit = false;
+  }
+  p.invuln = 0.6;
+  p.chain = 0;
+  speed = Math.max(START_SPEED, speed * 0.85);
+  sfx.shieldBreak();
+}
+
 function canRevive() {
-  return (mode === 'solo' || mode === 'daily') && !player.revived && profile.coins >= REVIVE_COST;
+  return rules().revive && !player.revived && profile.coins >= REVIVE_COST;
 }
 
 function offerRevive() {
@@ -877,12 +1032,14 @@ function acceptRevive() {
   const p = player;
   p.revived = true;
   p.alive = true;
+  p.chain = 0;
+  if (adv) adv.hits++;
   Object.assign(p, { y: 0, vy: 0, onGround: true, inPit: false, gliding: false, pounding: false, ducking: false });
   p.dino.root.visible = true;
   for (const m of p.dino.deadMeshes) m.visible = false;
   p.invuln = 2.5;
   // clear the track around the dino so the second chance is fair
-  for (let i = obstacles.length - 1; i >= 0; i--) if (obstacles[i].x < 20) removeObstacle(i);
+  for (let i = obstacles.length - 1; i >= 0; i--) if (obstacles[i].x < 20 && obstacles[i].kind !== 'finish') removeObstacle(i);
   gapLeft = Math.max(gapLeft, 8);
   ui.hideRevive();
   state = 'running';
@@ -896,48 +1053,76 @@ function declineRevive() {
   finishRun();
 }
 
-function finishRun() {
-  state = 'over';
-  const p = player;
-  const s = Math.floor(mode === 'local2' ? Math.max(...players.map((q) => q.final)) : p.final || score);
+// shared bookkeeping at the end of any run; returns the numbers for the result screen
+function recordRun(pts) {
+  const s = Math.floor(pts);
   const st = profile.stats;
+  const R2 = rules();
   st.games++;
   st.distance += s;
   st.time += Math.round(runTime);
   st.maxBiome = Math.max(st.maxBiome, run.biome - 1);
-  const isRecord = s > st.best;
+  st.perfects += run.perfects;
+  st.bestCombo = Math.max(st.bestCombo, run.bestCombo || 0);
+  const isRecord = R2.record && s > st.best;
   if (isRecord) st.best = s;
-  if (s > 0) {
-    profile.top.push({ s, d: Date.now(), lan: mode === 'lan', daily: mode === 'daily' });
+  if (s > 0 && R2.record) {
+    profile.top.push({ s, d: Date.now(), lan: mode === 'lan', daily: mode === 'daily', mode });
     profile.top.sort((a, b) => b.s - a.s);
     profile.top.length = Math.min(profile.top.length, 10);
   }
   if (mode === 'solo' && isRecord && ghostRec.length > 20) {
-    ghost = { samples: ghostRec, score: s, skin: profile.skin, hat: profile.hat };
+    ghost = { samples: ghostRec, score: Math.floor(player.final || score), skin: profile.skin, hat: profile.hat };
     saveGhost(ghost);
   }
   if (mode === 'daily') recordDaily(s);
   run.score = s;
-  const missionsDone = mode === 'local2' ? [] : checkMissions(run);
-  const xp = addXp(s / 10 + run.coins * 2 + missionsDone.length * 20);
+  const missionsDone = R2.missions ? checkMissions(run) : [];
+  const xp = addXp((s / 10 + run.coins * 2 + missionsDone.length * 20) * (mode === 'zen' ? 0.5 : 1));
   const ach = checkAchievements();
   save();
   ui.setHi(st.best);
-  music.sting();
-  ui.showOver({
-    score: s,
-    record: isRecord && s > 0,
-    coins: run.coins,
-    missions: missionsDone,
-    lan: mode === 'lan',
-    xp: Math.floor(xp.gained),
-    local2: mode === 'local2' ? players.map((q) => ({ name: 'P' + (q.index + 1), sc: Math.floor(q.final) })) : null,
-    daily: mode === 'daily' ? dailyInfo() : null,
-  });
+  return { s, isRecord, missionsDone, xp, ach };
+}
+
+function celebrate({ missionsDone, xp, ach }) {
   if (missionsDone.length) sfx.reward();
   for (const l of xp.levelUps) ui.toast(t('levelUp', { n: l }), 'gold');
   for (const id of xp.unlocked) ui.toast(t('skinUnlocked', { name: t('skin_' + id) }), 'gold');
   for (const a of ach) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
+}
+
+function finishRun() {
+  state = 'over';
+  const p = player;
+  const pts = isLocal() ? Math.max(...players.map((q) => (q.alive ? q.points : q.finalPts))) : p.alive ? p.points : p.finalPts;
+  const res = recordRun(pts);
+  let botResult = null;
+  if (mode === 'bot') {
+    const bot = players[1];
+    const won = !bot.alive && bot.final < p.final;
+    if (won) {
+      const reward = 25 * (profile.settings.botLevel + 1);
+      profile.coins += reward;
+      profile.stats.botWins++;
+      save();
+      botResult = { won, reward };
+    } else botResult = { won: false, reward: 0 };
+  }
+  music.sting();
+  ui.showOver({
+    score: res.s,
+    record: res.isRecord && res.s > 0,
+    coins: run.coins,
+    missions: res.missionsDone,
+    lan: mode === 'lan',
+    xp: Math.floor(res.xp.gained),
+    local2: isLocal() ? players.map((q) => ({ name: 'P' + (q.index + 1), sc: Math.floor(q.alive ? q.points : q.finalPts) })) : null,
+    daily: mode === 'daily' ? dailyInfo() : null,
+    bot: botResult,
+    mode,
+  });
+  celebrate(res);
   // in a LAN race, keep watching the others until everyone is out
   if (mode === 'lan' && lan && lan.others().some((r) => r.a)) {
     state = 'spectate';
@@ -946,13 +1131,27 @@ function finishRun() {
   }
 }
 
+// adventure: crossing the finish line
+function winLevel() {
+  state = 'won';
+  const s = scoreLevel(run.coins, adv.bonesSpawned, adv.hits);
+  const reward = saveLevel(adv.world, adv.level, s);
+  if (adv.boss) profile.stats.bosses++;
+  const res = recordRun(player.points);
+  sfx.reward();
+  music.stop(0.6);
+  ui.showWin({ stars: s, reward, adv, coins: run.coins, spawned: adv.bonesSpawned, hits: adv.hits, xp: Math.floor(res.xp.gained) });
+  celebrate(res);
+}
+
 function setPaused(on) {
   if (mode === 'lan') return;
   if (on && state === 'running') {
     state = 'paused';
     music.stop(0.1);
-    ui.showPaused(true);
-  } else if (!on && state === 'paused') {
+    ui.showPaused(true, mode);
+  } else if (!on && (state === 'paused' || state === 'photo')) {
+    if (state === 'photo') ui.photoMode(false);
     state = 'running';
     ui.showPaused(false);
     for (const p of players) p.input.jump = p.input.duck = false;
@@ -960,15 +1159,28 @@ function setPaused(on) {
   }
 }
 
+// zen has no game over: the player ends the run from the pause screen
+function endZen() {
+  if (state !== 'paused') return;
+  ui.showPaused(false);
+  player.final = score;
+  player.finalPts = player.points;
+  player.alive = false;
+  finishRun();
+}
+
 function toMenu() {
   if (lan) leaveLan();
   mode = 'solo';
   state = 'menu';
   daily = null;
+  adv = null;
   clearTrack();
   shatter.clear();
+  trail.clear();
   clearRivals();
   endEvent(true);
+  endBoss(true);
   if (ghostDino) scene.remove(ghostDino.root);
   ghostDino = null;
   tutorial = null;
@@ -978,6 +1190,7 @@ function toMenu() {
   if (env.biome !== 0) setBiome(0, true);
   music.stop(0.2);
   ui.hideRevive();
+  ui.photoMode(false);
   ui.setPlaying(false);
   ui.showMenu();
 }
@@ -1009,9 +1222,66 @@ function endEvent(silent) {
   nextEventAt = score + 1200 + R() * 600;
 }
 
+// ------------------------------------------------------------------ adventure boss
+// a giant pterodactyl that circles above the track and drops burning rocks
+function startBoss() {
+  const b = createPtero();
+  b.root.scale.setScalar(3.4);
+  b.root.position.set(30, 7, -3);
+  b.root.rotation.y = 0;
+  scene.add(b.root);
+  boss = { ...b, t: adv.bossTime, drop: 1.5, phase: 0 };
+  ui.toast(t('bossArrives'), 'red');
+  ui.bossBar(1);
+  sfx.boom();
+  shake = 0.4;
+}
+
+function endBoss(silent) {
+  if (!boss) return;
+  if (silent) {
+    scene.remove(boss.root);
+    boss = null;
+    ui.bossBar(null);
+    return;
+  }
+  boss.leaving = true;
+}
+
+function updateBoss(dt) {
+  if (!boss) return;
+  boss.phase += dt;
+  const a = Math.sin(boss.phase * 7) * 0.9;
+  boss.wings[0].pivot.rotation.x = -a;
+  boss.wings[1].pivot.rotation.x = a;
+  if (boss.leaving) {
+    boss.root.position.x += dt * 18;
+    boss.root.position.y += dt * 4;
+    if (boss.root.position.x > 70) endBoss(true);
+    return;
+  }
+  boss.root.position.x += (12 + Math.sin(boss.phase * 0.7) * 4 - boss.root.position.x) * Math.min(1, dt * 1.2);
+  boss.root.position.y = 7 + Math.sin(boss.phase * 1.3) * 0.8;
+  boss.t -= dt;
+  boss.drop -= dt;
+  ui.bossBar(Math.max(0, boss.t / adv.bossTime));
+  if (boss.drop <= 0 && boss.t > 1.5) {
+    boss.drop = 1.1 + R() * 0.7;
+    // far enough ahead that the red warning is visible before the rock lands
+    addObstacle(meteor(), 32 + R() * 8);
+  }
+  if (boss.t <= 0) {
+    adv.bossDone = true;
+    endBoss(false);
+    ui.bossBar(null);
+    ui.toast(t('bossDefeated'), 'gold');
+    sfx.reward();
+  }
+}
+
 function updateEvent(dt) {
   if (!event) {
-    if (!tutorial && score > nextEventAt && (mode !== 'lan' || lanMode !== 'elimination')) startEvent();
+    if (!tutorial && !adv && score > nextEventAt && (mode !== 'lan' || lanMode !== 'elimination')) startEvent();
   } else {
     event.t -= dt;
     if (event.type === 'trex') speedBoost = 1.15;
@@ -1075,6 +1345,10 @@ function jumpDown(p = player) {
   const tutorialJump = !!(tutorial && tutorial.freeze === 'jump');
   tutorialRelease('jump');
   if (p.inPit && p.y < 0) return;
+  if (p.onGround && p.slip > 0) {
+    p.jumpBuffer = p.slip + 0.1; // jumps as soon as the slide on the ice ends
+    return;
+  }
   if (p.onGround) {
     doJump(p);
     p.fullJump = tutorialJump; // a quick tap in the tutorial still clears the cactus
@@ -1111,17 +1385,27 @@ function duckUp(p = player) {
 
 const touchLayer = $('touch');
 const pointers = new Map();
+// which player a touch belongs to: top/bottom halves for 2 players, quarters for 3-4
+function touchPlayer(x, y) {
+  if (!isSplit()) return player;
+  const bottom = y > innerHeight / 2;
+  if (players.length === 2) return players[bottom ? 1 : 0];
+  return players[(bottom ? 2 : 0) + (x > innerWidth / 2 ? 1 : 0)] || player;
+}
 touchLayer.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   sfx.unlock();
+  if (state === 'photo') return photoPointer('down', e);
   if (state !== 'running') {
     if (state === 'paused') setPaused(false);
     else if (canRestart()) restart();
     return;
   }
-  // two players on one screen: top half is player 1, bottom half player 2
-  const p = mode === 'local2' && e.clientY > innerHeight / 2 ? players[1] : player;
-  const leftHalf = e.clientX < innerWidth * (profile.settings.lefty ? 0.6 : 0.4);
+  const p = touchPlayer(e.clientX, e.clientY);
+  // zones are measured inside that player's own part of the screen
+  const quarter = isSplit() && players.length > 2;
+  const localX = quarter ? (e.clientX % (innerWidth / 2)) / (innerWidth / 2) : e.clientX / innerWidth;
+  const leftHalf = localX < (profile.settings.lefty ? 0.6 : 0.4);
   const duckSide = profile.settings.lefty ? !leftHalf : leftHalf;
   const zone = e.pointerType !== 'mouse' && duckSide ? 'duck' : 'jump';
   pointers.set(e.pointerId, { zone, y0: e.clientY, p });
@@ -1134,6 +1418,7 @@ touchLayer.addEventListener('pointerdown', (e) => {
   else jumpDown(p);
 });
 touchLayer.addEventListener('pointermove', (e) => {
+  if (state === 'photo') return photoPointer('move', e);
   const q = pointers.get(e.pointerId);
   if (q && q.zone === 'jump' && e.clientY - q.y0 > 36) {
     q.zone = 'duck';
@@ -1142,6 +1427,7 @@ touchLayer.addEventListener('pointermove', (e) => {
   }
 });
 function pointerEnd(e) {
+  if (state === 'photo') photoPointer('up', e);
   const q = pointers.get(e.pointerId);
   if (!q) return;
   pointers.delete(e.pointerId);
@@ -1153,14 +1439,21 @@ touchLayer.addEventListener('pointerup', pointerEnd);
 touchLayer.addEventListener('pointercancel', pointerEnd);
 touchLayer.addEventListener('contextmenu', (e) => e.preventDefault());
 
-// keyboard: in two-player mode W/S/Space is player 1 and the arrows are player 2
+// keyboard in local multiplayer: P1 W/S (or Space), P2 arrows, P3 I/K, P4 numpad 8/5
+const LOCAL_KEYS = [
+  { jump: ['KeyW', 'Space'], duck: ['KeyS'] },
+  { jump: ['ArrowUp'], duck: ['ArrowDown'] },
+  { jump: ['KeyI'], duck: ['KeyK'] },
+  { jump: ['Numpad8'], duck: ['Numpad5', 'Numpad2'] },
+];
 function keyTarget(code) {
   const s = profile.settings;
-  if (mode === 'local2') {
-    if (code === 'KeyW' || code === 'Space' || code === s.keyJump) return [players[0], 'jump'];
-    if (code === 'KeyS' || code === s.keyDuck) return [players[0], 'duck'];
-    if (code === 'ArrowUp') return [players[1], 'jump'];
-    if (code === 'ArrowDown') return [players[1], 'duck'];
+  if (isLocal()) {
+    for (let i = 0; i < players.length; i++) {
+      const k = LOCAL_KEYS[i];
+      if (k.jump.includes(code) || (i === 0 && code === s.keyJump)) return [players[i], 'jump'];
+      if (k.duck.includes(code) || (i === 0 && code === s.keyDuck)) return [players[i], 'duck'];
+    }
     return null;
   }
   if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW' || code === s.keyJump) return [player, 'jump'];
@@ -1180,6 +1473,10 @@ addEventListener('keydown', (e) => {
   if (e.repeat) return;
   sfx.unlock();
   if (e.code === 'Escape' && ui.panelOpen()) return ui.closePanel();
+  if (state === 'photo') {
+    if (e.code === 'Escape' || e.code === 'KeyP') endPhoto();
+    return;
+  }
   if (state === 'menu') {
     if (!ui.panelOpen() && (e.code === 'Space' || e.code === 'Enter')) startSolo();
     return;
@@ -1203,12 +1500,12 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('blur', () => setPaused(true));
 
 // gamepads: A / up = jump, B / down = duck, X = send a boulder (LAN), Start = pause.
-// In two-player mode the first pad is player 1 and the second is player 2.
-const padState = [{}, {}];
+// In local multiplayer pad 1 is player 1, pad 2 is player 2, and so on.
+const padState = [{}, {}, {}, {}];
 function pollGamepads() {
   const gps = navigator.getGamepads ? [...navigator.getGamepads()].filter((g) => g && g.connected) : [];
-  gps.slice(0, mode === 'local2' ? 2 : 1).forEach((gp, i) => {
-    const p = mode === 'local2' ? players[i] : player;
+  gps.slice(0, isLocal() ? players.length : 1).forEach((gp, i) => {
+    const p = isLocal() ? players[i] : player;
     if (!p) return;
     const st = padState[i];
     const b = (k) => !!(gp.buttons[k] && gp.buttons[k].pressed);
@@ -1258,7 +1555,10 @@ function resize() {
   const scale = Math.max(1, Math.min(w, h) / PIXEL_LEVELS[level]);
   renderer.setSize(Math.round(w / scale), Math.round(h / scale), false);
   camera.aspect = w / h;
-  camera2.aspect = w / (h / 2);
+  if (isSplit()) {
+    const vps = viewports(players.length, w, h);
+    vps.forEach(([, , vw, vh], i) => (cams[i].aspect = vw / vh));
+  }
 }
 addEventListener('resize', resize);
 
@@ -1313,12 +1613,86 @@ function updateCamera(dt) {
   }
   camFocus.x += (fx - camFocus.x) * Math.min(1, dt * 3);
   camFocus.z += (fz - camFocus.z) * Math.min(1, dt * 3);
-  if (mode === 'local2') {
-    placeCamera(camera, camera2.aspect, players[0], new THREE.Vector3(0, 0, players[0].lane), dt);
-    placeCamera(camera2, camera2.aspect, players[1], new THREE.Vector3(0, 0, players[1].lane), dt);
+  if (state === 'photo') return photoCamera();
+  if (isSplit()) {
+    resize();
+    players.forEach((p, i) => placeCamera(cams[i], cams[i].aspect, p, new THREE.Vector3(0, 0, p.lane), dt));
   } else {
     placeCamera(camera, camera.aspect, player, camFocus, dt);
   }
+}
+
+// ------------------------------------------------------------------ photo mode
+// From the pause screen: drag to orbit around the dino, pinch / wheel to zoom.
+const photo = { yaw: 0.5, pitch: 0.35, dist: 9, drag: null, pinch: null };
+function photoCamera() {
+  const target = new THREE.Vector3(0.4, Math.max(0, player.y) + 1.4, player.lane);
+  const cp = Math.cos(photo.pitch);
+  camera.position.set(target.x + Math.sin(photo.yaw) * cp * photo.dist, target.y + Math.sin(photo.pitch) * photo.dist, target.z + Math.cos(photo.yaw) * cp * photo.dist);
+  camera.lookAt(target);
+  camera.fov = 45;
+  camera.updateProjectionMatrix();
+}
+function startPhoto() {
+  if (state !== 'paused') return;
+  state = 'photo';
+  Object.assign(photo, { yaw: 0.6, pitch: 0.3, dist: 9 });
+  ui.showPaused(false);
+  ui.photoMode(true);
+}
+function endPhoto() {
+  if (state !== 'photo') return;
+  state = 'paused';
+  ui.photoMode(false);
+  ui.showPaused(true, mode);
+}
+function photoPointer(type, e) {
+  if (type === 'down') photo.drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  if (type === 'move' && photo.drag && photo.drag.id === e.pointerId) {
+    photo.yaw -= (e.clientX - photo.drag.x) * 0.008;
+    photo.pitch = clamp(photo.pitch + (e.clientY - photo.drag.y) * 0.006, 0.02, 1.35);
+    photo.drag.x = e.clientX;
+    photo.drag.y = e.clientY;
+  }
+  if (type === 'up') photo.drag = null;
+}
+addEventListener(
+  'wheel',
+  (e) => {
+    if (state === 'photo') photo.dist = clamp(photo.dist * (e.deltaY > 0 ? 1.1 : 0.9), 3, 30);
+  },
+  { passive: true },
+);
+addEventListener('touchmove', (e) => {
+  if (state !== 'photo' || e.touches.length !== 2) return;
+  const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  if (photo.pinch) photo.dist = clamp(photo.dist * (photo.pinch / d), 3, 30);
+  photo.pinch = d;
+});
+addEventListener('touchend', () => (photo.pinch = null));
+
+// the photo, without the HUD, with a small watermark
+async function photoImage() {
+  render();
+  const shot = canvas.toDataURL('image/png');
+  const img = new Image();
+  await new Promise((res, rej) => {
+    img.onload = res;
+    img.onerror = rej;
+    img.src = shot;
+  });
+  const k = Math.max(1, Math.round(1200 / img.width));
+  const c = document.createElement('canvas');
+  c.width = img.width * k;
+  c.height = img.height * k;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, 0, 0, c.width, c.height);
+  g.font = `${Math.round(c.height / 32)}px "Press Start 2P", monospace`;
+  g.fillStyle = 'rgba(255,255,255,0.85)';
+  g.textAlign = 'right';
+  g.fillText('ANOTHER DINO', c.width - 16, c.height - 16);
+  return c.toDataURL('image/png');
 }
 
 // ------------------------------------------------------------------ per-frame updates
@@ -1416,6 +1790,7 @@ function updateWorld(dt, v) {
   document.body.classList.toggle('night', n > 0.5 || feat.dark > 0.5 || feat.stars > 0.5 || (env.biome === 6 && n > 0.2));
 
   dust.update(dt, v);
+  flame.update(dt, v);
   shatter.update(dt, v);
 }
 let bonusTint = 0;
@@ -1457,9 +1832,29 @@ function shockwave(p) {
   }
 }
 
+function note(key) {
+  if (weatherNotes.has(key)) return;
+  weatherNotes.add(key);
+  ui.toast(t(key), 'gold');
+}
+
 function updatePlayer(p, dt) {
   if (!p.alive) return;
-  if (p.onGround && overPit()) {
+  p.slip = Math.max(0, p.slip - dt);
+  if (p.power.rocket > 0) {
+    // the rocket carries the dino high above everything
+    p.rocketing = true;
+    p.y += (4.4 - p.y) * Math.min(1, dt * 5);
+    Object.assign(p, { vy: 0, onGround: false, inPit: false, gliding: false, pounding: false, ducking: false });
+    if (dt > 0) for (let k = 0; k < 2; k++) flame.puff(-0.9, p.y + 0.9, p.lane + (Math.random() - 0.5) * 0.3, -speed * 0.4 - 6, -2 - Math.random() * 2, (Math.random() - 0.5) * 1.5);
+    return;
+  }
+  if (p.rocketing) {
+    p.rocketing = false;
+    p.invuln = Math.max(p.invuln, 0.8); // a moment to land safely
+  }
+  const giant = p.power.giant > 0;
+  if (p.onGround && !giant && overPit()) {
     p.onGround = false;
     p.inPit = true;
     p.vy = 0;
@@ -1476,7 +1871,7 @@ function updatePlayer(p, dt) {
     p.vy -= g * dt;
     p.y += p.vy * dt;
     if (p.y <= 0) {
-      const holeBelow = overPit();
+      const holeBelow = !giant && overPit();
       if (holeBelow || (p.inPit && p.y < -0.05)) {
         // falling into a pit (or hitting its far wall after it scrolled past)
         p.inPit = true;
@@ -1494,11 +1889,18 @@ function updatePlayer(p, dt) {
         if (p.pounding) shockwave(p);
         p.pounding = false;
         landingPuff(p);
-        if (p.jumpBuffer > 0) doJump(p);
+        // snow world: icy ground, the dino slides a moment before it can jump again
+        if (BIOMES[env.biome].id === 'snow') {
+          p.slip = 0.2;
+          note('weatherIce');
+        }
+        if (p.jumpBuffer > 0 && p.slip <= 0) doJump(p);
       }
     }
   }
+  if (p.onGround && p.jumpBuffer > 0 && p.slip <= 0 && p.input.jump) doJump(p);
   p.jumpBuffer = Math.max(0, p.jumpBuffer - dt);
+  if (p.slip > 0 && dt > 0) dust.puff(0.4, 0.05, p.lane + (Math.random() - 0.5) * 0.6, -speed * 0.2, 0.3, (Math.random() - 0.5) * 2);
   const wasDucking = p.ducking;
   p.ducking = p.onGround && p.input.duck;
   if (p.ducking && !wasDucking && p === player) profile.stats.ducks++;
@@ -1571,6 +1973,15 @@ function updateObstacles(dt, v) {
       }
     }
     syncViews(o);
+    if (o.kind === 'finish' && adv && o.x < 0.4 && player.alive && state === 'running') {
+      winLevel();
+      return;
+    }
+    // track how close each dino gets while passing the obstacle
+    if (o.boxes.length && o.x < 1.4 && o.x + o.width > -0.8) {
+      o.minClear = o.minClear || {};
+      for (const p of players) if (p.alive && !o.broken.has(p.index)) o.minClear[p.index] = Math.min(o.minClear[p.index] ?? 99, clearance(p, o));
+    }
     if (o.tutorial && tutorial && !tutorial.freeze && o.x < (o.tutorial === 'jump' ? 5.2 : 6.5)) {
       tutorial.freeze = o.tutorial;
       o.tutorial = null;
@@ -1578,7 +1989,29 @@ function updateObstacles(dt, v) {
     }
     if (!o.passed && o.x + o.width < -1) {
       o.passed = true;
-      if (player.alive) {
+      if (o.kind !== 'finish') {
+        for (const p of players) {
+          if (!p.alive || o.broken.has(p.index)) continue;
+          const before = comboMult(p);
+          p.chain++;
+          const close = o.minClear && o.minClear[p.index] !== undefined && o.minClear[p.index] < 0.5;
+          if (close) {
+            p.chain += 1;
+            if (p === player) {
+              run.perfects++;
+              ui.perfect();
+            }
+          }
+          if (p === player) {
+            run.bestCombo = Math.max(run.bestCombo || 0, comboMult(p));
+            if (comboMult(p) > before) {
+              sfx.point();
+              ui.setCombo(comboMult(p), true);
+            }
+          }
+        }
+      }
+      if (player.alive && o.kind !== 'finish') {
         run.obstacles++;
         profile.stats.obstacles++;
         if (o.kind === 'bird' && o.mid && player.ducking) run.ducks++;
@@ -1602,12 +2035,22 @@ function updateObstacles(dt, v) {
 }
 
 function hitCheck(p) {
-  if (!p.alive || p.invuln > 0) return;
+  if (!p.alive || p.invuln > 0 || p.power.rocket > 0) return;
   for (let i = 0; i < obstacles.length; i++) {
     const o = obstacles[i];
     if (o.x > 8 || o.x + o.width < -2 || o.broken.has(p.index)) continue;
     if (o.kind === 'meteor' && !o.armed) continue;
     if (!o.boxes.length || !collides(p, o)) continue;
+    if (p.power.giant > 0) {
+      // the giant just walks through everything
+      breakObstacle(o, p.index, 1.6);
+      shake = Math.max(shake, 0.15);
+      sfx.boom();
+      continue;
+    }
+    if (adv && p === player) adv.hits++;
+    p.chain = 0;
+    if (p === player) ui.setCombo(1, false);
     if (p.power.shield > 0) {
       p.power.shield = 0;
       p.invuln = 0.8;
@@ -1623,8 +2066,9 @@ function hitCheck(p) {
 }
 
 function giveBone(p) {
-  const n = Math.random() < doubleBoneChance() ? 2 : 1;
-  if (p === player || mode === 'local2') {
+  let n = (Math.random() < doubleBoneChance() ? 2 : 1) * rules().bones;
+  n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); // zen counts a quarter of the bones
+  if (p === player || isLocal()) {
     run.coins += n;
     profile.coins += n;
     profile.stats.coins += n;
@@ -1638,6 +2082,14 @@ function updatePickups(dt, v) {
     const c = coins[i];
     const p = players[c.owner];
     c.x -= v * dt;
+    if (c.vy) {
+      // bone rain: falling bones settle at running height
+      c.y += c.vy * dt;
+      if (c.y <= 0.75) {
+        c.y = 0.75;
+        c.vy = 0;
+      }
+    }
     if (p && p.alive && p.power.magnet > 0 && c.x < 12 && c.x > -2) {
       const dx = 0.3 - c.x;
       const dy = p.y + 1.4 - c.y;
@@ -1650,8 +2102,9 @@ function updatePickups(dt, v) {
     c.m.rotation.y += dt * 4;
     // the baby pterodactyl catches bones a bit above and ahead of the dino
     const reach = p === player && pet && pet.kind === 'ptera' ? 1.4 : 0;
-    const top = p ? p.y + (p.ducking ? 1.7 : 2.9) + reach : 0;
-    if (p && p.alive && state === 'running' && c.x > -0.8 && c.x < 1.3 + reach * 0.4 && c.y > p.y - 0.2 && c.y < top) {
+    const top = p ? p.y + (p.ducking ? 1.7 : 2.9) * p.giantK + reach : 0;
+    const front = 1.3 * (p ? p.giantK : 1);
+    if (p && p.alive && state === 'running' && c.x > -0.8 && c.x < front + reach * 0.4 && c.y > p.y - 0.2 && c.y < top) {
       scene.remove(c.m);
       coins.splice(i, 1);
       giveBone(p);
@@ -1668,10 +2121,19 @@ function updatePickups(dt, v) {
     it.x -= v * dt;
     it.m.position.set(it.x, it.y + Math.sin(it.t * 3) * 0.15, p ? p.lane : 0);
     it.m.rotation.y += dt * 2.5;
-    const top = p ? p.y + (p.ducking ? 1.7 : 2.9) : 0;
-    if (p && p.alive && state === 'running' && it.x > -0.9 && it.x < 1.4 && it.y > p.y - 0.4 && it.y < top + 0.2) {
+    const top = p ? p.y + (p.ducking ? 1.7 : 2.9) * p.giantK : 0;
+    if (p && p.alive && state === 'running' && it.x > -0.9 && it.x < 1.4 * p.giantK && it.y > p.y - 0.4 && it.y < top + 0.2) {
       scene.remove(it.m);
       items.splice(i, 1);
+      if (it.type === 'fossil') {
+        if (p !== player) continue;
+        const r = addFossil(it.fossil);
+        sfx.reward();
+        ui.toast(t('fossilFound', { name: t('fossil_' + it.fossil.split('-')[1]), world: t('biome_' + it.fossil.split('-')[0]) }), 'gold');
+        if (r.worldDone) ui.toast(t('fossilWorldDone', { n: 100 }), 'gold');
+        if (r.allDone) ui.toast(t('skinUnlocked', { name: t('skin_fossil') }), 'gold');
+        continue;
+      }
       if (it.type === 'bomb') {
         p.bombs = Math.min(3, p.bombs + 1);
         ui.setBombs(p.bombs);
@@ -1685,7 +2147,7 @@ function updatePickups(dt, v) {
       }
       sfx.powerup();
       vibrate(25);
-      ui.toast((mode === 'local2' ? 'P' + (p.index + 1) + ': ' : '') + t('pu_' + it.type), it.type);
+      ui.toast((isLocal() ? 'P' + (p.index + 1) + ': ' : '') + t('pu_' + it.type), it.type);
     } else if (it.x < DESPAWN_X) {
       scene.remove(it.m);
       items.splice(i, 1);
@@ -1706,6 +2168,18 @@ function updatePowers(dt) {
       const blink = p.power.shield < 3 && Math.sin(time * 20) < 0 ? 0.3 : 1;
       p.shield.material.opacity = 0.28 * blink;
       p.shield.scale.set(p.ducking ? 1.25 : 1, p.ducking ? 0.65 : 1, 1);
+    }
+    // giant: grow and shrink smoothly
+    const gk = p.power.giant > 0 ? 1.8 : 1;
+    p.giantK += (gk - p.giantK) * Math.min(1, dt * 4);
+    p.dino.root.scale.setScalar(p.giantK);
+    // bone rain: bones fall from the sky just ahead of the dino
+    if (p.alive && p.power.rain > 0 && dt > 0) {
+      p.rainT = (p.rainT || 0) - dt;
+      if (p.rainT <= 0) {
+        p.rainT = 0.12;
+        addCoin(3 + Math.random() * 13, 9, -7, p);
+      }
     }
     // blink while invulnerable after a second chance
     if (p.alive && p.revived && p.invuln > 0) p.dino.root.visible = Math.sin(time * 30) > -0.3;
@@ -1780,6 +2254,28 @@ function updateEmotes(dt) {
       emotes.splice(i, 1);
     }
   }
+}
+
+// ------------------------------------------------------------------ seasons
+// New Year (and Christmas nights): fireworks over the track
+let fireworkT = 2;
+function updateSeason(dt) {
+  if (!season || state === 'menu' || state === 'photo') return;
+  const show = season === 'newyear' || (season === 'christmas' && night > 0.5);
+  if (!show) return;
+  fireworkT -= dt;
+  if (fireworkT > 0) return;
+  fireworkT = 1.2 + Math.random() * 1.8;
+  const cols = ['#ff4f5a', '#ffd23f', '#4fc3ff', '#5fd35a', '#ff6fd8', '#ffffff'];
+  const c = cols[Math.floor(Math.random() * cols.length)];
+  const pieces = [];
+  for (let i = 0; i < 36; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * 0.4;
+    pieces.push({ x: Math.cos(a) * r, y: Math.sin(a) * r + 1.4, z: (Math.random() - 0.5) * 0.4, color: c });
+  }
+  shatter.burst(pieces, 6 + Math.random() * 20, 9 + Math.random() * 5, -8 - Math.random() * 10, 1.6, 0);
+  sfx.tone(180 + Math.random() * 120, 0.25, { to: 60, type: 'triangle', vol: 0.05 });
 }
 
 // ------------------------------------------------------------------ LAN
@@ -1914,10 +2410,12 @@ function updateRivals(dt) {
   }
   const meAlive = player.alive && (state === 'running' || state === 'countdown');
   const mine = meAlive ? score : player.final;
-  const list = [{ id: lan.me.id, name: lan.me.name, sc: Math.floor(mine), a: meAlive }];
-  for (const s of states.values()) list.push({ id: s.id, name: lan.nameOf(s.id), sc: s.sc, a: !!s.a });
+  const myPts = meAlive ? player.points : player.finalPts;
+  // the scoreboard shows points (with combos); positions on the track use distance
+  const list = [{ id: lan.me.id, name: lan.me.name, sc: Math.floor(myPts), a: meAlive }];
+  for (const s of states.values()) list.push({ id: s.id, name: lan.nameOf(s.id), sc: s.pt ?? s.sc, a: !!s.a });
   ui.mpHud(list.sort((a, b) => b.sc - a.sc), lan.me.id);
-  if (['running', 'over', 'dying', 'spectate'].includes(state)) lan.sendState({ sc: mine, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive });
+  if (['running', 'over', 'dying', 'spectate'].includes(state)) lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive });
   // my own dino stays where it fell while the camera follows the others
   if (!player.alive) player.dino.root.position.x = clamp((player.final - score) / 0.75, -30, 40);
 }
@@ -1957,6 +2455,16 @@ function trackFps(dt) {
 }
 
 // ------------------------------------------------------------------ main update
+// the computer rival presses and releases buttons like a player would
+function driveBot(p) {
+  if (!p.brain || !p.alive) return;
+  const want = p.brain.think(p, obstacles, speed);
+  if (want === 'jump' && !p.input.jump && p.onGround) jumpDown(p);
+  if (want !== 'jump' && p.input.jump && p.vy < 6) jumpUp(p);
+  if (want === 'duck' && !p.input.duck) duckDown(p);
+  if (want !== 'duck' && p.input.duck) duckUp(p);
+}
+
 function update(rawDt) {
   time += rawDt;
   pollGamepads();
@@ -1981,10 +2489,16 @@ function update(rawDt) {
   if (live && !frozen) {
     const accel = mode === 'lan' && lanMode === 'elimination' ? ACCEL * 2.5 : ACCEL;
     speed = Math.min(MAX_SPEED, speed + accel * dt);
-    v = speed * slowK * speedBoost;
+    // sandstorm: gusts of wind push the world faster and slower
+    const storm = weather.type === 'sand' ? weather.intensity : 0;
+    if (storm > 0.5) note('weatherWind');
+    const gust = 1 + storm * 0.14 * Math.sin(time * 1.7);
+    v = speed * slowK * speedBoost * gust;
     runTime += dt;
-    score += v * dt * 0.75;
-    if (player.alive) run.score = score;
+    const ds = v * dt * 0.75;
+    score += ds;
+    for (const p of players) if (p.alive) p.points += ds * comboMult(p);
+    if (player.alive) run.score = player.points;
     const m = Math.floor(score / 100);
     if (m > lastMilestone) {
       lastMilestone = m;
@@ -1999,14 +2513,22 @@ function update(rawDt) {
       lastNight = n;
       nightTimer = NIGHT_LEN;
     }
-    const b = biomeAt(score);
+    // adventure levels stay in their world; the endless modes move on every 1000 points
+    const b = adv ? adv.world : biomeAt(score);
     if (b !== env.biome) {
       setBiome(b, false);
       run.biome = Math.max(run.biome, Math.floor(score / BIOME_LENGTH) + 1);
       music.biome = b;
       ui.toast(t('biome_' + BIOMES[b].id), 'biome');
     }
-    if (daily && player.alive && score >= daily.target && !daily.rewarded) {
+    if (adv) {
+      if (adv.boss && !boss && !adv.bossDone && score >= adv.bossAt) startBoss();
+      if (adv.bossDone && adv.finishAt == null) adv.finishAt = score + 160;
+      const total = adv.boss ? (adv.finishAt ?? adv.length) : adv.length;
+      ui.advProgress(clamp(score / total, 0, 1));
+      updateBoss(dt);
+    }
+    if (daily && player.alive && player.points >= daily.target && !daily.rewarded) {
       daily.rewarded = true;
       const reward = completeDaily();
       if (reward) {
@@ -2016,21 +2538,27 @@ function update(rawDt) {
     }
     music.rate = 1 + ((speed - START_SPEED) / (MAX_SPEED - START_SPEED)) * 0.15;
     updateEvent(dt);
+    for (const p of players) driveBot(p);
     for (const p of players) updatePlayer(p, dt);
     updateObstacles(dt, v);
     updatePickups(dt, v);
     if (state === 'running') for (const p of players) hitCheck(p);
     updatePowers(dt);
     checkTimer -= dt;
-    if (checkTimer <= 0 && player.alive && mode !== 'local2') {
+    if (checkTimer <= 0 && player.alive && rules().missions) {
       checkTimer = 0.5;
       for (const md of checkMissions(run)) {
         sfx.reward();
         ui.toast(t('missionDone', { n: md.reward }), 'gold');
       }
     }
-    ui.setScore(player.alive ? score : player.final);
-    if (mode === 'local2') ui.mpHud(players.map((p) => ({ id: 'p' + p.index, name: 'P' + (p.index + 1), sc: Math.floor(p.alive ? score : p.final), a: p.alive })), null);
+    ui.setScore(player.alive ? player.points : player.finalPts);
+    ui.setCombo(comboMult(player), false);
+    if (isLocal() || mode === 'bot')
+      ui.mpHud(
+        players.map((p) => ({ id: 'p' + p.index, name: p.brain ? t('botName') : 'P' + (p.index + 1), sc: Math.floor(p.alive ? p.points : p.finalPts), a: p.alive })),
+        'p0',
+      );
   } else if (state === 'running' && frozen) {
     updatePlayer(player, 0); // tutorial pause: the world waits, the player can still act
   } else if (state === 'countdown') {
@@ -2056,26 +2584,54 @@ function update(rawDt) {
     player.dino.root.position.y = Math.abs(Math.sin(time * 2.2)) * 0.08;
     player.dino.root.rotation.y = shopBlend * Math.sin(time * 0.8) * 0.6;
   } else player.dino.root.rotation.y = 0;
+  // the trail streams from the tail of player 1
+  const tp = player;
+  trail.update(dt, profile.trail, -1.3 * tp.giantK, tp.y + 1.2 * tp.giantK, tp.lane, v, live && tp.alive && !frozen && tp.dino.root.visible);
   updatePet(dt);
   updateGhost(dt);
   updateRivals(rawDt);
   updateEmotes(rawDt);
+  updateSeason(rawDt);
   updateWorld(dt, v);
   updateCamera(rawDt);
 }
 
+// viewports for split screen: 2 players stacked, 3-4 players in a 2x2 grid
+function viewports(n, w, h) {
+  if (n === 2) {
+    const hh = Math.floor(h / 2);
+    return [
+      [0, h - hh, w, hh],
+      [0, 0, w, h - hh],
+    ];
+  }
+  const hw = Math.floor(w / 2);
+  const hh = Math.floor(h / 2);
+  return [
+    [0, h - hh, hw, hh],
+    [hw, h - hh, w - hw, hh],
+    [0, 0, hw, h - hh],
+    [hw, 0, w - hw, h - hh],
+  ].slice(0, n);
+}
+
 function render() {
-  if (mode === 'local2' && players.length === 2) {
-    // split screen: player 1 on top, player 2 below
+  if (isSplit()) {
     const size = renderer.getSize(new THREE.Vector2());
-    const h = Math.floor(size.y / 2);
+    const vps = viewports(players.length, size.x, size.y);
     renderer.setScissorTest(true);
-    renderer.setViewport(0, size.y - h, size.x, h);
-    renderer.setScissor(0, size.y - h, size.x, h);
-    renderer.render(scene, camera);
-    renderer.setViewport(0, 0, size.x, size.y - h);
-    renderer.setScissor(0, 0, size.x, size.y - h);
-    renderer.render(scene, camera2);
+    if (players.length === 3) {
+      // the empty quarter just shows the sky colour
+      renderer.setViewport(0, 0, size.x, size.y);
+      renderer.setScissor(Math.floor(size.x / 2), 0, size.x, Math.floor(size.y / 2));
+      renderer.setClearColor(scene.background);
+      renderer.clear();
+    }
+    vps.forEach(([x, y, w, h], i) => {
+      renderer.setViewport(x, y, w, h);
+      renderer.setScissor(x, y, w, h);
+      renderer.render(scene, cams[i]);
+    });
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, size.x, size.y);
     return;
@@ -2173,9 +2729,24 @@ const game = {
   },
   previewDino: (skin, hat, petId) => {
     rebuildDino(player, skin, hat);
-    if (petId !== undefined) setPet(petId);
+    if (petId !== undefined && petId !== null) setPet(petId);
   },
-  recordImage: () => recordImage(mode === 'local2' ? Math.max(...players.map((q) => q.final)) : player.final || score),
+  recordImage: () => recordImage(isLocal() ? Math.max(...players.map((q) => (q.alive ? q.points : q.finalPts))) : player.alive ? player.points : player.finalPts),
+  photoImage,
+  startPhoto,
+  endPhoto,
+  endZen,
+  startMode,
+  get adv() {
+    return adv;
+  },
+  get transport() {
+    return transport;
+  },
+  get season() {
+    return season;
+  },
+  setTrail: () => {},
   lanOpen: openLan,
   lanHost: () => lan && lan.host(),
   lanBrowse: () => lan && lan.browse(),
@@ -2209,6 +2780,14 @@ ui.setHi(profile.stats.best);
 ui.showMenu();
 requestAnimationFrame(frame);
 ui.checkUpdates();
+// seasonal event: a free hat and a greeting
+if (season) {
+  const gift = giveSeasonGift(season);
+  setTimeout(() => {
+    ui.toast(t('season_' + season), 'gold');
+    if (gift) ui.toast(t('seasonGift', { name: t('hat_' + gift) }), 'gold');
+  }, 900);
+}
 
 if ('serviceWorker' in navigator && location.protocol === 'https:' && !isApp && location.hostname !== 'localhost') {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
@@ -2244,6 +2823,13 @@ window.__dino = {
   startDaily,
   startLocal2,
   startEvent,
+  startMode,
+  get adv() {
+    return adv;
+  },
+  get boss() {
+    return boss;
+  },
   player,
   players,
   obstacles,

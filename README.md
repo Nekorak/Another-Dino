@@ -29,7 +29,8 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
   - **spațiu**: **gravitație mică**, Pământul pe cer.
 - **Evenimente** în timpul turei: ploaie de meteoriți, un **T-rex uriaș** care te fugărește și **zona bonus** plină de oase.
 - **Obstacole**: specifice fiecărei lumi, pterodactili la 3 înălțimi, bolovani, **gropi** și **meteoriți** cu cerc de avertizare.
-- **Puteri speciale**: scut, magnet, încetinirea timpului, săritură dublă.
+- **Puteri speciale**: scut, magnet, încetinirea timpului, săritură dublă, **rachetă** (zbori peste tot), **gigant** (dinozaur uriaș care sparge obstacolele) și **ploaie de oase**.
+- **Combo**: fiecare 10 obstacole trecute la rând cresc multiplicatorul de puncte (până la x5). O trecere la milimetru e **PERFECT** și grăbește combo-ul.
 - **Upgrade-uri permanente**: puteri mai lungi, scut la start, oase duble, noroc.
 - **A doua șansă**: când mori, continui o dată pentru 50 de oase.
 - **Provocarea zilei**: un traseu nou în fiecare zi, cu țintă și recompensă. Dacă o termini zile la rând, recompensa crește.
@@ -43,14 +44,27 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
 - **Efecte**: dinozaurul se sparge în cubulețe cu slow-motion, plus muzică chiptune diferită în fiecare lume.
 - **Stiluri grafice**: Normal, Contur, Game Boy, Ecran CRT.
 - **Confort și accesibilitate**: calitate grafică automată (scade singură pe telefoanele slabe), obstacole evidențiate, text mare.
+- **Moduri de joc** (meniul MODURI):
+  - **Aventură**: 8 lumi × 3 niveluri, cu linie de sosire și până la 3 stele pe nivel; al treilea nivel din fiecare lume are un **boss** (pterodactil uriaș care aruncă bolovani);
+  - **Zen**: fără moarte, doar alergare și muzică;
+  - **Hardcore**: fără puteri speciale și fără a doua șansă, dar oase duble;
+  - **Contra robotului**: un dinozaur-robot aleargă pe culoarul de lângă tine (3 niveluri de dificultate).
+- **Album de fosile**: 24 de fosile ascunse (câte 3 în fiecare lume). O lume completă dă 100 de oase, iar albumul complet deblochează skin-ul **Fosilă**.
+- **Urme** în spatele dinozaurului: bule, scântei, inimioare, curcubeu, foc.
+- **Evenimente de sezon** după calendar: **Halloween** (dovleci, pălărie-dovleac), **Crăciun** (brazi, cadouri, căciulă de Moș) și **Anul Nou** (artificii). Se pot opri din Setări.
+- **Mod foto**: din pauză, rotești camera în jurul dinozaurului și salvezi poza.
+- **Transfer de progres fără server** (Setări → Transferă progresul):
+  - **cod QR**: telefonul vechi afișează un QR care conține progresul (oase, XP, skin-uri…), iar cel nou îl scanează cu camera sau dintr-o poză;
+  - **LAN**: pe același Wi-Fi/hotspot, un dispozitiv așteaptă cu un **PIN** din 4 cifre, iar celălalt trimite.
+  - La import, progresul se **combină** (se păstrează maximul și toate lucrurile cumpărate), nu se șterge nimic.
 - Interfață în **română, rusă și engleză**.
 
-## 2 jucători pe același ecran
+## 2–4 jucători pe același ecran
 
-Din meniu alege **2 JUCĂTORI**. Ecranul se împarte în două: sus e jucătorul 1, jos jucătorul 2, pe același traseu.
+Din MULTIPLAYER alege **2, 3 sau 4 JUCĂTORI**. Ecranul se împarte: în două (sus/jos) pentru 2 jucători, în 4 sferturi pentru 3–4 jucători, toți pe același traseu.
 
-- **PC**: jucătorul 1 folosește `W` / `S` (sau `Space`), jucătorul 2 folosește `↑` / `↓`. Primul controller conectat e al jucătorului 1, al doilea e al jucătorului 2.
-- **Telefon/tabletă**: fiecare atinge jumătatea lui de ecran (stânga = ghemuit, dreapta = sari).
+- **PC**: P1 `W` / `S` (sau `Space`), P2 `↑` / `↓`, P3 `I` / `K`, P4 `Numpad 8` / `Numpad 5`. Controllerele se dau în ordinea conectării (până la 4).
+- **Telefon/tabletă**: fiecare atinge zona lui de ecran (stânga = ghemuit, dreapta = sari).
 
 ## Multiplayer LAN (fără internet)
 
@@ -69,7 +83,7 @@ Gazda alege și **modul**:
 
 În cursă poți trimite **emoticoane** (butoanele 😂 🔥 👋 😱 sau tastele `1`–`4`). După ce ieși din cursă, camera îi urmărește pe cei rămași.
 
-Merge între telefoane Android și PC-uri (Windows/macOS/Linux) amestecate. Funcționează doar în aplicații, nu în browser. Pe Windows, la prima cursă, permite accesul prin firewall în rețeaua privată. Comunicarea e directă, prin UDP pe portul **47777**.
+Merge între telefoane Android și PC-uri (Windows/macOS/Linux) amestecate. Funcționează doar în aplicații, nu în browser. Pe Windows, la prima cursă, permite accesul prin firewall în rețeaua privată. Comunicarea e directă, prin UDP pe portul **47777** (transferul de progres folosește portul **47778**).
 
 ## Aplicații (Android, Windows, macOS, Linux)
 
@@ -150,11 +164,14 @@ js/ui.js              meniuri, magazin, misiuni, statistici, setări, LAN
 js/save.js            progresul salvat (oase, skin-uri, statistici, fantoma)
 js/progress.js        upgrade-uri, nivel/XP, provocarea zilei, ou-surpriză
 js/missions.js        misiuni și realizări
+js/modes.js           nivelurile din Aventură și robotul adversar
+js/collection.js      fosile (album), urme, evenimente de sezon
+js/transfer.js        transferul de progres: cod QR și LAN cu PIN
 js/i18n.js            textele în română, rusă și engleză (cu pluralul corect)
 js/net.js             transport UDP (Android / desktop / test în browser)
 js/multiplayer.js     protocolul LAN: camere, lobby, cursă, rezultate
 sw.js                 service worker pentru offline
-vendor/               three.js (MIT), @capacitor/core (MIT), fontul Press Start 2P (OFL)
+vendor/               three.js (MIT), @capacitor/core (MIT), qrcode-generator (MIT), jsQR (Apache-2.0), fontul Press Start 2P (OFL)
 electron/             aplicația desktop (fereastră, UDP pentru LAN, actualizări)
 capacitor.config.json aplicația Android
 native/android/       activitate full-screen, plugin-uri (LAN, actualizare, distribuire), cheia de semnare

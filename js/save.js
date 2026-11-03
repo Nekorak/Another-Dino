@@ -6,10 +6,14 @@ function defaults() {
   return {
     v: 1,
     coins: 0,
-    owned: { skin: ['classic'], hat: ['none'], pet: ['none'] },
+    owned: { skin: ['classic'], hat: ['none'], pet: ['none'], trail: ['none'] },
     skin: 'classic',
     hat: 'none',
     pet: 'none',
+    trail: 'none',
+    fossils: [], // ids like 'desert-1'
+    adventure: {}, // 'world-level' -> stars (1..3)
+    seasonGifts: [], // seasons whose free hat was already given
     xp: 0,
     upgrades: { duration: 0, shieldStart: 0, bones: 0, luck: 0 },
     daily: { date: '', best: 0, done: '', streak: 0 },
@@ -29,6 +33,8 @@ function defaults() {
       bigText: false,
       keyJump: 'Space',
       keyDuck: 'ArrowDown',
+      seasons: true,
+      botLevel: 1,
     },
     stats: {
       games: 0,
@@ -48,6 +54,10 @@ function defaults() {
       dailies: 0,
       pounds: 0,
       eggs: 0,
+      perfects: 0,
+      bestCombo: 0,
+      botWins: 0,
+      bosses: 0,
     },
     top: [],
     missions: { active: [], done: 0 },

@@ -89,6 +89,10 @@ export const ACHIEVEMENTS = [
   { id: 'egg', test: (s) => s.eggs >= 1 },
   { id: 'level10', test: () => levelOf() >= 10 },
   { id: 'pet', test: () => profile.owned.pet.length > 1 },
+  { id: 'boss', test: (s) => s.bosses >= 1 },
+  { id: 'combo5', test: (s) => s.bestCombo >= 5 },
+  { id: 'bot', test: (s) => s.botWins >= 1 },
+  { id: 'album', test: () => profile.fossils.length >= 24 },
 ];
 export const ACHIEVEMENT_REWARD = 25;
 

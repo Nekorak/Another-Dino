@@ -25,7 +25,8 @@
       {
         "imports": {
           "three": "./vendor/three.module.min.js",
-          "@capacitor/core": "./vendor/capacitor-core.js"
+          "@capacitor/core": "./vendor/capacitor-core.js",
+          "qrcode": "./vendor/qrcode.mjs"
         }
       }
     </script>
@@ -61,6 +62,10 @@
       </div>
     </div>
     <div id="powerups"></div>
+    <div id="combo" class="hidden"></div>
+    <div id="perfects"></div>
+    <div id="advbar" class="hidden"><i></i></div>
+    <div id="bossbar" class="hidden"><span></span><i></i></div>
     <div id="mp-hud"></div>
     <div id="split-line" aria-hidden="true"></div>
     <p id="spectate" class="hidden"></p>
@@ -87,7 +92,7 @@
     </div>
 
     <div id="over" class="screen hidden">
-      <h2>GAME OVER</h2>
+      <h2 id="over-title">GAME OVER</h2>
       <p id="over-score" class="big-score"></p>
       <p id="over-record" class="blink"></p>
       <p id="over-coins"></p>
@@ -107,6 +112,31 @@
     <div id="paused" class="screen hidden">
       <h2 id="paused-title"></h2>
       <p id="paused-msg" class="blink"></p>
+      <div class="over-buttons">
+        <button id="btn-resume" class="menu-btn primary"></button>
+        <button id="btn-photo" class="menu-btn"></button>
+        <button id="btn-zen-end" class="menu-btn hidden"></button>
+        <button id="btn-pause-menu" class="menu-btn"></button>
+      </div>
+    </div>
+
+    <div id="photo-ui" class="hidden">
+      <p id="photo-hint"></p>
+      <div class="over-buttons">
+        <button id="btn-photo-save" class="menu-btn primary"></button>
+        <button id="btn-photo-back" class="menu-btn"></button>
+      </div>
+    </div>
+
+    <div id="win" class="screen hidden">
+      <h2 id="win-title"></h2>
+      <div id="win-stars"></div>
+      <div id="win-details"></div>
+      <div class="over-buttons">
+        <button id="btn-win-next" class="menu-btn primary"></button>
+        <button id="btn-win-retry" class="menu-btn"></button>
+        <button id="btn-win-map" class="menu-btn"></button>
+      </div>
     </div>
 
     <div id="revive" class="screen hidden">

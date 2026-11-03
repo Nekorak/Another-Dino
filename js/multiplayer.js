@@ -135,7 +135,7 @@ export class LanSession {
     const now = performance.now();
     if (now - (this.lastSend || 0) < 60 && st.a) return;
     this.lastSend = now;
-    const s = { id: this.me.id, sc: Math.floor(st.sc), y: Math.round(st.y * 100) / 100, d: st.d ? 1 : 0, a: st.a ? 1 : 0 };
+    const s = { id: this.me.id, sc: Math.floor(st.sc), pt: Math.floor(st.pt ?? st.sc), y: Math.round(st.y * 100) / 100, d: st.d ? 1 : 0, a: st.a ? 1 : 0 };
     if (this.role === 'host') {
       this.peerStates.set(this.me.id, s);
       this.checkEnd();
@@ -148,8 +148,9 @@ export class LanSession {
     if (all.length && all.every((s) => !s.a)) {
       this.state = 'lobby';
       clearInterval(this.relay);
+      // ranked by points (distance plus combo bonus)
       const results = all
-        .map((s) => ({ id: s.id, name: this.players.get(s.id).name, sc: s.sc }))
+        .map((s) => ({ id: s.id, name: this.players.get(s.id).name, sc: s.pt ?? s.sc }))
         .sort((a, b) => b.sc - a.sc);
       const end = { t: 'end', r: results, seed: this.raceSeed };
       this.toPeers(end);

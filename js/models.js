@@ -18,6 +18,8 @@ export const SKINS = {
   ice: { level: 10, body: '#a8e4ff', dark: '#6cc4ec', belly: '#ffffff', eye: '#ffffff', pupil: '#2a6aa8', mouth: '#3a7ab8', foot: '#6cc4ec', pattern: 'ice' },
   galaxy: { level: 15, body: '#2a1a4a', dark: '#160c2c', belly: '#6a3ab8', eye: '#ffffff', pupil: '#ff6fd8', mouth: '#0c0618', foot: '#160c2c', pattern: 'galaxy' },
   rainbow: { level: 20, body: '#ff4f5a', dark: '#c8303a', belly: '#ffffff', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#3a3a3a', foot: '#5a5a5a', pattern: 'rainbow' },
+  // reward for completing the fossil album
+  fossil: { album: true, body: '#e8d8a8', dark: '#b8a070', belly: '#fff4d0', eye: '#1b1b1b', pupil: '#ffd23f', mouth: '#5a4a2a', foot: '#a89060', pattern: 'ribs' },
   // the giant that chases you during the T-rex event (not in the shop)
   trex: { hidden: true, body: '#3f5a2a', dark: '#2a3d1c', belly: '#7a8a4a', eye: '#ffcf3a', pupil: '#c8102e', mouth: '#1a2410', foot: '#2a3d1c' },
 };
@@ -57,6 +59,9 @@ export const HATS = {
   tophat: { price: 250 },
   headphones: { price: 300 },
   crown: { price: 750 },
+  // gifts from seasonal events, not for sale
+  pumpkin: { season: 'halloween' },
+  santa: { season: 'christmas' },
 };
 
 // ---------------------------------------------------------------- dino grids
@@ -208,6 +213,24 @@ function hatVoxels(id) {
       box(-6, -6, -3, -3, -3, 3, '#111114');
       box(-5, -5, -3, -3, -3, -3, '#111114');
       box(-5, -5, -3, -3, 3, 3, '#111114');
+      break;
+    case 'pumpkin':
+      for (let x = -4; x <= 2; x++)
+        for (let y = 0; y <= 4; y++)
+          for (let z = -3; z <= 3; z++) {
+            if (((x + 1) / 3.6) ** 2 + ((y - 2) / 2.6) ** 2 + (z / 3.4) ** 2 > 1) continue;
+            vs.set(x, y, z, Math.abs(z) % 2 ? '#ff8a1a' : '#e8700a');
+          }
+      for (const [y, z] of [[3, -1], [3, 1], [1, -1], [1, 0], [1, 1]]) vs.set(3, y, z, '#ffe066');
+      box(-1, -1, 5, 6, 0, 0, '#4a7a2a');
+      break;
+    case 'santa':
+      box(-4, 2, 0, 0, -3, 3, '#ffffff');
+      for (let i = 1; i <= 5; i++) {
+        const r = Math.max(0, 3 - Math.floor(i * 0.6));
+        box(-1 - r - Math.floor(i / 2), -1 + r - Math.floor(i / 2), i, i, -r, r, '#e0303a');
+      }
+      box(-5, -4, 5, 6, -1, 0, '#ffffff');
       break;
     default:
       return null;
@@ -399,8 +422,17 @@ export function boneGeometry() {
   return boneGeo;
 }
 
-export const POWERUPS = ['shield', 'magnet', 'slow', 'double'];
-export const POWERUP_COLOR = { shield: '#4fc3ff', magnet: '#ff5a5a', slow: '#b388ff', double: '#ffd23f', bomb: '#ff8a2a' };
+export const POWERUPS = ['shield', 'magnet', 'slow', 'double', 'rocket', 'giant', 'rain'];
+export const POWERUP_COLOR = {
+  shield: '#4fc3ff',
+  magnet: '#ff5a5a',
+  slow: '#b388ff',
+  double: '#ffd23f',
+  rocket: '#ff7043',
+  giant: '#66bb6a',
+  rain: '#fff1a8',
+  bomb: '#ff8a2a',
+};
 
 const puCache = new Map();
 export function powerupGeometry(type) {
@@ -417,6 +449,9 @@ export function powerupGeometry(type) {
     slow: ['#######', ' ##### ', '  ###  ', '   #   ', '  ###  ', ' ##### ', '#######'],
     double: ['   #   ', '  ###  ', ' ##### ', '   #   ', '  ###  ', ' ##### ', '#######'],
     bomb: ['    **  ', '   *    ', '  ###   ', ' #####  ', ' ##+##  ', ' #####  ', '  ###   '],
+    rocket: ['   #   ', '  ###  ', '  #+#  ', '  ###  ', ' ##### ', '## * ##', '  * *  '],
+    giant: ['# # # #', '#######', '#######', '  ###  ', ' ##### ', '## # ##', '#  #  #'],
+    rain: [' # # # ', '       ', '# # # #', '       ', ' # # # ', '       ', '#######'],
   }[type];
   art.forEach((row, r) => {
     for (let x = 0; x < row.length; x++) {
@@ -424,6 +459,8 @@ export function powerupGeometry(type) {
       let col = c;
       if (row[x] === '+') col = '#ffffff';
       if (type === 'bomb') col = row[x] === '*' ? '#ffd23f' : row[x] === '+' ? '#ffffff' : '#2a2a30';
+      if (type === 'rocket' && row[x] === '*') col = '#ffd23f';
+      if (type === 'rain' && r < 6) col = '#fbf6e6';
       if (type === 'magnet' && r === 0) col = '#e8eef3';
       put(x, art.length - 1 - r, col);
     }
