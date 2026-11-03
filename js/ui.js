@@ -9,6 +9,7 @@ import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImag
 import { save, resetProgress } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
+import { MAX_PLAYERS } from './multiplayer.js';
 import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS } from './missions.js';
@@ -1448,7 +1449,7 @@ export class UI {
       el(
         'div',
         { class: 'room' },
-        el('span', { text: `${r.name} (${r.n}/4)` }),
+        el('span', { text: `${r.name} (${r.n}/${MAX_PLAYERS})` }),
         r.st === 'race' || r.n >= 4
           ? el('span', { class: 'muted', text: r.st === 'race' ? t('mpRacing') : t('mpFull') })
           : el('button', {

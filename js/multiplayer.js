@@ -3,7 +3,7 @@
 // through the host (star topology), so nobody needs a server or the internet.
 export const LAN_PORT = 47777;
 const PROTO = 1;
-const MAX_PLAYERS = 8;
+export const MAX_PLAYERS = 8;
 export const TOUR_RACES = 5;
 // tournament points for 1st, 2nd, 3rd... place in each race
 const TOUR_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
@@ -239,7 +239,11 @@ export class LanSession {
       if (m.t === 'join') {
         let p = this.players.get(m.from);
         if (!p) {
-          if (this.players.size >= MAX_PLAYERS || this.state === 'race') return;
+          if (this.players.size >= MAX_PLAYERS || this.state === 'race') {
+            // tell them, instead of leaving them waiting
+            this.t.send(address, port, this.pack({ t: this.state === 'race' ? 'busy' : 'full' }));
+            return;
+          }
           p = { id: m.from };
           this.players.set(m.from, p);
         }
@@ -317,6 +321,12 @@ export class LanSession {
         case 'close':
           this.role = 'idle';
           this.on.closed();
+          break;
+        case 'full':
+        case 'busy':
+          if (this.state === 'race' || this.lobby.some((x) => x.id === this.me.id)) break; // we are already in
+          this.role = 'idle';
+          this.on.error(m.t === 'full' ? 'mpRoomFull' : 'mpRoomBusy');
           break;
       }
     }

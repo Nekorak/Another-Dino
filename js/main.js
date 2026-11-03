@@ -497,9 +497,18 @@ function createFish() {
   return { root, wings: null, box: FISH_BOX };
 }
 
+// The speed the track "expects" at this distance: what the speed would be with no
+// slow-motion. Obstacle sizes and gaps use it, so a shared seed builds the same track
+// for everyone, even for a player who slowed time down (speed itself grows with time).
+function trackSpeed() {
+  const s0 = adv ? adv.startSpeed : START_SPEED;
+  const a = mode === 'lan' && lanMode === 'elimination' ? ACCEL * 2.5 : ACCEL;
+  return Math.min(MAX_SPEED, Math.sqrt(s0 * s0 + (2 * a * score) / 0.75));
+}
+
 function groundObstacle(biomeId, forceSmall) {
   const large = !forceSmall && R() < 0.45;
-  const maxN = Math.min(3, 1 + Math.floor((speed - START_SPEED) / 3.5));
+  const maxN = Math.min(3, 1 + Math.floor((trackSpeed() - START_SPEED) / 3.5));
   const n = 1 + Math.floor(R() * maxN);
   const root = new THREE.Group();
   const boxes = [];
@@ -820,7 +829,7 @@ function spawnNext() {
   addObstacle(o);
   // low gravity means longer jumps, so space gets wider gaps
   const air = feat.gravity < 1 ? 1.35 : 1;
-  const gap = o.width + speed * (0.72 * air + R() * 0.85) + R() * 2 + o.extra * 0.6 + (o.tutorial ? 10 : 0);
+  const gap = o.width + trackSpeed() * (0.72 * air + R() * 0.85) + R() * 2 + o.extra * 0.6 + (o.tutorial ? 10 : 0);
   gapLeft = gap;
 
   // bones: an arc over ground obstacles and pits, or a line in the gap after

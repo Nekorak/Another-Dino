@@ -343,7 +343,7 @@ const STR = {
     mpConnect: 'CONECTEAZĂ',
     mpLobby: 'CAMERĂ',
     mpYourIp: 'IP-ul tău: {ip}',
-    mpPlayers: 'Jucători ({n}/4)',
+    mpPlayers: 'Jucători ({n}/8)',
     mpStart: 'START',
     mpWaitHost: 'Aștept ca gazda să pornească…',
     mpLeave: 'IEȘI',
@@ -467,6 +467,8 @@ const STR = {
     widgetDailyTodo: 'Provocarea zilei: mai ai {h} h',
     widgetDailyDone: 'Provocarea zilei: gata ✓',
     widgetStreak: '{n} zile la rând',
+    mpRoomFull: 'Camera e plină (8 jucători)',
+    mpRoomBusy: 'Cursa a început deja; intră după ce se termină',
   },
   ru: {
     modes: 'РЕЖИМЫ',
@@ -811,7 +813,7 @@ const STR = {
     mpConnect: 'ПОДКЛЮЧИТЬ',
     mpLobby: 'КОМНАТА',
     mpYourIp: 'Твой IP: {ip}',
-    mpPlayers: 'Игроки ({n}/4)',
+    mpPlayers: 'Игроки ({n}/8)',
     mpStart: 'СТАРТ',
     mpWaitHost: 'Ждём, пока хозяин начнёт…',
     mpLeave: 'ВЫЙТИ',
@@ -935,6 +937,8 @@ const STR = {
     widgetDailyTodo: 'Задание дня: осталось {h} ч',
     widgetDailyDone: 'Задание дня: выполнено ✓',
     widgetStreak: '{n} дн. подряд',
+    mpRoomFull: 'Комната заполнена (8 игроков)',
+    mpRoomBusy: 'Забег уже идёт; заходи, когда закончится',
   },
   en: {
     modes: 'MODES',
@@ -1279,7 +1283,7 @@ const STR = {
     mpConnect: 'CONNECT',
     mpLobby: 'ROOM',
     mpYourIp: 'Your IP: {ip}',
-    mpPlayers: 'Players ({n}/4)',
+    mpPlayers: 'Players ({n}/8)',
     mpStart: 'START',
     mpWaitHost: 'Waiting for the host to start…',
     mpLeave: 'LEAVE',
@@ -1403,6 +1407,8 @@ const STR = {
     widgetDailyTodo: 'Daily challenge: {h} h left',
     widgetDailyDone: 'Daily challenge: done ✓',
     widgetStreak: '{n} days in a row',
+    mpRoomFull: 'The room is full (8 players)',
+    mpRoomBusy: 'A race is on; join when it ends',
   },
 };
 
