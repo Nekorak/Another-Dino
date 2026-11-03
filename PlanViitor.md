@@ -1,33 +1,32 @@
 # Plan pentru viitor
 
-Idei care se pot adăuga în versiunile următoare. Nimic de aici nu are nevoie de server: totul merge offline, prin QR sau LAN.
+## Gata în v1.3
 
-## Gameplay
+Toate cele 15 idei din planul anterior sunt în joc:
 
-1. **Zi și noapte**: cerul se schimbă treptat în timpul turei; noaptea apar licurici și stele.
-2. **Obstacole mobile**: cactuși care se ridică din pământ, pterodactili care coboară în zig-zag, platforme care se mișcă.
-3. **Monede rare**: un os de aur din când în când, care valorează 10 oase obișnuite.
-4. **Mini-boss în modul normal**: la fiecare 2000 de puncte apare un boss scurt, nu doar în Aventură.
+1. Zi și noapte (apus, stele, licurici)
+2. Obstacole mobile (cactuși care răsar, pterodactili în zig-zag, platforme plutitoare)
+3. Osul de aur (valorează 10)
+4. Mini-boss la fiecare 2000 de puncte
+5. Editor de skin, pixel cu pixel
+6. Dansuri de victorie
+7. Teme pentru meniu (culori, lume și muzică)
+8. Replay al ultimelor 10 secunde, salvat ca GIF
+9. Provocare prin QR, pe același traseu
+10. Turneu LAN cu 2–8 jucători
+11. Cufărul zilei
+12. Pass de sezon gratuit (30 de trepte)
+13. Lumi noi în Aventură: Sub apă (cu înot) și Lumea dulce
+14. Widget pe Android
+15. Controale pe ecran configurabile
 
-## Personalizare
+## Idei noi
 
-5. **Editor de skin**: îți colorezi singur dinozaurul, pixel cu pixel.
-6. **Dansuri de victorie**: animații la record sau la final de nivel, care se cumpără din magazin.
-7. **Teme pentru meniu**: culori și muzică diferite pentru meniu.
+Tot fără server: totul merge offline, prin QR sau LAN.
 
-## Social, fără server
-
-8. **Replay**: după tură, revezi ultimele 10 secunde și le salvezi ca GIF sau video.
-9. **Provocare prin QR**: un QR cu traseul și scorul tău; prietenul îl scanează, aleargă exact pe același traseu și încearcă să te întreacă.
-10. **Turneu LAN**: 4–8 jucători, mai multe curse la rând, cu clasament pe puncte.
-
-## Progres
-
-11. **Cufere zilnice**: o recompensă la fiecare intrare în joc, mai mare dacă intri zile la rând.
-12. **Pass de sezon gratuit**: 30 de trepte cu recompense pentru XP, care se resetează la fiecare sezon (Halloween, Crăciun…).
-13. **Lumi noi în Aventură**: de exemplu sub apă (cu înot în loc de săritură) sau o lume de bomboane.
-
-## Tehnic
-
-14. **Widget pe Android**: arată recordul și cât mai ai până la provocarea zilei.
-15. **Controale configurabile pe ecran**: poți muta sau mări zonele de atingere.
+- **Editor de niveluri**: îți faci propriul traseu și îl trimiți prietenilor prin QR.
+- **Animăluțe care cresc**: puiul de pterodactil sau broscuța capătă puteri noi pe măsură ce alergi cu ele.
+- **Misiuni de săptămână**: provocări mai lungi, cu recompense mai mari.
+- **Mod cooperativ în LAN**: doi jucători pe același traseu, cu o viață comună.
+- **Album de realizări cu medalii** (bronz, argint, aur) pentru fiecare statistică.
+- **Fotografii în album**: pozele din modul foto rămân într-o galerie în joc.

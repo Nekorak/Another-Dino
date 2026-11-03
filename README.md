@@ -29,6 +29,10 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
   - **spațiu**: **gravitație mică**, Pământul pe cer.
 - **Evenimente** în timpul turei: ploaie de meteoriți, un **T-rex uriaș** care te fugărește și **zona bonus** plină de oase.
 - **Obstacole**: specifice fiecărei lumi, pterodactili la 3 înălțimi, bolovani, **gropi** și **meteoriți** cu cerc de avertizare.
+- **Zi și noapte**: cerul trece treptat prin apus în noapte (cu lună, stele și licurici) și înapoi.
+- **Obstacole care se mișcă**: cactuși care răsar din pământ, pterodactili care coboară și urcă în zig-zag, **platforme plutitoare** peste gropi largi (poți ateriza pe ele, sus sunt oase).
+- **Os de aur**: apare rar și valorează 10 oase.
+- **Mini-boss** în modul normal: la fiecare 2000 de puncte vine un pterodactil uriaș; dacă reziști 14 secunde, primești 25 de oase.
 - **Puteri speciale**: scut, magnet, încetinirea timpului, săritură dublă, **rachetă** (zbori peste tot), **gigant** (dinozaur uriaș care sparge obstacolele) și **ploaie de oase**.
 - **Combo**: fiecare 10 obstacole trecute la rând cresc multiplicatorul de puncte (până la x5). O trecere la milimetru e **PERFECT** și grăbește combo-ul.
 - **Upgrade-uri permanente**: puteri mai lungi, scut la start, oase duble, noroc.
@@ -45,18 +49,27 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
 - **Stiluri grafice**: Normal, Contur, Game Boy, Ecran CRT.
 - **Confort și accesibilitate**: calitate grafică automată (scade singură pe telefoanele slabe), obstacole evidențiate, text mare.
 - **Moduri de joc** (meniul MODURI):
-  - **Aventură**: 8 lumi × 3 niveluri, cu linie de sosire și până la 3 stele pe nivel; al treilea nivel din fiecare lume are un **boss** (pterodactil uriaș care aruncă bolovani);
+  - **Aventură**: 10 lumi × 3 niveluri (cele 8 de mai sus, plus **Sub apă**, unde dinozaurul înoată: fiecare atingere e o tură de înot în sus, și **Lumea dulce**, cu acadele și bastonașe de zahăr), cu linie de sosire și până la 3 stele pe nivel; al treilea nivel din fiecare lume are un **boss** (pterodactil uriaș care aruncă bolovani);
   - **Zen**: fără moarte, doar alergare și muzică;
   - **Hardcore**: fără puteri speciale și fără a doua șansă, dar oase duble;
-  - **Contra robotului**: un dinozaur-robot aleargă pe culoarul de lângă tine (3 niveluri de dificultate).
-- **Album de fosile**: 24 de fosile ascunse (câte 3 în fiecare lume). O lume completă dă 100 de oase, iar albumul complet deblochează skin-ul **Fosilă**.
+  - **Contra robotului**: un dinozaur-robot aleargă pe culoarul de lângă tine (3 niveluri de dificultate);
+  - **Provocare QR**: după o tură, butonul PROVOACĂ arată un cod QR cu traseul și scorul tău. Prietenul îl scanează din Moduri și aleargă exact pe același traseu; dacă te întrece, primește 40 de oase.
+- **Album de fosile**: 30 de fosile ascunse (câte 3 în fiecare lume). O lume completă dă 100 de oase, iar albumul complet deblochează skin-ul **Fosilă**.
 - **Urme** în spatele dinozaurului: bule, scântei, inimioare, curcubeu, foc.
 - **Evenimente de sezon** după calendar: **Halloween** (dovleci, pălărie-dovleac), **Crăciun** (brazi, cadouri, căciulă de Moș) și **Anul Nou** (artificii). Se pot opri din Setări.
 - **Mod foto**: din pauză, rotești camera în jurul dinozaurului și salvezi poza.
+- **Replay**: după game over, butonul REPLAY arată ultimele 10 secunde, iar SALVEAZĂ GIF le face GIF animat (pe Android se deschide meniul de partajare, pe PC se salvează în *Imagini*).
+- **Editor de skin**: în Magazin, skin-ul „Al meu” se pictează pixel cu pixel, plus culori pentru corp, burtă, ochi și tălpi.
+- **Dansuri de victorie** (Magazin > Dansuri): la un record nou sau la finalul unui nivel dinozaurul dansează (salt mortal, moonwalk, disco…).
+- **Teme pentru meniu** (Magazin > Teme): culorile meniurilor, lumea din spatele lor și muzica din meniu.
+- **Cufărul zilei**: la prima intrare din zi primești oase și XP; 7 zile la rând înseamnă recompense tot mai mari.
+- **Pass de sezon gratuit**: 30 de trepte umplute cu XP-ul din ture (250 XP pe treaptă), cu oase și 3 obiecte exclusive (coroniță de lauri, urmă de confetti, skin-ul Campion). Se reia în fiecare trimestru.
 - **Transfer de progres fără server** (Setări → Transferă progresul):
   - **cod QR**: telefonul vechi afișează un QR care conține progresul (oase, XP, skin-uri…), iar cel nou îl scanează cu camera sau dintr-o poză;
   - **LAN**: pe același Wi-Fi/hotspot, un dispozitiv așteaptă cu un **PIN** din 4 cifre, iar celălalt trimite.
   - La import, progresul se **combină** (se păstrează maximul și toate lucrurile cumpărate), nu se șterge nimic.
+- **Controale pe ecran configurabile** (Setări): muți granița dintre zona de ghemuit și cea de săritură sau treci pe **butoane** pe care le așezi și le mărești cum vrei.
+- **Widget pe Android**: pe ecranul principal arată recordul și câte ore mai ai pentru provocarea zilei.
 - Interfață în **română, rusă și engleză**.
 
 ## 2–4 jucători pe același ecran
@@ -72,7 +85,7 @@ Ca în Soul Knight: toți jucătorii sunt pe aceeași rețea, iar unul face pe g
 
 1. Conectați-vă toți la același **Wi-Fi**, sau pornește **hotspot-ul** pe un telefon și conectează-i pe ceilalți la el.
 2. Deschideți **MULTIPLAYER**. Unul apasă **CREEAZĂ CAMERĂ**, iar ceilalți văd camera în listă și apasă **INTRĂ**. Dacă nu apare, merge și **Conectare după IP** (IP-ul gazdei e afișat în cameră).
-3. Gazda apasă **START** (2–4 jucători). Toți aleargă pe **același traseu**, iar ceilalți se văd pe culoarele de alături, cu skin-ul și numele lor.
+3. Gazda apasă **START** (2–8 jucători). Toți aleargă pe **același traseu**, iar ceilalți se văd pe culoarele de alături, cu skin-ul și numele lor.
 4. Câștigă cine rezistă cel mai mult. Gazda poate porni o cursă nouă cu **DIN NOU**.
 
 Gazda alege și **modul**:
@@ -80,6 +93,7 @@ Gazda alege și **modul**:
 - **Cursă**: cine rezistă mai mult câștigă.
 - **Sabotaj**: strângi bombe și trimiți bolovani pe traseul celorlalți (butonul **BOLOVAN**, tasta `E` sau `X` pe controller).
 - **Eliminare**: viteza crește mult mai repede, iar ultimul rămas primește 100 de oase.
+- **Turneu**: 5 curse la rând, cu puncte pentru fiecare loc (10, 8, 6, 5…) și clasament după fiecare cursă; campionul primește 150 de oase.
 
 În cursă poți trimite **emoticoane** (butoanele 😂 🔥 👋 😱 sau tastele `1`–`4`). După ce ieși din cursă, camera îi urmărește pe cei rămași.
 
@@ -170,7 +184,13 @@ js/progress.js        upgrade-uri, nivel/XP, provocarea zilei, ou-surpriză
 js/missions.js        misiuni și realizări
 js/modes.js           nivelurile din Aventură și robotul adversar
 js/collection.js      fosile (album), urme, evenimente de sezon
-js/transfer.js        transferul de progres: cod QR și LAN cu PIN
+js/transfer.js        transferul de progres: cod QR și LAN cu PIN; codurile de provocare
+js/extras.js          licurici, platforme mobile, osul de aur, peștii de sub apă
+js/custom.js          dansuri, teme de meniu, datele editorului de skin
+js/editor.js          editorul de skin (pictat pixel cu pixel)
+js/replay.js          înregistrarea ultimelor 10 secunde și encoderul GIF
+js/rewards.js         cufărul zilei și pass-ul de sezon
+js/controls.js        controalele pe ecran și editorul lor
 js/i18n.js            textele în română, rusă și engleză (cu pluralul corect)
 js/net.js             transport UDP (Android / desktop / test în browser)
 js/multiplayer.js     protocolul LAN: camere, lobby, cursă, rezultate
@@ -178,7 +198,7 @@ sw.js                 service worker pentru offline
 vendor/               three.js (MIT), @capacitor/core (MIT), qrcode-generator (MIT), jsQR (Apache-2.0), fontul Press Start 2P (OFL)
 electron/             aplicația desktop (fereastră, UDP pentru LAN, actualizări)
 capacitor.config.json aplicația Android
-native/android/       activitate full-screen, plugin-uri (LAN, actualizare, distribuire), cheia de semnare
+native/android/       activitate full-screen, plugin-uri (LAN, actualizare, distribuire, widget), widgetul, cheia de semnare
 assets/, build/       iconițe și splash screen pentru aplicații
 scripts/              build (copiază jocul în dist/) și pregătirea proiectului Android
 ```

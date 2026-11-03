@@ -1,5 +1,5 @@
 // Offline support: serve from cache, refresh the cache in the background.
-const CACHE = 'another-dino-v6';
+const CACHE = 'another-dino-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -21,6 +21,12 @@ const ASSETS = [
   './js/net.js',
   './js/multiplayer.js',
   './js/ui.js',
+  './js/extras.js',
+  './js/custom.js',
+  './js/editor.js',
+  './js/replay.js',
+  './js/rewards.js',
+  './js/controls.js',
   './vendor/capacitor-core.js',
   './vendor/qrcode.mjs',
   './vendor/jsQR.js',

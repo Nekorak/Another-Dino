@@ -9,12 +9,14 @@ import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImag
 import { save, resetProgress } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
+import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS } from './missions.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const Updater = registerPlugin('Updater');
 const Share = registerPlugin('Share');
+const Widget = registerPlugin('Widget');
 
 const $ = (id) => document.getElementById(id);
 const pad5 = (n) => String(Math.floor(n)).padStart(5, '0');
@@ -370,6 +372,8 @@ export class UI {
   }
   setPlaying(on, mode = 'solo', lanMode = 'race') {
     document.body.classList.toggle('playing', on);
+    // the movable on-screen buttons (only on touch screens, not in split screen)
+    layoutButtons(on && this.g.isTouch && mode !== 'local' && mode !== 'local2');
     document.body.classList.toggle('local2', on && mode === 'local2');
     document.body.classList.toggle('lan-race', on && mode === 'lan');
     $('lan-actions').classList.toggle('hidden', !(on && mode === 'lan'));
@@ -481,8 +485,24 @@ export class UI {
     this.setCoins();
     this.refreshTexts();
     this.passBadge();
+    this.updateWidget();
     // the daily chest waits on the menu (not during the very first tutorial run)
     if (this.p.tutorial && chestInfo().available) setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
+  }
+
+  // the Android home-screen widget shows the record and the daily challenge
+  updateWidget() {
+    if (Capacitor.getPlatform() !== 'android') return;
+    const d = dailyInfo();
+    Widget.update({
+      best: Math.floor(this.p.stats.best),
+      dailyDone: d.done,
+      streak: d.streak,
+      recordLabel: t('widgetRecord'),
+      dailyTodo: t('widgetDailyTodo'),
+      dailyDoneText: t('widgetDailyDone'),
+      streakText: d.streak ? t('widgetStreak', { n: d.streak }) : '',
+    }).catch(() => {});
   }
 
   // ------------------------------------------------------------ daily chest
@@ -1352,6 +1372,15 @@ export class UI {
         this.g.menuMusic();
         this.renderPanel();
       }),
+      this.g.isTouch
+        ? this.row(t('set_controls'), t(s.controls.mode === 'buttons' ? 'ctlModeButtons' : 'ctlModeZones'), () => {
+            this.closePanel(true);
+            $('menu').classList.add('hidden');
+            openControlsEditor(() => {
+              this.openPanel('settings');
+            });
+          })
+        : null,
       this.row(t('transfer'), t('open'), () => this.openPanel('transfer')),
       this.g.isApp ? this.updateRow() : null,
       reset,

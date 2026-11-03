@@ -34,6 +34,7 @@ import { LanSession } from './multiplayer.js';
 import { UI } from './ui.js';
 import { Recorder } from './replay.js';
 import { addPassXp } from './rewards.js';
+import { controlAt } from './controls.js';
 import { encodeChallenge } from './transfer.js';
 
 setCustomSkin(profile.customSkin); // the dino painted in the skin editor
@@ -1584,13 +1585,23 @@ touchLayer.addEventListener('pointerdown', (e) => {
     return;
   }
   const p = touchPlayer(e.clientX, e.clientY);
-  // zones are measured inside that player's own part of the screen
-  const quarter = isSplit() && players.length > 2;
-  const localX = quarter ? (e.clientX % (innerWidth / 2)) / (innerWidth / 2) : e.clientX / innerWidth;
-  const leftHalf = localX < (profile.settings.lefty ? 0.6 : 0.4);
-  const duckSide = profile.settings.lefty ? !leftHalf : leftHalf;
-  const zone = e.pointerType !== 'mouse' && duckSide ? 'duck' : 'jump';
-  pointers.set(e.pointerId, { zone, y0: e.clientY, p });
+  let zone;
+  if (isSplit()) {
+    // zones are measured inside that player's own part of the screen
+    const quarter = players.length > 2;
+    const localX = quarter ? (e.clientX % (innerWidth / 2)) / (innerWidth / 2) : e.clientX / innerWidth;
+    const leftHalf = localX < (profile.settings.lefty ? 0.6 : 0.4);
+    const duckSide = profile.settings.lefty ? !leftHalf : leftHalf;
+    zone = e.pointerType !== 'mouse' && duckSide ? 'duck' : 'jump';
+  } else if (e.pointerType === 'mouse') zone = 'jump';
+  else {
+    // the player's own layout: a movable border between the zones, or placed buttons
+    zone = controlAt(e.clientX, e.clientY, profile.settings.lefty);
+    if (!zone) return;
+    const b = document.getElementById('ctl-' + zone);
+    if (b) b.classList.add('down');
+  }
+  pointers.set(e.pointerId, { zone, y0: e.clientY, p, swipe: !isSplit() && profile.settings.controls.mode !== 'buttons' });
   try {
     touchLayer.setPointerCapture(e.pointerId);
   } catch {
@@ -1602,7 +1613,7 @@ touchLayer.addEventListener('pointerdown', (e) => {
 touchLayer.addEventListener('pointermove', (e) => {
   if (state === 'photo') return photoPointer('move', e);
   const q = pointers.get(e.pointerId);
-  if (q && q.zone === 'jump' && e.clientY - q.y0 > 36) {
+  if (q && q.zone === 'jump' && q.swipe !== false && e.clientY - q.y0 > 36) {
     q.zone = 'duck';
     jumpUp(q.p);
     duckDown(q.p);
@@ -1614,6 +1625,8 @@ function pointerEnd(e) {
   if (!q) return;
   pointers.delete(e.pointerId);
   if ([...pointers.values()].some((o) => o.zone === q.zone && o.p === q.p)) return;
+  const b = document.getElementById('ctl-' + q.zone);
+  if (b) b.classList.remove('down');
   if (q.zone === 'duck') duckUp(q.p);
   else jumpUp(q.p);
 }
