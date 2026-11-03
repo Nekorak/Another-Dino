@@ -32,8 +32,11 @@ import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial 
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession } from './multiplayer.js';
 import { UI } from './ui.js';
+import { Recorder } from './replay.js';
+import { encodeChallenge } from './transfer.js';
 
 setCustomSkin(profile.customSkin); // the dino painted in the skin editor
+const recorder = new Recorder(); // the last 10 seconds, for the replay after a game over
 
 // ------------------------------------------------------------------ tuning
 const START_SPEED = 13;
@@ -54,7 +57,7 @@ const MINI_BOSS_TIME = 14;
 const PIXEL_LEVELS = [110, 160, 240]; // render pixels along the short screen side
 const BASE_POWER_TIME = { shield: 15, magnet: 10, slow: 6, double: 12, rocket: 5, giant: 6, rain: 6 };
 const GHOST_STEP = 0.05;
-const RIVAL_LANES = [-2.4, -4.8, -7.2];
+const RIVAL_LANES = [-2.4, -4.8, -7.2, -9.6, -12, -14.4, -16.8]; // up to 7 other players in a LAN race
 const LANES = [0, -3.2, -6.4, -9.6]; // lanes for local multiplayer and the robot rival
 const REVIVE_COST = 50;
 const REVIVE_TIME = 5;
@@ -748,10 +751,15 @@ function spawnNext() {
     }
   }
   if (boss) {
-    // during a boss fight only a few small obstacles, the rocks do the rest
+    // during a boss fight only a few small obstacles, the rocks do the rest.
+    // The fight lasts a fixed time, not a distance, so it must not use the track's
+    // seeded randomness (that would make the rest of a shared track different).
+    const trackR = R;
+    R = Math.random;
     gapLeft = speed * 2.2;
     if (R() < 0.5) addObstacle(groundObstacle(biomeId, true));
     coinWave(SPAWN_X + 4, 6);
+    R = trackR;
     return;
   }
   if (event && event.type === 'bonus') {
@@ -818,7 +826,7 @@ function spawnNext() {
   } else if (!tutorial && mode !== 'lan' && !isLocal() && score > nextFossilAt && gap > o.width + 5) {
     // a rare fossil for the album
     nextFossilAt = score + 700 + R() * 600;
-    const id = missingFossil(biomeId, R);
+    const id = mode === 'challenge' ? null : missingFossil(biomeId, Math.random); // depends on the album, so not seeded
     if (id) addItem('fossil', SPAWN_X + o.width + gap * 0.5, 1.6, id);
   } else if (mode === 'lan' && lanMode === 'sabotage' && score > nextBombAt && gap > o.width + 5) {
     nextBombAt = score + 220 + R() * 120;
@@ -904,6 +912,7 @@ const RULES = {
   bot: { revive: false, powerups: true, bones: 1, missions: true, record: true },
   local: { revive: false, powerups: true, bones: 1, missions: false, record: false },
   lan: { revive: false, powerups: true, bones: 1, missions: true, record: true },
+  challenge: { revive: false, powerups: true, bones: 1, missions: true, record: true },
 };
 const rules = () => RULES[mode] || RULES.solo;
 
@@ -993,6 +1002,8 @@ function resetRun(seed) {
   const startBiome = adv ? adv.world : 0;
   if (env.biome !== startBiome) setBiome(startBiome, true);
   tutorial = mode === 'solo' && !profile.tutorial ? { plan: ['cactus', 'bird'], freeze: null, done: false } : null;
+  run.hadTutorial = !!tutorial;
+  recorder.clear();
   weatherNotes.clear();
   ui.setRunCoins(0);
   ui.setScore(0);
@@ -1014,8 +1025,12 @@ function setupGhost() {
   }
 }
 
+let runSeed = 0; // every run has a seed, so any solo run can be sent as a QR challenge
+let challenge = null; // { seed, score, name }: the friend's score to beat
+let challengeable = null; // { seed, score } of the run that just ended
 function startRun(seed) {
-  resetRun(seed);
+  runSeed = seed ?? (Math.random() * 2 ** 31) >>> 0;
+  resetRun(runSeed);
   setupGhost();
   state = 'running';
   ui.hideScreens();
@@ -1030,11 +1045,15 @@ function startMode(m, opts = {}) {
   if (lan) leaveLan();
   mode = m;
   daily = m === 'daily' ? dailyInfo() : null;
+  if (m === 'challenge') challenge = { seed: opts.seed >>> 0, score: opts.score || 0, name: opts.name || '?' };
+  else challenge = null;
+  challengeable = null;
   adv = m === 'adventure' ? { ...levelDef(opts.world, opts.level), bonesSpawned: 0, hits: 0, bossDone: false, finishSpawned: false } : null;
   if (m === 'local') localCount = clamp(opts.count || localCount, 2, 4);
   clearRivals();
   setPlayerCount(m === 'local' ? localCount : m === 'bot' ? 2 : 1);
-  startRun(daily ? daily.seed : adv ? adv.seed : null);
+  startRun(daily ? daily.seed : adv ? adv.seed : challenge ? challenge.seed : null);
+  if (challenge) ui.toast(t('chBeat', { name: challenge.name, n: challenge.score }), 'gold');
   if (daily) ui.toast(t('dailyGoal', { n: daily.target }), 'gold');
   if (adv) ui.toast(t('advLevelTitle', { w: t('biome_' + adv.biome), n: adv.level + 1 }), 'biome');
   if (m === 'zen' || m === 'hardcore') ui.toast(t('mode_' + m), 'gold');
@@ -1048,7 +1067,7 @@ const startLocal2 = (count = 2) => startMode('local', { count });
 function restart() {
   if (mode === 'adventure' && adv) startMode('adventure', { world: adv.world, level: adv.level });
   else if (mode === 'lan') return;
-  else startMode(mode, { count: localCount });
+  else startMode(mode, { count: localCount, ...(challenge || {}) });
 }
 
 function killPlayer(p, o) {
@@ -1182,8 +1201,22 @@ function finishRun() {
       botResult = { won, reward };
     } else botResult = { won: false, reward: 0 };
   }
+  // QR challenge: did we beat the friend? Any solo run (without the tutorial) can be sent on.
+  let chResult = null;
+  if (challenge) {
+    const won = pts > challenge.score;
+    chResult = { won, name: challenge.name, target: challenge.score, reward: won ? 40 : 0 };
+    if (won) {
+      profile.coins += 40;
+      profile.stats.challengesWon = (profile.stats.challengesWon || 0) + 1;
+      save();
+    }
+  }
+  challengeable = (mode === 'solo' && !run.hadTutorial) || mode === 'challenge' ? { seed: runSeed, score: Math.floor(pts) } : null;
   music.sting();
   ui.showOver({
+    challenge: chResult,
+    canChallenge: !!challengeable,
     score: res.s,
     record: res.isRecord && res.s > 0,
     coins: run.coins,
@@ -1378,9 +1411,9 @@ function updateBoss(dt) {
   boss.drop -= dt;
   ui.bossBar(Math.max(0, boss.t / boss.dur));
   if (boss.drop <= 0 && boss.t > 1.5) {
-    boss.drop = 1.1 + R() * 0.7;
+    boss.drop = 1.1 + Math.random() * 0.7;
     // far enough ahead that the red warning is visible before the rock lands
-    addObstacle(meteor(), 32 + R() * 8);
+    addObstacle(meteor(), 32 + Math.random() * 8);
   }
   if (boss.t <= 0) {
     const mini = boss.mini;
@@ -2466,8 +2499,13 @@ async function openLan() {
     rooms: (list) => ui.mpRooms(list),
     lobby: (list, isHost) => ui.mpLobby(list, isHost, session.me.id, session.mode),
     start: (seed, m) => beginCountdown(seed, m),
-    end: (results) => {
+    end: (results, tour) => {
       const st = profile.stats;
+      if (tour && tour.done && tour.table.length > 1 && tour.table[0].id === session.me.id) {
+        st.tournaments = (st.tournaments || 0) + 1;
+        profile.coins += 150;
+        ui.toast(t('tourBonus', { n: 150 }), 'gold');
+      }
       st.mpGames++;
       const won = results.length > 1 && results[0].id === session.me.id;
       if (won) st.mpWins++;
@@ -2480,7 +2518,7 @@ async function openLan() {
       if (state === 'spectate') state = 'over';
       ui.spectate(null);
       music.stop(0.3);
-      ui.mpResults(results, session.me.id);
+      ui.mpResults(results, session.me.id, tour);
     },
     attack: (by) => {
       if (state !== 'running' || mode !== 'lan') return;
@@ -2724,7 +2762,15 @@ function update(rawDt) {
     }
     ui.setScore(player.alive ? player.points : player.finalPts);
     ui.setCombo(comboMult(player), false);
-    if (isLocal() || mode === 'bot')
+    if (challenge)
+      ui.mpHud(
+        [
+          { id: 'ch', name: challenge.name, sc: challenge.score, a: true },
+          { id: 'me', name: profile.name || 'Dino', sc: Math.floor(player.alive ? player.points : player.finalPts), a: player.alive },
+        ].sort((a, b) => b.sc - a.sc),
+        'me',
+      );
+    else if (isLocal() || mode === 'bot')
       ui.mpHud(
         players.map((p) => ({ id: 'p' + p.index, name: p.brain ? t('botName') : 'P' + (p.index + 1), sc: Math.floor(p.alive ? p.points : p.finalPts), a: p.alive })),
         'p0',
@@ -2821,6 +2867,8 @@ function frame(t0) {
   last = t0;
   update(dt);
   render();
+  // keep recording a moment after the crash so the replay shows it
+  if (state === 'running' || state === 'dying' || state === 'won') recorder.capture(canvas, dt, player.alive ? player.points : player.finalPts);
 }
 
 // ------------------------------------------------------------------ share the record
@@ -2923,6 +2971,8 @@ const game = {
   },
   recordImage: () => recordImage(isLocal() ? Math.max(...players.map((q) => (q.alive ? q.points : q.finalPts))) : player.alive ? player.points : player.finalPts),
   photoImage,
+  replay: recorder,
+  challengeCode: () => (challengeable ? encodeChallenge({ seed: challengeable.seed, score: challengeable.score, name: profile.name || 'Dino', skin: profile.skin }) : null),
   startPhoto,
   endPhoto,
   endZen,

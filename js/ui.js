@@ -5,7 +5,7 @@ import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dai
 import { BIOMES } from './biomes.js';
 import { ADV_LEVELS, stars as advStars, unlocked as advUnlocked, totalStars } from './modes.js';
 import { TRAILS, FOSSIL_KINDS, FOSSIL_WORLD_REWARD, fossilId, fossilPixels, allFossils } from './collection.js';
-import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImage, CameraScanner, LanSync } from './transfer.js';
+import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImage, CameraScanner, LanSync, isChallenge, decodeChallenge } from './transfer.js';
 import { save, resetProgress } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
@@ -226,6 +226,10 @@ export class UI {
       if (g.state === 'over' && g.mode !== 'lan') g.restart();
     });
     btn('btn-share', () => this.share());
+    btn('btn-replay', () => this.showReplay());
+    btn('btn-replay-close', () => this.hideReplay());
+    btn('btn-replay-gif', () => this.saveReplay());
+    btn('btn-challenge', () => this.openPanel('challenge'));
     btn('btn-revive-yes', () => g.acceptRevive());
     btn('btn-revive-no', () => g.declineRevive());
     btn('btn-bomb', () => g.lanAttack());
@@ -461,6 +465,7 @@ export class UI {
   // ------------------------------------------------------------ screens
   hideScreens() {
     for (const id of ['menu', 'over', 'paused', 'win']) $(id).classList.add('hidden');
+    this.hideReplay();
     document.body.classList.remove('over');
     this.closePanel(true);
     this.tutorial(null);
@@ -477,7 +482,9 @@ export class UI {
     document.body.classList.toggle('paused', !!on);
     $('btn-zen-end').classList.toggle('hidden', mode !== 'zen');
   }
-  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode }) {
+  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge }) {
+    $('btn-replay').classList.toggle('hidden', !!lan || this.g.replay.length < 5);
+    $('btn-challenge').classList.toggle('hidden', !canChallenge || score <= 0);
     this.overShownAt = performance.now() / 1000;
     $('over-title').textContent = mode === 'zen' ? t('zenOver') : 'GAME OVER';
     $('over-score').textContent = pad5(score);
@@ -491,6 +498,10 @@ export class UI {
       const head = top.length > 1 ? t('draw') : t('mpWinner', { name: top[0].name });
       extra.append(el('p', { class: 'winner', text: head }), el('p', { text: local2.map((q) => `${q.name} ${pad5(q.sc)}`).join('   ') }));
     }
+    if (challenge)
+      extra.append(
+        el('p', { class: challenge.won ? 'winner' : '', text: challenge.won ? t('chWon', { name: challenge.name, n: challenge.reward }) : t('chLost', { name: challenge.name, n: challenge.target }) }),
+      );
     if (bot) extra.append(el('p', { class: bot.won ? 'winner' : '', text: bot.won ? t('botBeaten', { n: bot.reward }) : t('botWon') }));
     if (daily) extra.append(el('p', { class: daily.done ? 'mission-done' : '', text: daily.done ? t('dailyDoneShort', { n: daily.streak }) : t('dailyBest', { n: daily.best, target: daily.target }) }));
     $('btn-share').classList.toggle('hidden', !!lan || score <= 0);
@@ -503,6 +514,108 @@ export class UI {
     document.body.classList.add('over');
     this.setCoins();
   }
+  // ------------------------------------------------------------ replay
+  showReplay() {
+    const rec = this.g.replay;
+    if (!rec.length) return;
+    const c = $('replay-canvas');
+    const f = rec.frames[0].c;
+    c.width = f.width;
+    c.height = f.height;
+    $('replay').classList.remove('hidden');
+    let i = 0;
+    clearInterval(this.replayTimer);
+    this.replayTimer = setInterval(() => {
+      rec.draw(c, i);
+      i = (i + 1) % rec.length;
+    }, 100);
+  }
+  hideReplay() {
+    clearInterval(this.replayTimer);
+    $('replay').classList.add('hidden');
+  }
+  async saveReplay() {
+    const b = $('btn-replay-gif');
+    b.disabled = true;
+    b.textContent = t('replayMaking');
+    // let the button repaint before the (blocking) encoding starts
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const blob = this.g.replay.toGif();
+      const data = await new Promise((res) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.readAsDataURL(blob);
+      });
+      if (window.desktop && window.desktop.shareImage) {
+        await window.desktop.shareImage(data);
+        this.toast(t('shareSaved'), 'gold');
+      } else if (Capacitor.getPlatform() === 'android') {
+        await Share.shareImage({ data: data.split(',')[1], text: t('shareText'), mime: 'image/gif' });
+      } else {
+        const file = new File([blob], 'another-dino-replay.gif', { type: 'image/gif' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], text: t('shareText') });
+        else {
+          const a = el('a', { href: URL.createObjectURL(blob), download: 'another-dino-replay.gif' });
+          document.body.append(a);
+          a.click();
+          a.remove();
+          this.toast(t('replaySaved'), 'gold');
+        }
+      }
+    } catch (err) {
+      if (!err || err.name !== 'AbortError') this.toast(t('shareFailed'), 'red');
+    }
+    b.disabled = false;
+    b.textContent = t('replayGif');
+  }
+
+  // ------------------------------------------------------------ QR challenge
+  challengeView() {
+    const code = this.g.challengeCode();
+    if (!code) return el('p', { class: 'muted', text: t('chNone') });
+    const area = el('textarea', { class: 'code', readonly: true, rows: 3 });
+    area.value = code;
+    const copy = el('button', { class: 'val', text: t('xferCopy') });
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        this.toast(t('xferCopied'), 'gold');
+      } catch {
+        area.select();
+      }
+    });
+    return el('div', { class: 'xfer' }, el('p', { class: 'small', text: t('chHelp') }), qrCanvas(code, 4), area, copy);
+  }
+  askChallenge(text) {
+    let c;
+    try {
+      c = decodeChallenge(text);
+    } catch (err) {
+      return this.toast(t(err.message || 'xferBadCode'), 'red');
+    }
+    this.stopTransfer();
+    const box = $('xfer-confirm');
+    if (!box) return;
+    box.replaceChildren(
+      el(
+        'div',
+        { class: 'confirm' },
+        el('p', { text: t('chFrom', { name: c.name, n: c.score }) }),
+        el('p', { class: 'small muted', text: t('chRules') }),
+        el('button', {
+          class: 'menu-btn primary',
+          text: t('chAccept'),
+          onclick: () => {
+            this.closePanel(true);
+            this.g.startMode('challenge', c);
+          },
+        }),
+      ),
+    );
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   hideOver() {
     $('over').classList.add('hidden');
     document.body.classList.remove('over');
@@ -580,7 +693,7 @@ export class UI {
     if (!silent && this.g.state === 'menu') $('menu').classList.remove('hidden');
   }
   renderPanel() {
-    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle' };
+    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
@@ -594,6 +707,7 @@ export class UI {
       adventure: () => this.adventureView(),
       album: () => this.albumView(),
       transfer: () => this.transferView(),
+      challenge: () => this.challengeView(),
       editor: () =>
         skinEditorView(this, () => {
           this.shopTab = 'skin';
@@ -781,6 +895,11 @@ export class UI {
       card('mode_zen', t('modeDesc_zen'), () => g.startMode('zen')),
       card('mode_hardcore', t('modeDesc_hardcore'), () => g.startMode('hardcore')),
       card('mode_bot', t('modeDesc_bot'), () => g.startMode('bot'), botBtn),
+      card('mode_challenge', t('modeDesc_challenge'), () => {
+        // scanning a friend's challenge uses the same scanner as the progress transfer
+        this.xferTab = 'scan';
+        this.openPanel('transfer');
+      }),
       el('div', { class: 'mode-card' }, el('b', { text: t('mode_local') }), el('span', { class: 'small muted', text: t('modeDesc_local') }), localBtns),
     );
   }
@@ -916,6 +1035,7 @@ export class UI {
   }
 
   askImport(text) {
+    if (isChallenge(text)) return this.askChallenge(text);
     let data;
     try {
       data = decodeProgress(text);
@@ -1210,8 +1330,9 @@ export class UI {
     if (this.lanView === 'home' && !isHost) this.lanView = 'lobby';
     if (this.panel === 'lan' && this.lanView === 'lobby') this.renderPanel();
   }
-  mpResults(results, myId) {
+  mpResults(results, myId, tour) {
     this.results = results;
+    this.tour = tour || null;
     this.myId = myId;
     this.lanView = 'results';
     $('over').classList.add('hidden');
@@ -1294,7 +1415,7 @@ export class UI {
       ),
     );
     const canStart = this.lobby.length >= 2;
-    const MODES = ['race', 'sabotage', 'elimination'];
+    const MODES = ['race', 'sabotage', 'elimination', 'tournament'];
     const modeRow = this.lanIsHost
       ? this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => this.g.lanSetMode(MODES[(MODES.indexOf(this.lanMode || 'race') + 1) % MODES.length]))
       : this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => {});
@@ -1317,13 +1438,24 @@ export class UI {
     const r = this.results || [];
     const winner = r[0];
     const head = winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
+    const tour = this.tour;
+    // tournament: the standings after this race, and the champion after the last one
+    const tourEls = tour
+      ? [
+          el('h3', { text: tour.done ? (tour.table[0].id === this.myId ? t('tourYouChampion') : t('tourChampion', { name: tour.table[0].name })) : t('tourRace', { n: tour.race, total: tour.total }) }),
+          el('ol', { class: 'top tour' }, tour.table.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: String(p.pts).padStart(3, ' ') + ' ' + t('tourPts') }), el('span', { text: p.name })))),
+          el('p', { class: 'muted small', text: t('tourThisRace') }),
+        ]
+      : [];
+    const again = tour ? (tour.done ? t('tourNew') : t('tourNext')) : t('again');
     return el(
       'div',
       { class: 'lan' },
-      el('h3', { class: 'winner', text: head }),
+      tour && !tour.done ? null : el('h3', { class: 'winner', text: head }),
+      tourEls,
       el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: p.name })))),
       this.lanIsHost
-        ? el('button', { class: 'menu-btn primary', text: t('again'), disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
+        ? el('button', { class: 'menu-btn primary', text: again, disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
         : el('p', { class: 'blink', text: t('mpWaitHost') }),
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
     );

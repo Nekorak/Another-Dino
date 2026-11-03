@@ -106,7 +106,20 @@
         <button id="btn-over-menu" class="menu-btn" data-t="menu"></button>
         <button id="btn-share" class="menu-btn"></button>
       </div>
+      <div class="over-buttons">
+        <button id="btn-replay" class="menu-btn hidden" data-t="replay"></button>
+        <button id="btn-challenge" class="menu-btn hidden" data-t="chSend"></button>
+      </div>
       <p id="again-msg" class="small"></p>
+    </div>
+
+    <div id="replay" class="screen hidden">
+      <h2 data-t="replayTitle"></h2>
+      <canvas id="replay-canvas"></canvas>
+      <div class="over-buttons">
+        <button id="btn-replay-gif" class="menu-btn primary" data-t="replayGif"></button>
+        <button id="btn-replay-close" class="menu-btn" data-t="close"></button>
+      </div>
     </div>
 
     <div id="paused" class="screen hidden">

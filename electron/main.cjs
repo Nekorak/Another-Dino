@@ -198,11 +198,22 @@ async function startUpdate(version) {
 // "Share record": save the picture to Pictures/Another Dino, copy it to the
 // clipboard (ready to paste into a chat) and show it in the file manager.
 ipcMain.handle('share:image', (_e, dataUrl) => {
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) throw new Error('bad image');
-  const img = nativeImage.createFromDataURL(dataUrl);
+  if (typeof dataUrl !== 'string' || !/^data:image\/(png|gif);base64,/.test(dataUrl)) throw new Error('bad image');
+  const gif = dataUrl.startsWith('data:image/gif');
   const dir = path.join(app.getPath('pictures'), 'Another Dino');
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `another-dino-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`);
+  const file = path.join(dir, `another-dino-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.${gif ? 'gif' : 'png'}`);
+  if (gif) {
+    // a replay: saved as an animated GIF and shown in the file manager
+    fs.writeFileSync(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    try {
+      shell.showItemInFolder(file);
+    } catch {
+      /* no file manager */
+    }
+    return file;
+  }
+  const img = nativeImage.createFromDataURL(dataUrl);
   fs.writeFileSync(file, img.toPNG());
   // both are conveniences: the picture is already saved if they fail
   try {

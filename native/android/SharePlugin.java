@@ -11,7 +11,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 import java.io.FileOutputStream;
 
-// Shares the "my record" picture through Android's share sheet
+// Shares the "my record" picture or a replay GIF through Android's share sheet
 // (WhatsApp, Telegram, Instagram, gallery...).
 @CapacitorPlugin(name = "Share")
 public class SharePlugin extends Plugin {
@@ -19,6 +19,8 @@ public class SharePlugin extends Plugin {
     public void shareImage(PluginCall call) {
         String data = call.getString("data");
         String text = call.getString("text", "");
+        // "image/png" for the record picture, "image/gif" for a replay
+        String mime = "image/gif".equals(call.getString("mime")) ? "image/gif" : "image/png";
         if (data == null) {
             call.reject("no image");
             return;
@@ -26,13 +28,13 @@ public class SharePlugin extends Plugin {
         try {
             File dir = new File(getContext().getCacheDir(), "share");
             if (!dir.exists() && !dir.mkdirs()) throw new Exception("no cache dir");
-            File png = new File(dir, "another-dino-record.png");
+            File png = new File(dir, mime.equals("image/gif") ? "another-dino-replay.gif" : "another-dino-record.png");
             try (FileOutputStream out = new FileOutputStream(png)) {
                 out.write(Base64.decode(data, Base64.DEFAULT));
             }
             Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", png);
             Intent send = new Intent(Intent.ACTION_SEND);
-            send.setType("image/png");
+            send.setType(mime);
             send.putExtra(Intent.EXTRA_STREAM, uri);
             send.putExtra(Intent.EXTRA_TEXT, text);
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);

@@ -119,6 +119,31 @@ export function decodeProgress(text) {
   };
 }
 
+// ------------------------------------------------------------------ QR challenge
+// "Beat my score on this exact track": the seed of the run and the score to beat.
+const CH_HEADER = 'ANOTHERDINO-CH';
+export const isChallenge = (text) => String(text || '').trim().startsWith(CH_HEADER + ';');
+
+export function encodeChallenge({ seed, score, name, skin }) {
+  const body = `${CH_HEADER};v=1;seed=${seed >>> 0};score=${Math.floor(score)};name=${String(name || '').replace(/[;=]/g, '').slice(0, 16)};skin=${skin || 'classic'}`;
+  return body + ';sum=' + fnv(body);
+}
+
+export function decodeChallenge(text) {
+  const clean = String(text || '').trim();
+  if (!isChallenge(clean)) throw new Error('xferBadCode');
+  const i = clean.lastIndexOf(';sum=');
+  if (i < 0 || fnv(clean.slice(0, i)) !== clean.slice(i + 5)) throw new Error('xferBadSum');
+  const vars = {};
+  for (const part of clean.slice(CH_HEADER.length + 1, i).split(';')) {
+    const eq = part.indexOf('=');
+    if (eq > 0) vars[part.slice(0, eq)] = part.slice(eq + 1);
+  }
+  const seed = Number(vars.seed);
+  if (!Number.isFinite(seed)) throw new Error('xferBadCode');
+  return { seed: seed >>> 0, score: Math.max(0, Math.floor(Number(vars.score) || 0)), name: vars.name || '?', skin: SKINS[vars.skin] ? vars.skin : 'classic' };
+}
+
 // Merge never loses anything: numbers take the larger value, collections are joined.
 export function mergeProgress(d) {
   const p = profile;

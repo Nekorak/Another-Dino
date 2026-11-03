@@ -1905,3 +1905,27 @@ body.over #perfects {
 @media (prefers-reduced-motion: reduce) {
   .dance-icon { animation: none; }
 }
+
+/* replay */
+#replay {
+  z-index: 30;
+  background: rgba(20, 16, 10, 0.82);
+  color: #fff;
+  gap: 12px;
+}
+#replay-canvas {
+  max-width: min(92vw, 640px);
+  max-height: 62vh;
+  width: auto;
+  height: auto;
+  min-width: 240px;
+  image-rendering: pixelated;
+  border: 3px solid #fff;
+  object-fit: contain;
+}
+.top.tour li b {
+  min-width: 7ch;
+}
+#replay {
+  pointer-events: auto; /* taps on the replay must not restart the game behind it */
+}
