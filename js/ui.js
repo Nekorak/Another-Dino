@@ -1,8 +1,22 @@
 // All menus, panels and HUD elements (plain DOM on top of the 3D canvas).
 import { t, LANGS } from './i18n.js';
-import { SKINS, HATS, POWERUP_COLOR, hatPixels } from './models.js';
+import { SKINS, HATS, PETS, POWERUP_COLOR, hatPixels, petPixels } from './models.js';
+import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dailyInfo, EGG_PRICE, openEgg, eggPoolSize } from './progress.js';
+import { BIOMES } from './biomes.js';
+import { ADV_LEVELS, stars as advStars, unlocked as advUnlocked, totalStars } from './modes.js';
+import { TRAILS, FOSSIL_KINDS, FOSSIL_WORLD_REWARD, fossilId, fossilPixels, allFossils } from './collection.js';
+import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImage, CameraScanner, LanSync, isChallenge, decodeChallenge } from './transfer.js';
 import { save, resetProgress } from './save.js';
+import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
+import { skinEditorView } from './editor.js';
+import { layoutButtons, openControlsEditor } from './controls.js';
+import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS } from './missions.js';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const Updater = registerPlugin('Updater');
+const Share = registerPlugin('Share');
+const Widget = registerPlugin('Widget');
 
 const $ = (id) => document.getElementById(id);
 const pad5 = (n) => String(Math.floor(n)).padStart(5, '0');
@@ -47,6 +61,22 @@ const ICON = [
 ];
 function dinoIcon(skin) {
   const s = SKINS[skin];
+  if (skin === 'custom') {
+    // the painted side view, as drawn in the editor
+    const c = document.createElement('canvas');
+    c.className = 'dino-icon';
+    c.width = EDITOR_GRID[0].length;
+    c.height = EDITOR_GRID.length;
+    const g = c.getContext('2d');
+    for (let r = 0; r < c.height; r++)
+      for (let x = 0; x < c.width; x++) {
+        const col = editorCell(s, x, r);
+        if (!col) continue;
+        g.fillStyle = col;
+        g.fillRect(x, r, 1, 1);
+      }
+    return c;
+  }
   const c = document.createElement('canvas');
   c.width = 16;
   c.height = 14;
@@ -63,8 +93,62 @@ function dinoIcon(skin) {
   return c;
 }
 
+// a dino that does a little of its dance (CSS animation)
+function danceIcon(id, skin) {
+  const c = dinoIcon(SKINS[skin] ? skin : 'classic');
+  c.classList.add('dance-icon', 'dance-' + id);
+  return c;
+}
+
+// the theme's sheet, line and accent colours as a small flag
+function themeIcon(id) {
+  const v = THEMES[id].vars;
+  const c = document.createElement('canvas');
+  c.className = 'dino-icon';
+  c.width = 12;
+  c.height = 10;
+  const g = c.getContext('2d');
+  g.fillStyle = v['--line'] || '#3b3326';
+  g.fillRect(0, 0, 12, 10);
+  g.fillStyle = v['--sheet'] || '#fff8ea';
+  g.fillRect(1, 1, 10, 8);
+  g.fillStyle = v['--accent'] || '#5fae3e';
+  g.fillRect(2, 5, 8, 3);
+  g.fillStyle = v['--sheet-ink'] || '#3b3326';
+  g.fillRect(2, 2, 5, 1);
+  return c;
+}
+
 function hatIcon(id) {
-  const px = hatPixels(id);
+  return pixelIcon(hatPixels(id));
+}
+
+function petIcon(id) {
+  return pixelIcon(petPixels(id));
+}
+
+function trailIcon(id) {
+  const c = document.createElement('canvas');
+  c.className = 'dino-icon';
+  c.width = 12;
+  c.height = 7;
+  const g = c.getContext('2d');
+  const cols = TRAILS[id].colors;
+  if (!cols) {
+    g.fillStyle = '#9a8f7a';
+    for (let i = 0; i < 7; i++) g.fillRect(i + 2, 6 - i, 1, 1);
+    return c;
+  }
+  for (let x = 0; x < 12; x++) {
+    const h = TRAILS[id].motion === 'line' ? 3 : 3 + Math.round(Math.sin(x * 0.9) * 2);
+    g.fillStyle = cols[x % cols.length];
+    g.fillRect(x, h, 1, TRAILS[id].motion === 'line' ? 2 : 1);
+    if (x % 3 === 0 && TRAILS[id].motion !== 'line') g.fillRect(x, h - 2, 1, 1);
+  }
+  return c;
+}
+
+function pixelIcon(px) {
   const c = document.createElement('canvas');
   c.className = 'dino-icon';
   if (!px.length) {
@@ -142,18 +226,54 @@ export class UI {
       });
     } else $('btn-fs').remove();
     btn('btn-restart', () => {
-      if (g.state === 'over' && g.mode === 'solo') g.startSolo();
+      if (g.state === 'over' && g.mode !== 'lan') g.restart();
     });
+    btn('btn-share', () => this.share());
+    btn('btn-replay', () => this.showReplay());
+    btn('chest-open', () => this.doOpenChest());
+    btn('chest-ok', () => $('chest').classList.add('hidden'));
+    btn('btn-replay-close', () => this.hideReplay());
+    btn('btn-replay-gif', () => this.saveReplay());
+    btn('btn-challenge', () => this.openPanel('challenge'));
+    btn('btn-revive-yes', () => g.acceptRevive());
+    btn('btn-revive-no', () => g.declineRevive());
+    btn('btn-bomb', () => g.lanAttack());
+    btn('egg-ok', () => $('egg').classList.add('hidden'));
+    const emo = $('emotes');
+    for (const e of g.emotes) {
+      const b = el('button', { class: 'emote', text: e, 'aria-label': e });
+      b.addEventListener('pointerdown', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        g.lanEmote(e);
+      });
+      emo.append(b);
+    }
     btn('btn-over-menu', () => g.toMenu());
     btn('panel-back', () => this.closePanel());
+    btn('btn-resume', () => g.setPaused(false));
+    btn('btn-photo', () => g.startPhoto());
+    btn('btn-pause-menu', () => g.toMenu());
+    btn('btn-zen-end', () => g.endZen());
+    btn('btn-photo-back', () => g.endPhoto());
+    btn('btn-photo-save', () => this.share(true));
+    btn('btn-win-next', () => this.nextLevel());
+    btn('btn-win-map', () => {
+      g.toMenu();
+      this.openPanel('adventure');
+    });
+    btn('btn-win-retry', () => g.restart());
 
     const menu = $('menu-buttons');
     const items = [
       ['play', () => g.startSolo(), 'primary'],
+      ['modes', () => this.openPanel('modes')],
       ['multiplayer', () => this.openPanel('lan')],
       ['shop', () => this.openPanel('shop')],
       ['missions', () => this.openPanel('missions')],
+      ['album', () => this.openPanel('album')],
       ['stats', () => this.openPanel('stats')],
+      ['pass', () => this.openPanel('pass')],
       ['settings', () => this.openPanel('settings')],
     ];
     for (const [key, fn, cls] of items) {
@@ -171,15 +291,37 @@ export class UI {
 
   refreshTexts() {
     for (const e of document.querySelectorAll('[data-t]')) e.textContent = t(e.dataset.t);
-    $('controls-msg').textContent = this.g.isTouch ? '' : t('controlsKey');
+    $('controls-msg').textContent = (this.g.isTouch ? '' : t('controlsKey') + ' · ') + t('abilitiesHint');
     $('hint-jump').textContent = t('jump');
     $('hint-duck').textContent = t('duck');
     $('hints').classList.toggle('lefty', this.p.settings.lefty);
     $('paused-title').textContent = t('paused');
     $('paused-msg').textContent = t('resume');
     $('btn-sound').classList.toggle('off', !(this.p.settings.sfx || this.p.settings.music));
+    $('revive-title').textContent = t('reviveTitle');
+    $('btn-revive-no').textContent = t('reviveNo');
+    $('btn-share').textContent = t('share');
+    $('btn-bomb').textContent = t('bombSend');
+    for (const [id, key] of [['btn-resume', 'resumeBtn'], ['btn-photo', 'photo'], ['btn-pause-menu', 'menu'], ['btn-zen-end', 'zenEnd'], ['btn-photo-back', 'back'], ['btn-photo-save', 'photoSave'], ['btn-win-next', 'advNext'], ['btn-win-map', 'advMap'], ['btn-win-retry', 'again']]) $(id).textContent = t(key);
+    $('photo-hint').textContent = t('photoHint');
     this.setCoins();
+    this.menuInfo();
     if (this.panel) this.renderPanel();
+  }
+
+  menuInfo() {
+    const d = dailyInfo();
+    const db = $('menu-daily');
+    if (db) {
+      db.textContent = '';
+      db.append(el('span', { text: t('daily') }), el('small', { text: d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }) }));
+      db.classList.toggle('done', d.done);
+    }
+    const lp = levelProgress();
+    $('menu-level').replaceChildren(
+      el('span', { text: t('levelShort', { n: lp.level }) }),
+      el('span', { class: 'xpbar' }, el('i', { style: `width:${Math.round((lp.into / lp.need) * 100)}%` })),
+    );
   }
 
   setCoins() {
@@ -228,15 +370,110 @@ export class UI {
         ),
     );
   }
-  setPlaying(on) {
+  setPlaying(on, mode = 'solo', lanMode = 'race') {
     document.body.classList.toggle('playing', on);
+    // the movable on-screen buttons (only on touch screens, not in split screen)
+    layoutButtons(on && this.g.isTouch && mode !== 'local' && mode !== 'local2');
+    document.body.classList.toggle('local2', on && mode === 'local2');
+    document.body.classList.toggle('lan-race', on && mode === 'lan');
+    $('lan-actions').classList.toggle('hidden', !(on && mode === 'lan'));
+    $('btn-bomb').classList.toggle('hidden', lanMode !== 'sabotage');
     $('mp-hud').replaceChildren();
+    this.mpKey = '';
     if (!on) $('powerups').replaceChildren();
+  }
+  setCombo(mult, pop) {
+    const c = $('combo');
+    if (mult <= 1) {
+      c.classList.add('hidden');
+      return;
+    }
+    c.classList.remove('hidden');
+    const txt = 'COMBO ×' + mult;
+    if (c.textContent !== txt) c.textContent = txt;
+    if (pop) {
+      c.classList.remove('pop');
+      void c.offsetWidth;
+      c.classList.add('pop');
+    }
+  }
+  perfect() {
+    const n = el('div', { class: 'perfect', text: t('perfect') });
+    $('perfects').append(n);
+    setTimeout(() => n.remove(), 900);
+  }
+  advProgress(k) {
+    const b = $('advbar');
+    b.classList.toggle('hidden', k == null);
+    if (k != null) b.firstElementChild.style.width = Math.round(k * 100) + '%';
+  }
+  bossBar(k) {
+    const b = $('bossbar');
+    b.classList.toggle('hidden', k == null);
+    if (k != null) {
+      b.querySelector('i').style.width = Math.round(k * 100) + '%';
+      b.querySelector('span').textContent = t('bossName');
+    }
+  }
+  photoMode(on) {
+    document.body.classList.toggle('photo', on);
+    $('photo-ui').classList.toggle('hidden', !on);
+  }
+  showWin({ stars, reward, adv, coins, spawned, hits, xp }) {
+    this.overShownAt = performance.now() / 1000;
+    $('win-title').textContent = adv.boss ? t('bossDefeated') : t('advWin');
+    $('win-stars').replaceChildren(...[0, 1, 2].map((i) => el('span', { class: 'star' + (i < stars ? ' on' : '') })));
+    // replaceChildren would print a null as the text "null"
+    const lines = [
+      el('p', { text: t('advBones', { a: coins, b: spawned }) }),
+      el('p', { text: hits ? t('advHits', { n: hits }) : t('advNoHits') }),
+      reward ? el('p', { class: 'mission-done', text: t('coinsEarned', { n: reward }) }) : null,
+      xp ? el('p', { class: 'small', text: t('xpGained', { n: xp }) }) : null,
+    ];
+    $('win-details').replaceChildren(...lines.filter(Boolean));
+    const hasNext = this.nextLevelOf(adv) != null;
+    $('btn-win-next').classList.toggle('hidden', !hasNext);
+    $('win').classList.remove('hidden');
+    document.body.classList.add('over');
+  }
+  nextLevelOf(adv) {
+    if (!adv) return null;
+    if (adv.level < ADV_LEVELS - 1) return { world: adv.world, level: adv.level + 1 };
+    if (adv.world < BIOMES.length - 1) return { world: adv.world + 1, level: 0 };
+    return null;
+  }
+  nextLevel() {
+    const n = this.nextLevelOf(this.g.adv);
+    if (n) this.g.startMode('adventure', n);
+  }
+  setBombs(n) {
+    const b = $('btn-bomb');
+    if (n == null) return;
+    b.dataset.n = n;
+    b.disabled = n <= 0;
+    b.textContent = t('bombSend') + ' ×' + n;
+  }
+  spectate(name) {
+    const s = $('spectate');
+    s.classList.toggle('hidden', !name);
+    if (name) s.textContent = t('spectating', { name });
+  }
+  showRevive(cost, seconds) {
+    $('btn-revive-yes').replaceChildren(document.createTextNode(t('reviveYes') + ' '), bone(), document.createTextNode(' ' + cost));
+    this.reviveTick(seconds);
+    $('revive').classList.remove('hidden');
+  }
+  reviveTick(n) {
+    $('revive-timer').textContent = String(Math.max(0, n));
+  }
+  hideRevive() {
+    $('revive').classList.add('hidden');
   }
 
   // ------------------------------------------------------------ screens
   hideScreens() {
-    for (const id of ['menu', 'over', 'paused']) $(id).classList.add('hidden');
+    for (const id of ['menu', 'over', 'paused', 'win']) $(id).classList.add('hidden');
+    this.hideReplay();
     document.body.classList.remove('over');
     this.closePanel(true);
     this.tutorial(null);
@@ -247,14 +484,147 @@ export class UI {
     $('menu').classList.remove('hidden');
     this.setCoins();
     this.refreshTexts();
+    this.passBadge();
+    this.updateWidget();
+    // the daily chest waits on the menu (not during the very first tutorial run)
+    if (this.p.tutorial && chestInfo().available) setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
   }
-  showPaused(on) {
+
+  // the Android home-screen widget shows the record and the daily challenge
+  updateWidget() {
+    if (Capacitor.getPlatform() !== 'android') return;
+    const d = dailyInfo();
+    Widget.update({
+      best: Math.floor(this.p.stats.best),
+      dailyDone: d.done,
+      streak: d.streak,
+      recordLabel: t('widgetRecord'),
+      dailyTodo: t('widgetDailyTodo'),
+      dailyDoneText: t('widgetDailyDone'),
+      streakText: d.streak ? t('widgetStreak', { n: d.streak }) : '',
+    }).catch(() => {});
+  }
+
+  // ------------------------------------------------------------ daily chest
+  showChest() {
+    const info = chestInfo();
+    if (!info.available) return;
+    $('chest-title').textContent = t('chestTitle', { n: info.day });
+    $('chest-days').replaceChildren(
+      ...CHEST_DAYS.map((b, i) => el('span', { class: 'cday' + (i + 1 < info.day ? ' got' : i + 1 === info.day ? ' now' : '') }, el('b', { text: String(i + 1) }), bone(), document.createTextNode(String(b)))),
+    );
+    $('chest-result').replaceChildren();
+    $('chest-open').classList.remove('hidden');
+    $('chest-ok').classList.add('hidden');
+    $('chest').classList.remove('hidden', 'open');
+  }
+  doOpenChest() {
+    const r = openChest();
+    if (!r) return $('chest').classList.add('hidden');
+    const box = $('chest');
+    box.classList.add('shaking');
+    this.g.sfx.beep();
+    $('chest-open').classList.add('hidden');
+    setTimeout(() => {
+      box.classList.remove('shaking');
+      box.classList.add('open');
+      this.g.sfx.reward();
+      $('chest-result').replaceChildren(el('p', {}, bone(), ' +' + r.bones), el('p', { class: 'small', text: '+' + r.xp + ' XP' }));
+      for (const l of r.levelUps) this.toast(t('levelUp', { n: l }), 'gold');
+      $('chest-ok').classList.remove('hidden');
+      this.setCoins();
+      this.passBadge();
+    }, 900);
+  }
+
+  // ------------------------------------------------------------ season pass
+  passBadge() {
+    const b = $('menu-pass');
+    if (b) b.classList.toggle('badge', passState().unclaimed.length > 0);
+  }
+  passView() {
+    const st = passState();
+    const SEASONS = ['passWinter', 'passSpring', 'passSummer', 'passAutumn'];
+    const head = el(
+      'div',
+      { class: 'pass-head' },
+      el('b', { text: t(SEASONS[st.q]) }),
+      el('span', { class: 'small muted', text: t('passLeft', { n: st.daysLeft }) }),
+      el('p', { class: 'small', text: st.tier >= PASS_TIERS ? t('passDone') : t('passTier', { n: st.tier, total: PASS_TIERS }) }),
+      el('div', { class: 'bar' }, el('i', { style: `width:${st.tier >= PASS_TIERS ? 100 : Math.round((st.into / PASS_XP) * 100)}%` })),
+      el('p', { class: 'small muted', text: t('passHelp', { n: PASS_XP }) }),
+    );
+    const claimAll = st.unclaimed.length
+      ? el('button', {
+          class: 'menu-btn primary',
+          text: t('passClaimAll', { n: st.unclaimed.length }),
+          onclick: () => {
+            for (const n of st.unclaimed) this.claimPassTier(n, true);
+            this.g.sfx.reward();
+            this.renderPanel();
+          },
+        })
+      : null;
+    const tiers = el('div', { class: 'pass-tiers' });
+    for (let n = 1; n <= PASS_TIERS; n++) {
+      const r = passReward(n);
+      const got = this.p.pass.claimed.includes(n);
+      const ready = n <= st.tier && !got;
+      // the exclusive items always show themselves, even once claimed (or owned from an earlier season)
+      const sp = PASS_SPECIAL[n];
+      const icon = sp ? (sp[0] === 'skin' ? dinoIcon(sp[1]) : sp[0] === 'hat' ? hatIcon(sp[1]) : trailIcon(sp[1])) : null;
+      const card = el(
+        'button',
+        { class: 'tier' + (got ? ' got' : ready ? ' ready' : ' locked') + (icon ? ' special' : '') },
+        el('span', { class: 'tier-n', text: String(n) }),
+        icon || el('span', { class: 'tier-bones' }, bone(), ' ' + r.n),
+        el('span', { class: 'tier-tag', text: got ? '✓' : ready ? t('passClaim') : '' }),
+      );
+      card.addEventListener('click', () => {
+        if (!ready) return this.toast(sp ? t(sp[0] + '_' + sp[1]) : t('passLocked', { n }), 'gold');
+        this.claimPassTier(n);
+        this.renderPanel();
+      });
+      tiers.append(card);
+    }
+    return el('div', {}, head, claimAll, tiers);
+  }
+  claimPassTier(n, quiet) {
+    const r = claimTier(n);
+    if (!r) return;
+    if (!quiet) this.g.sfx.reward();
+    this.toast(r.kind === 'bones' ? t('passGotBones', { n: r.n }) : t('passGotItem', { name: t(r.kind + '_' + r.id) }), 'gold');
+    this.setCoins();
+    this.passBadge();
+  }
+  showPaused(on, mode) {
     $('paused').classList.toggle('hidden', !on);
+    document.body.classList.toggle('paused', !!on);
+    $('btn-zen-end').classList.toggle('hidden', mode !== 'zen');
   }
-  showOver({ score, record, coins, missions, lan }) {
+  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge }) {
+    $('btn-replay').classList.toggle('hidden', !!lan || this.g.replay.length < 5);
+    $('btn-challenge').classList.toggle('hidden', !canChallenge || score <= 0);
     this.overShownAt = performance.now() / 1000;
+    $('over-title').textContent = mode === 'zen' ? t('zenOver') : 'GAME OVER';
     $('over-score').textContent = pad5(score);
     $('over-record').textContent = record ? t('record') : '';
+    $('over-xp').textContent = xp ? t('xpGained', { n: xp }) : '';
+    const extra = $('over-extra');
+    extra.replaceChildren();
+    if (local2) {
+      const best = Math.max(...local2.map((q) => q.sc));
+      const top = local2.filter((q) => q.sc === best);
+      const head = top.length > 1 ? t('draw') : t('mpWinner', { name: top[0].name });
+      extra.append(el('p', { class: 'winner', text: head }), el('p', { text: local2.map((q) => `${q.name} ${pad5(q.sc)}`).join('   ') }));
+    }
+    if (challenge)
+      extra.append(
+        el('p', { class: challenge.won ? 'winner' : '', text: challenge.won ? t('chWon', { name: challenge.name, n: challenge.reward }) : t('chLost', { name: challenge.name, n: challenge.target }) }),
+      );
+    if (bot) extra.append(el('p', { class: bot.won ? 'winner' : '', text: bot.won ? t('botBeaten', { n: bot.reward }) : t('botWon') }));
+    if (daily) extra.append(el('p', { class: daily.done ? 'mission-done' : '', text: daily.done ? t('dailyDoneShort', { n: daily.streak }) : t('dailyBest', { n: daily.best, target: daily.target }) }));
+    $('btn-share').classList.toggle('hidden', !!lan || score <= 0);
     $('over-coins').replaceChildren(bone(), document.createTextNode(' ' + t('coinsEarned', { n: coins })));
     $('over-missions').replaceChildren(...missions.map((m) => el('p', { class: 'mission-done', text: '+ ' + t('m_' + m.kind, { n: m.target }) + '  +' + m.reward })));
     $('again-msg').textContent = lan ? t('mpWaitOthers') : this.g.isTouch ? t('tapAgain') : t('keyAgain');
@@ -263,6 +633,112 @@ export class UI {
     $('over').classList.remove('hidden');
     document.body.classList.add('over');
     this.setCoins();
+  }
+  // ------------------------------------------------------------ replay
+  showReplay() {
+    const rec = this.g.replay;
+    if (!rec.length) return;
+    const c = $('replay-canvas');
+    const f = rec.frames[0].c;
+    c.width = f.width;
+    c.height = f.height;
+    $('replay').classList.remove('hidden');
+    let i = 0;
+    clearInterval(this.replayTimer);
+    this.replayTimer = setInterval(() => {
+      rec.draw(c, i);
+      i = (i + 1) % rec.length;
+    }, 100);
+  }
+  hideReplay() {
+    clearInterval(this.replayTimer);
+    $('replay').classList.add('hidden');
+  }
+  async saveReplay() {
+    const b = $('btn-replay-gif');
+    b.disabled = true;
+    b.textContent = t('replayMaking');
+    // let the button repaint before the (blocking) encoding starts
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const blob = this.g.replay.toGif();
+      const data = await new Promise((res) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.readAsDataURL(blob);
+      });
+      if (window.desktop && window.desktop.shareImage) {
+        await window.desktop.shareImage(data);
+        this.toast(t('shareSaved'), 'gold');
+      } else if (Capacitor.getPlatform() === 'android') {
+        await Share.shareImage({ data: data.split(',')[1], text: t('shareText'), mime: 'image/gif' });
+      } else {
+        const file = new File([blob], 'another-dino-replay.gif', { type: 'image/gif' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], text: t('shareText') });
+        else {
+          const a = el('a', { href: URL.createObjectURL(blob), download: 'another-dino-replay.gif' });
+          document.body.append(a);
+          a.click();
+          a.remove();
+          this.toast(t('replaySaved'), 'gold');
+        }
+      }
+    } catch (err) {
+      if (!err || err.name !== 'AbortError') this.toast(t('shareFailed'), 'red');
+    }
+    b.disabled = false;
+    b.textContent = t('replayGif');
+  }
+
+  // ------------------------------------------------------------ QR challenge
+  challengeView() {
+    const code = this.g.challengeCode();
+    if (!code) return el('p', { class: 'muted', text: t('chNone') });
+    const area = el('textarea', { class: 'code', readonly: true, rows: 3 });
+    area.value = code;
+    const copy = el('button', { class: 'val', text: t('xferCopy') });
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        this.toast(t('xferCopied'), 'gold');
+      } catch {
+        area.select();
+      }
+    });
+    return el('div', { class: 'xfer' }, el('p', { class: 'small', text: t('chHelp') }), qrCanvas(code, 4), area, copy);
+  }
+  askChallenge(text) {
+    let c;
+    try {
+      c = decodeChallenge(text);
+    } catch (err) {
+      return this.toast(t(err.message || 'xferBadCode'), 'red');
+    }
+    this.stopTransfer();
+    const box = $('xfer-confirm');
+    if (!box) return;
+    box.replaceChildren(
+      el(
+        'div',
+        { class: 'confirm' },
+        el('p', { text: t('chFrom', { name: c.name, n: c.score }) }),
+        el('p', { class: 'small muted', text: t('chRules') }),
+        el('button', {
+          class: 'menu-btn primary',
+          text: t('chAccept'),
+          onclick: () => {
+            this.closePanel(true);
+            this.g.startMode('challenge', c);
+          },
+        }),
+      ),
+    );
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  hideOver() {
+    $('over').classList.add('hidden');
+    document.body.classList.remove('over');
   }
   tutorial(kind) {
     const box = $('tutorial');
@@ -301,7 +777,7 @@ export class UI {
   }
   banner(text, action, fn) {
     const b = $('banner');
-    b.replaceChildren(el('span', { text }), el('button', { text: action, onclick: fn }));
+    b.replaceChildren(el('span', { text }), el('button', { text: action, onclick: () => fn() }));
     b.classList.remove('hidden');
   }
 
@@ -315,7 +791,7 @@ export class UI {
     $('panel').classList.remove('hidden');
     $('panel').dataset.panel = name;
     document.body.classList.add('panel-open');
-    if (name === 'shop') this.preview = { skin: this.p.skin, hat: this.p.hat };
+    if (name === 'shop') this.preview = { skin: this.p.skin, hat: this.p.hat, pet: this.p.pet, trail: this.p.trail, dance: this.p.dance, theme: this.p.theme };
     if (name === 'lan') this.lanView = this.g.lan && this.g.lan.role !== 'idle' ? this.lanView : 'home';
     this.renderPanel();
     if (name === 'lan') this.startLan();
@@ -326,16 +802,39 @@ export class UI {
     this.panel = null;
     $('panel').classList.add('hidden');
     document.body.classList.remove('panel-open');
-    if (was === 'shop' && (this.preview.skin !== this.p.skin || this.preview.hat !== this.p.hat)) this.g.previewDino(this.p.skin, this.p.hat);
+    if ((was === 'shop' || was === 'editor') && (this.preview.skin !== this.p.skin || this.preview.hat !== this.p.hat || this.preview.pet !== this.p.pet || was === 'editor')) {
+      if (was === 'editor') this.g.setCustomSkin(this.p.customSkin); // leaving without saving
+      this.g.previewDino(this.p.skin, this.p.hat, this.p.pet);
+    }
+    if (was === 'shop' && this.preview.theme !== this.p.theme) this.g.applyTheme(this.p.theme); // only tried on
+    if (!silent) this.menuInfo();
     if (was === 'lan' && !silent) this.g.lanLeave();
+    if (was === 'transfer') this.stopTransfer();
     if (!silent && this.g.state === 'menu') $('menu').classList.remove('hidden');
   }
   renderPanel() {
-    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle' };
+    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
-    const render = { shop: () => this.shopView(), missions: () => this.missionsView(), stats: () => this.statsView(), settings: () => this.settingsView(), lan: () => this.lanViewEl() }[this.panel];
+    const render = {
+      shop: () => this.shopView(),
+      missions: () => this.missionsView(),
+      stats: () => this.statsView(),
+      settings: () => this.settingsView(),
+      lan: () => this.lanViewEl(),
+      modes: () => this.modesView(),
+      adventure: () => this.adventureView(),
+      album: () => this.albumView(),
+      transfer: () => this.transferView(),
+      challenge: () => this.challengeView(),
+      pass: () => this.passView(),
+      editor: () =>
+        skinEditorView(this, () => {
+          this.shopTab = 'skin';
+          this.openPanel('shop');
+        }),
+    }[this.panel];
     const scroll = body.scrollTop;
     body.replaceChildren(render());
     body.scrollTop = scroll;
@@ -344,13 +843,14 @@ export class UI {
   // ------------------------------------------------------------ shop
   shopView() {
     const p = this.p;
+    const TABS = { skin: 'shopSkins', hat: 'shopHats', pet: 'shopPets', trail: 'shopTrails', dance: 'shopDances', theme: 'shopThemes', upgrade: 'shopUpgrades' };
     const tabs = el(
       'div',
       { class: 'tabs' },
-      ['skin', 'hat'].map((tab) =>
+      Object.entries(TABS).map(([tab, label]) =>
         el('button', {
           class: 'tab' + (this.shopTab === tab ? ' on' : ''),
-          text: t(tab === 'skin' ? 'shopSkins' : 'shopHats'),
+          text: t(label),
           onclick: () => {
             this.shopTab = tab;
             this.renderPanel();
@@ -358,52 +858,419 @@ export class UI {
         }),
       ),
     );
-    const isSkin = this.shopTab === 'skin';
-    const list = isSkin ? SKINS : HATS;
-    const owned = isSkin ? p.owned.skin : p.owned.hat;
-    const equipped = isSkin ? p.skin : p.hat;
-    const sel = isSkin ? this.preview.skin : this.preview.hat;
+    if (this.shopTab === 'upgrade') return el('div', {}, tabs, this.upgradesView());
+    const kind = this.shopTab;
+    const list = { skin: SKINS, hat: HATS, pet: PETS, trail: TRAILS, dance: DANCES, theme: THEMES }[kind];
+    const owned = p.owned[kind];
     const grid = el('div', { class: 'cards' });
+    if (kind === 'skin' || kind === 'hat' || kind === 'pet') grid.append(this.eggCard());
     for (const [id, item] of Object.entries(list)) {
+      if (item.hidden) continue;
       const have = owned.includes(id);
-      const status = id === equipped ? t('equipped') : have ? t('owned') : null;
+      const status = item.editor && have ? t('edOpen') : id === p[kind] ? t('equipped') : have ? t('owned') : null;
+      if ((item.season || item.album || item.pass) && !have) continue; // gifts are shown once you have them
+      const icon =
+        kind === 'skin' ? dinoIcon(id) : kind === 'hat' ? hatIcon(id) : kind === 'pet' ? petIcon(id) : kind === 'dance' ? danceIcon(id, p.skin) : kind === 'theme' ? themeIcon(id) : trailIcon(id);
+      const price = item.level
+        ? el('span', { class: 'card-price' }, t('levelShort', { n: item.level }))
+        : el('span', { class: 'card-price' }, bone(), ' ' + item.price);
       const card = el(
         'button',
-        { class: 'card' + (id === sel ? ' sel' : '') + (have ? '' : ' locked') },
-        isSkin ? dinoIcon(id) : hatIcon(id),
-        el('span', { class: 'card-name', text: t((isSkin ? 'skin_' : 'hat_') + id) }),
-        status ? el('span', { class: 'card-tag', text: status }) : el('span', { class: 'card-price' }, bone(), ' ' + item.price),
+        { class: 'card' + (id === this.preview[kind] ? ' sel' : '') + (have ? '' : ' locked') },
+        icon,
+        el('span', { class: 'card-name', text: t(kind + '_' + id) }),
+        status ? el('span', { class: 'card-tag', text: status }) : price,
       );
-      card.addEventListener('click', () => this.shopClick(isSkin, id, item.price, have));
+      card.addEventListener('click', () => this.shopClick(kind, id, item, have));
       grid.append(card);
     }
     return el('div', {}, tabs, grid);
   }
-  shopClick(isSkin, id, price, have) {
+  eggCard() {
+    const left = eggPoolSize();
+    const card = el(
+      'button',
+      { class: 'card egg-card' + (left ? '' : ' locked') },
+      el('span', { class: 'egg-icon' }),
+      el('span', { class: 'card-name', text: t('egg') }),
+      left ? el('span', { class: 'card-price' }, bone(), ' ' + EGG_PRICE) : el('span', { class: 'card-tag', text: t('eggEmpty') }),
+    );
+    card.addEventListener('click', () => this.openEggClick());
+    return card;
+  }
+  openEggClick() {
+    if (!eggPoolSize()) return this.toast(t('eggEmpty'), 'gold');
+    if (this.p.coins < EGG_PRICE) return this.toast(t('notEnough'), 'red');
+    const prize = openEgg();
+    if (!prize) return;
+    const box = $('egg');
+    const result = $('egg-result');
+    result.replaceChildren();
+    box.classList.remove('hidden', 'open');
+    void box.offsetWidth;
+    box.classList.add('shaking');
+    this.g.sfx.beep();
+    setTimeout(() => {
+      box.classList.remove('shaking');
+      box.classList.add('open');
+      this.g.sfx.reward();
+      const icon = prize.kind === 'skin' ? dinoIcon(prize.id) : prize.kind === 'hat' ? hatIcon(prize.id) : petIcon(prize.id);
+      result.append(icon, el('p', { text: t('eggGot', { name: t(prize.kind + '_' + prize.id) }) }));
+      this.renderPanel();
+    }, 1300);
+  }
+  upgradesView() {
+    const rows = Object.keys(UPGRADES).map((id) => {
+      const lvl = upgradeLevel(id);
+      const max = UPGRADES[id].cost.length;
+      const cost = nextUpgradeCost(id);
+      const dots = el('span', { class: 'dots' }, Array.from({ length: max }, (_, i) => el('i', { class: i < lvl ? 'on' : '' })));
+      const btn =
+        cost == null
+          ? el('span', { class: 'card-tag', text: t('maxed') })
+          : el('button', {
+              class: 'val',
+              onclick: () => {
+                if (buyUpgrade(id)) {
+                  this.g.sfx.reward();
+                  this.toast(t('bought'), 'gold');
+                } else this.toast(t('notEnough'), 'red');
+                this.renderPanel();
+              },
+            });
+      if (cost != null) btn.append(bone(), ' ' + cost);
+      return el('div', { class: 'upgrade' }, el('div', {}, el('p', { text: t('up_' + id) }), el('p', { class: 'muted small', text: t('upd_' + id) }), dots), btn);
+    });
+    return el('div', { class: 'upgrades' }, rows);
+  }
+  shopClick(kind, id, item, have) {
     const p = this.p;
-    const key = isSkin ? 'skin' : 'hat';
-    const selected = this.preview[key] === id;
-    this.preview[key] = id;
+    const selected = this.preview[kind] === id;
+    this.preview[kind] = id;
+    if (kind === 'dance') this.g.previewDance(id);
+    if (kind === 'theme') this.g.applyTheme(id);
+    if (item.editor && have && selected) return this.openPanel('editor');
     if (have) {
-      p[key] = id;
+      p[kind] = id;
       save();
       this.g.lanSetLook();
+    } else if (item.level) {
+      this.toast(t('needLevel', { n: item.level }), 'gold');
     } else if (selected) {
       // second tap on a locked item buys it
-      if (p.coins >= price) {
-        p.coins -= price;
-        p.owned[key].push(id);
-        p[key] = id;
+      if (p.coins >= item.price) {
+        p.coins -= item.price;
+        p.owned[kind].push(id);
+        p[kind] = id;
         save();
         this.g.sfx.reward();
         this.toast(t('bought'), 'gold');
         this.g.lanSetLook();
+        if (item.editor) return this.openPanel('editor');
       } else {
         this.toast(t('notEnough'), 'red');
       }
     }
-    this.g.previewDino(this.preview.skin, this.preview.hat);
+    if (kind === 'trail' && have) this.p.trail = id;
+    this.g.previewDino(this.preview.skin, this.preview.hat, this.preview.pet);
     this.renderPanel();
+  }
+
+
+  // ------------------------------------------------------------ modes
+  modesView() {
+    const g = this.g;
+    const d = dailyInfo();
+    const s = this.p.settings;
+    const card = (key, desc, fn, extra) =>
+      el('button', { class: 'mode-card', onclick: fn }, el('b', { text: t(key) }), el('span', { class: 'small muted', text: desc }), extra || null);
+    const botBtn = el('button', {
+      class: 'val',
+      text: t('bot_' + s.botLevel),
+      onclick: (e) => {
+        e.stopPropagation();
+        s.botLevel = (s.botLevel + 1) % 3;
+        save();
+        this.renderPanel();
+      },
+    });
+    const localBtns = el(
+      'span',
+      { class: 'mode-count' },
+      [2, 3, 4].map((n) =>
+        el('button', {
+          class: 'val',
+          text: String(n),
+          onclick: (e) => {
+            e.stopPropagation();
+            g.startMode('local', { count: n });
+          },
+        }),
+      ),
+    );
+    return el(
+      'div',
+      { class: 'modes' },
+      card('mode_adventure', t('modeDesc_adventure', { n: totalStars(), max: BIOMES.length * ADV_LEVELS * 3 }), () => this.openPanel('adventure')),
+      card('daily', d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }), () => g.startMode('daily')),
+      card('mode_zen', t('modeDesc_zen'), () => g.startMode('zen')),
+      card('mode_hardcore', t('modeDesc_hardcore'), () => g.startMode('hardcore')),
+      card('mode_bot', t('modeDesc_bot'), () => g.startMode('bot'), botBtn),
+      card('mode_challenge', t('modeDesc_challenge'), () => {
+        // scanning a friend's challenge uses the same scanner as the progress transfer
+        this.xferTab = 'scan';
+        this.openPanel('transfer');
+      }),
+      el('div', { class: 'mode-card' }, el('b', { text: t('mode_local') }), el('span', { class: 'small muted', text: t('modeDesc_local') }), localBtns),
+    );
+  }
+
+  // ------------------------------------------------------------ adventure map
+  adventureView() {
+    const worlds = BIOMES.map((b, w) =>
+      el(
+        'div',
+        { class: 'world' },
+        el('b', { class: 'world-name', text: t('biome_' + b.id) }),
+        el(
+          'div',
+          { class: 'levels' },
+          Array.from({ length: ADV_LEVELS }, (_, l) => {
+            const open = advUnlocked(w, l);
+            const st = advStars(w, l);
+            const btn = el(
+              'button',
+              { class: 'level' + (open ? '' : ' locked') + (l === ADV_LEVELS - 1 ? ' boss' : ''), disabled: !open },
+              el('span', { text: l === ADV_LEVELS - 1 ? t('bossShort') : String(w * ADV_LEVELS + l + 1) }),
+              el('span', { class: 'mini-stars' }, [0, 1, 2].map((i) => el('i', { class: i < st ? 'on' : '' }))),
+            );
+            btn.addEventListener('click', () => this.g.startMode('adventure', { world: w, level: l }));
+            return btn;
+          }),
+        ),
+      ),
+    );
+    return el('div', {}, el('p', { class: 'small muted', text: t('advHelp') }), el('div', { class: 'worlds' }, worlds));
+  }
+
+  // ------------------------------------------------------------ fossil album
+  albumView() {
+    const have = new Set(this.p.fossils);
+    const total = allFossils().length;
+    const rows = BIOMES.map((b) => {
+      const done = FOSSIL_KINDS.every((_, k) => have.has(fossilId(b.id, k)));
+      return el(
+        'div',
+        { class: 'album-row' + (done ? ' done' : '') },
+        el('b', { text: t('biome_' + b.id) }),
+        el(
+          'div',
+          { class: 'album-slots' },
+          FOSSIL_KINDS.map((_, k) => {
+            const id = fossilId(b.id, k);
+            const got = have.has(id);
+            const icon = pixelIcon(fossilPixels(id));
+            return el('div', { class: 'slot' + (got ? ' got' : '') }, got ? icon : el('span', { text: '?' }), el('small', { text: got ? t('fossil_' + k) : '' }));
+          }),
+        ),
+        el('small', { class: done ? 'mission-done' : 'muted', text: done ? t('albumWorldDone') : t('albumReward', { n: FOSSIL_WORLD_REWARD }) }),
+      );
+    });
+    return el('div', {}, el('p', { class: 'small', text: t('albumHelp', { n: have.size, max: total }) }), el('div', { class: 'album' }, rows));
+  }
+
+  // ------------------------------------------------------------ progress transfer
+  transferView() {
+    const tab = this.xferTab || 'qr';
+    const tabs = el(
+      'div',
+      { class: 'tabs' },
+      [
+        ['qr', 'xferSendQr'],
+        ['scan', 'xferScan'],
+        ['lan', 'xferLan'],
+      ].map(([id, key]) =>
+        el('button', {
+          class: 'tab' + (tab === id ? ' on' : ''),
+          text: t(key),
+          onclick: () => {
+            this.stopTransfer();
+            this.xferTab = id;
+            this.renderPanel();
+          },
+        }),
+      ),
+    );
+    let body;
+    if (tab === 'qr') {
+      const code = encodeProgress();
+      const copy = el('button', { class: 'val', text: t('xferCopy') });
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(code);
+          this.toast(t('xferCopied'), 'gold');
+        } catch {
+          area.select();
+        }
+      });
+      const area = el('textarea', { class: 'code', readonly: true, rows: 4 });
+      area.value = code;
+      body = el('div', { class: 'xfer' }, el('p', { class: 'small', text: t('xferQrHelp') }), qrCanvas(code, 3), el('p', { class: 'small muted', text: t('xferCodeHelp') }), area, copy);
+    } else if (tab === 'scan') {
+      const video = el('video', { class: 'scan-video', playsinline: true, muted: true, autoplay: true });
+      const camBtn = el('button', { class: 'menu-btn primary', text: t('xferCamera') });
+      camBtn.addEventListener('click', () => {
+        this.stopTransfer();
+        video.classList.add('on');
+        this.scanner = new CameraScanner(
+          video,
+          (text) => {
+            video.classList.remove('on');
+            this.askImport(text);
+          },
+          (key) => {
+            video.classList.remove('on');
+            this.toast(t(key), 'red');
+          },
+        );
+        this.scanner.start();
+      });
+      const file = el('input', { type: 'file', accept: 'image/*', id: 'xfer-file', class: 'hidden' });
+      file.addEventListener('change', async () => {
+        if (!file.files[0]) return;
+        try {
+          this.askImport(await readQrFromImage(file.files[0]));
+        } catch (err) {
+          this.toast(t(err.message && err.message.startsWith('xfer') ? err.message : 'xferNoQrInImage'), 'red');
+        }
+        file.value = '';
+      });
+      const pick = el('button', { class: 'menu-btn', text: t('xferImage'), onclick: () => file.click() });
+      const paste = el('textarea', { class: 'code', rows: 3, placeholder: 'ANOTHERDINO;v=1;…', id: 'xfer-paste' });
+      const go = el('button', { class: 'val', text: t('xferImport'), onclick: () => this.askImport(paste.value) });
+      body = el('div', { class: 'xfer' }, el('p', { class: 'small', text: t('xferScanHelp') }), camBtn, video, pick, file, el('p', { class: 'small muted', text: t('xferPasteHelp') }), paste, go);
+    } else {
+      body = this.lanTransferView();
+    }
+    return el('div', {}, tabs, body, el('div', { id: 'xfer-confirm' }));
+  }
+
+  askImport(text) {
+    if (isChallenge(text)) return this.askChallenge(text);
+    let data;
+    try {
+      data = decodeProgress(text);
+    } catch (err) {
+      return this.toast(t(err.message || 'xferBadCode'), 'red');
+    }
+    this.stopTransfer();
+    const box = $('xfer-confirm');
+    if (!box) return;
+    const summary = t('xferSummary', { bones: data.bones, xp: data.xp, skins: data.skins.length, fossils: data.fossils.length, stars: Object.values(data.adventure).reduce((a, b) => a + b, 0) });
+    box.replaceChildren(
+      el(
+        'div',
+        { class: 'confirm' },
+        el('p', { text: t('xferFound', { name: data.name || '?' }) }),
+        el('p', { class: 'small', text: summary }),
+        el('p', { class: 'small muted', text: t('xferMergeHelp') }),
+        el('button', {
+          class: 'menu-btn primary',
+          text: t('xferApply'),
+          onclick: () => {
+            mergeProgress(data);
+            this.g.previewDino(this.p.skin, this.p.hat, this.p.pet);
+            this.g.applySettings();
+            this.toast(t('xferDone'), 'gold');
+            this.g.sfx.reward();
+            box.replaceChildren();
+          },
+        }),
+      ),
+    );
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  lanTransferView() {
+    if (!this.g.lanAvailable) return el('div', { class: 'xfer' }, el('p', { text: t('xferLanWebOnly') }));
+    const role = this.xferRole;
+    if (!role) {
+      return el(
+        'div',
+        { class: 'xfer' },
+        el('p', { class: 'small', text: t('xferLanHelp') }),
+        el('button', { class: 'menu-btn primary', text: t('xferLanReceive'), onclick: () => this.startLanSync('receive') }),
+        el('button', { class: 'menu-btn', text: t('xferLanSend'), onclick: () => this.startLanSync('send') }),
+      );
+    }
+    if (role === 'receive') {
+      return el('div', { class: 'xfer' }, el('p', { text: t('xferPinIs') }), el('p', { class: 'pin', text: this.xferPin || '…' }), el('p', { class: 'small muted blink', text: t('xferWaiting') }));
+    }
+    const pin = el('input', { id: 'xfer-pin', inputmode: 'numeric', maxlength: 4, placeholder: '1234', autocomplete: 'off' });
+    // the device list refreshes every second; keep what was typed
+    pin.value = this.xferPinTyped || '';
+    pin.addEventListener('input', () => (this.xferPinTyped = pin.value.replace(/\D/g, '').slice(0, 4)));
+    const list = (this.xferDevices || []).map((d) =>
+      el(
+        'div',
+        { class: 'room' },
+        el('span', { text: d.name }),
+        el('button', {
+          text: t('xferSendTo'),
+          onclick: () => {
+            if (!/^\d{4}$/.test(pin.value)) return this.toast(t('xferNeedPin'), 'red');
+            this.sync.send(d, pin.value, encodeProgress());
+            this.toast(t('xferSending'), 'gold');
+          },
+        }),
+      ),
+    );
+    return el(
+      'div',
+      { class: 'xfer' },
+      el('label', { class: 'field' }, el('span', { text: t('xferEnterPin') }), pin),
+      el('div', { class: 'rooms', id: 'xfer-devices' }, list.length ? list : el('p', { class: 'muted small', text: t('xferSearching') })),
+    );
+  }
+
+  async startLanSync(role) {
+    const tr = this.g.transport;
+    if (!tr) return;
+    this.g.lanLeave();
+    this.sync = new LanSync(tr, {
+      devices: (list) => {
+        this.xferDevices = list;
+        if (this.panel === 'transfer' && this.xferRole === 'send' && !document.activeElement?.matches('#xfer-pin')) this.renderPanel();
+      },
+      received: (text) => {
+        this.xferRole = null;
+        this.renderPanel();
+        this.askImport(text);
+      },
+      sent: () => this.toast(t('xferSent'), 'gold'),
+      error: (key) => this.toast(t(key), 'red'),
+    });
+    try {
+      await this.sync.start();
+    } catch (err) {
+      this.toast(t('mpPortError', { msg: (err && err.message) || String(err) }), 'red');
+      this.sync = null;
+      return;
+    }
+    this.xferRole = role;
+    if (role === 'receive') this.xferPin = this.sync.wait(this.p.name || 'Dino');
+    else this.sync.browse();
+    this.renderPanel();
+  }
+
+  stopTransfer() {
+    if (this.scanner) this.scanner.stop();
+    this.scanner = null;
+    if (this.sync) this.sync.stop();
+    this.sync = null;
+    this.xferRole = null;
+    this.xferDevices = [];
+    this.xferPinTyped = '';
   }
 
   // ------------------------------------------------------------ missions
@@ -438,7 +1305,9 @@ export class UI {
   statsView() {
     const s = this.p.stats;
     const fmtTime = (sec) => `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
-    const rows = ['best', 'games', 'distance', 'jumps', 'ducks', 'coins', 'obstacles', 'powerups', 'meteors', 'time', 'mpGames', 'mpWins'].map((k) =>
+    const lp = levelProgress();
+    const level = el('div', { class: 'stat' }, el('span', { text: t('levelShort', { n: lp.level }) }), el('b', { text: `${lp.into}/${lp.need} XP` }));
+    const rows = ['best', 'games', 'distance', 'jumps', 'ducks', 'coins', 'obstacles', 'perfects', 'bestCombo', 'powerups', 'meteors', 'pounds', 'revives', 'dailies', 'eggs', 'bosses', 'botWins', 'time', 'mpGames', 'mpWins'].map((k) =>
       el('div', { class: 'stat' }, el('span', { text: t('st_' + k) }), el('b', { text: k === 'time' ? fmtTime(s[k]) : String(s[k]) })),
     );
     const top = this.p.top.length
@@ -448,7 +1317,7 @@ export class UI {
           this.p.top.map((e) => el('li', {}, el('b', { text: pad5(e.s) }), el('span', { text: new Date(e.d).toLocaleDateString() + (e.lan ? ' · LAN' : '') }))),
         )
       : el('p', { class: 'muted', text: t('noScores') });
-    return el('div', {}, el('div', { class: 'stats' }, rows), el('h3', { text: t('top10') }), top);
+    return el('div', {}, el('div', { class: 'stats' }, level, rows), el('h3', { text: t('top10') }), top);
   }
 
   // ------------------------------------------------------------ settings
@@ -472,7 +1341,7 @@ export class UI {
     reset.addEventListener('click', () => {
       if (reset.dataset.armed) {
         resetProgress();
-        this.g.previewDino('classic', 'none');
+        this.g.previewDino('classic', 'none', 'none');
         this.toast(t('set_resetDone'), 'red');
         this.g.applySettings();
       } else {
@@ -491,8 +1360,55 @@ export class UI {
       cycle('style', ['normal', 'outline', 'gameboy', 'crt'], (v) => t('style_' + v)),
       cycle('pixel', [0, 1, 2], (v) => 'PX' + (v + 1)),
       toggle('ghost'),
+      cycle('quality', ['auto', 'high', 'medium', 'low'], (v) => t('q_' + v)),
+      toggle('highlight'),
+      toggle('bigText'),
+      this.g.isTouch ? null : this.keyRow('keyJump'),
+      this.g.isTouch ? null : this.keyRow('keyDuck'),
+      toggle('seasons'),
+      this.row(t('set_menuMusic'), s.menuMusic ? t('on') : t('off'), () => {
+        s.menuMusic = !s.menuMusic;
+        save();
+        this.g.menuMusic();
+        this.renderPanel();
+      }),
+      this.g.isTouch
+        ? this.row(t('set_controls'), t(s.controls.mode === 'buttons' ? 'ctlModeButtons' : 'ctlModeZones'), () => {
+            this.closePanel(true);
+            $('menu').classList.add('hidden');
+            openControlsEditor(() => {
+              this.openPanel('settings');
+            });
+          })
+        : null,
+      this.row(t('transfer'), t('open'), () => this.openPanel('transfer')),
+      this.g.isApp ? this.updateRow() : null,
       reset,
     );
+  }
+  keyRow(key) {
+    const label = this.capturing === key ? t('pressKey') : keyName(this.p.settings[key]);
+    return this.row(t('set_' + key), label, () => {
+      this.capturing = key;
+      this.renderPanel();
+    });
+  }
+  capturingKey() {
+    return !!this.capturing;
+  }
+  capturedKey(code) {
+    if (code !== 'Escape') {
+      this.p.settings[this.capturing] = code;
+      save();
+    }
+    this.capturing = null;
+    this.renderPanel();
+  }
+  updateRow() {
+    const row = this.row(t('set_version', { v: this.version || '…' }), this.updating ? '…' : t('updateCheck'), () => this.checkUpdates(true));
+    row.querySelector('.val').id = 'upd-btn';
+    if (!this.version) this.currentVersion().then(() => this.panel === 'settings' && this.renderPanel());
+    return row;
   }
   row(label, value, fn) {
     return el('div', { class: 'row' }, el('span', { text: label }), el('button', { class: 'val', text: value, onclick: fn }));
@@ -536,15 +1452,17 @@ export class UI {
       ),
     );
   }
-  mpLobby(players, isHost, myId) {
+  mpLobby(players, isHost, myId, mode) {
     this.lobby = players;
     this.lanIsHost = isHost;
     this.myId = myId;
+    this.lanMode = mode || 'race';
     if (this.lanView === 'home' && !isHost) this.lanView = 'lobby';
     if (this.panel === 'lan' && this.lanView === 'lobby') this.renderPanel();
   }
-  mpResults(results, myId) {
+  mpResults(results, myId, tour) {
     this.results = results;
+    this.tour = tour || null;
     this.myId = myId;
     this.lanView = 'results';
     $('over').classList.add('hidden');
@@ -627,10 +1545,16 @@ export class UI {
       ),
     );
     const canStart = this.lobby.length >= 2;
+    const MODES = ['race', 'sabotage', 'elimination', 'tournament'];
+    const modeRow = this.lanIsHost
+      ? this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => this.g.lanSetMode(MODES[(MODES.indexOf(this.lanMode || 'race') + 1) % MODES.length]))
+      : this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => {});
     return el(
       'div',
       { class: 'lan' },
       el('h3', { text: t('mpPlayers', { n: this.lobby.length }) }),
+      modeRow,
+      el('p', { class: 'muted small', text: t('lanModeHelp_' + (this.lanMode || 'race')) }),
       el('div', { class: 'players' }, players.length ? players : el('p', { class: 'muted', text: '…' })),
       this.myIp ? el('p', { class: 'muted small', text: t('mpYourIp', { ip: this.myIp }) }) : null,
       this.lanIsHost
@@ -644,13 +1568,24 @@ export class UI {
     const r = this.results || [];
     const winner = r[0];
     const head = winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
+    const tour = this.tour;
+    // tournament: the standings after this race, and the champion after the last one
+    const tourEls = tour
+      ? [
+          el('h3', { text: tour.done ? (tour.table[0].id === this.myId ? t('tourYouChampion') : t('tourChampion', { name: tour.table[0].name })) : t('tourRace', { n: tour.race, total: tour.total }) }),
+          el('ol', { class: 'top tour' }, tour.table.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: String(p.pts).padStart(3, ' ') + ' ' + t('tourPts') }), el('span', { text: p.name })))),
+          el('p', { class: 'muted small', text: t('tourThisRace') }),
+        ]
+      : [];
+    const again = tour ? (tour.done ? t('tourNew') : t('tourNext')) : t('again');
     return el(
       'div',
       { class: 'lan' },
-      el('h3', { class: 'winner', text: head }),
+      tour && !tour.done ? null : el('h3', { class: 'winner', text: head }),
+      tourEls,
       el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: p.name })))),
       this.lanIsHost
-        ? el('button', { class: 'menu-btn primary', text: t('again'), disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
+        ? el('button', { class: 'menu-btn primary', text: again, disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
         : el('p', { class: 'blink', text: t('mpWaitHost') }),
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
     );
@@ -660,42 +1595,119 @@ export class UI {
     this.g.toMenu();
   }
 
-  // ------------------------------------------------------------ updates
-  async checkUpdates() {
-    if (!this.g.isApp) return;
-    let current = '0.0.0';
+  // ------------------------------------------------------------ share
+  async share(isPhoto = false) {
+    let data;
     try {
-      current = (await (await fetch('version.json')).json()).version;
-    } catch {
-      return;
+      data = await (isPhoto ? this.g.photoImage() : this.g.recordImage());
+    } catch (err) {
+      return this.toast(t('shareFailed'), 'red');
     }
-    const desktop = window.desktop;
-    if (desktop && desktop.update) {
-      desktop.update.onStatus((s) => {
-        if (s === 'downloaded') this.banner(t('updateReady'), t('updateRestart'), () => desktop.update.install());
-      });
-      const info = await desktop.update.info();
-      if (info.autoUpdate) return; // electron-updater handles it
+    const text = t('shareText');
+    try {
+      if (window.desktop && window.desktop.shareImage) {
+        await window.desktop.shareImage(data);
+        this.toast(t('shareSaved'), 'gold');
+      } else if (Capacitor.getPlatform() === 'android') {
+        await Share.shareImage({ data: data.split(',')[1], text });
+      } else {
+        const blob = await (await fetch(data)).blob();
+        const file = new File([blob], 'another-dino.png', { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], text });
+        else if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          this.toast(t('shareCopied'), 'gold');
+        } else this.toast(t('shareFailed'), 'red');
+      }
+    } catch (err) {
+      if (!err || err.name !== 'AbortError') this.toast(t('shareFailed'), 'red');
     }
+  }
+
+  // ------------------------------------------------------------ updates
+  // The installed apps compare their version with the latest GitHub release and
+  // offer a one-tap update (download + install, no browser needed).
+  async currentVersion() {
+    if (!this.version) {
+      try {
+        this.version = (await (await fetch('version.json')).json()).version;
+      } catch {
+        this.version = null;
+      }
+    }
+    return this.version;
+  }
+
+  async checkUpdates(manual = false) {
+    if (!this.g.isApp || this.updating) return;
+    const current = await this.currentVersion();
+    if (!current) return;
+    let latest = null;
     try {
       const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
-      const j = await res.json();
-      const latest = String(j.tag_name || '').replace(/^v/, '');
-      const newer = (a, b) => {
-        const pa = a.split('.').map(Number);
-        const pb = b.split('.').map(Number);
-        for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
-        return false;
-      };
-      if (!latest || !newer(latest, current)) return;
-      const android = !desktop;
-      const url = android ? `https://github.com/${REPO}/releases/latest/download/Another-Dino-android.apk` : `https://github.com/${REPO}/releases/latest`;
-      this.banner(t('updateAvail', { v: 'v' + latest }), t('updateGet'), () => {
-        if (desktop) desktop.openExternal(url);
-        else location.href = url; // Capacitor opens external links in the system browser
-      });
+      if (res.ok) latest = String((await res.json()).tag_name || '').replace(/^v/, '');
     } catch {
       /* offline */
     }
+    if (!latest) {
+      if (manual) this.toast(t('updateFailed', { msg: 'offline' }), 'red');
+      return;
+    }
+    if (!newerVersion(latest, current)) {
+      if (manual) this.toast(t('updateLatest', { v: current }), 'gold');
+      return;
+    }
+    this.latest = latest;
+    this.banner(t('updateAvail', { v: 'v' + latest }), t('updateNow'), () => this.runUpdate());
+    if (manual) this.runUpdate();
+  }
+
+  updateStatus(text) {
+    const b = $('banner');
+    b.replaceChildren(el('span', { text }));
+    b.classList.remove('hidden');
+    const s = $('upd-btn');
+    if (s) s.textContent = text;
+  }
+
+  async runUpdate() {
+    if (this.updating || !this.latest) return;
+    this.updating = true;
+    const progress = (p) => this.updateStatus(t('updateDownloading', { p: p < 0 ? '…' : p + '%' }));
+    progress(0);
+    try {
+      if (window.desktop && window.desktop.update) {
+        window.desktop.update.onProgress(progress);
+        const r = await window.desktop.update.start(this.latest);
+        this.updateStatus(r === 'opened' ? t('updateMacOpen') : t('updateInstalling'));
+      } else if (Capacitor.getPlatform() === 'android') {
+        const handle = await Updater.addListener('progress', (e) => progress(e.percent));
+        const url = `https://github.com/${REPO}/releases/download/v${this.latest}/Another-Dino-android.apk`;
+        const r = await Updater.install({ url });
+        handle.remove();
+        this.updateStatus(r.status === 'permission' ? t('updatePermission') : t('updateInstalling'));
+      }
+    } catch (err) {
+      this.toast(t('updateFailed', { msg: (err && err.message) || String(err) }), 'red');
+      this.banner(t('updateAvail', { v: 'v' + this.latest }), t('updateNow'), () => this.runUpdate());
+    } finally {
+      this.updating = false;
+    }
   }
 }
+
+function keyName(code) {
+  if (!code) return '—';
+  if (code === 'Space') return 'SPACE';
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  return { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }[code] || code;
+}
+
+function newerVersion(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+}
+

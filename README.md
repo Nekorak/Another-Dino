@@ -2,32 +2,82 @@
 
 Un endless runner **3D cu grafică pixelată (voxel)**, inspirat de dinozaurul din Chrome, gândit în primul rând pentru **telefoane**.
 
-Aleargă prin patru lumi (deșert, junglă, zăpadă și vulcan), sari peste cactuși, gropi, bolovani și meteoriți, ghemuiește-te sub pterodactili, strânge oase și cumpără skin-uri. Poți juca și **cu prietenii în LAN**, pe același Wi-Fi sau pe hotspot-ul unui telefon.
+Aleargă prin **opt lumi**, sari peste cactuși, gropi, bolovani și meteoriți, ghemuiește-te sub pterodactili, strânge oase, cumpără skin-uri și animăluțe. Poți juca **în doi pe același ecran** sau **cu prietenii în LAN**, pe același Wi-Fi sau pe hotspot-ul unui telefon.
 
 ## Cum se joacă
 
 | Telefon | Tastatură | Controller |
 | --- | --- | --- |
 | Atinge **partea dreaptă** → **sari** (ține apăsat ca să sari mai sus) | `Space` / `↑` / `W` | `A` / sus |
-| Ține apăsat pe **partea stângă** sau **glisează în jos** → **ghemuit** / cădere rapidă | `↓` / `S` | `B` / jos |
+| Ține apăsat pe **partea stângă** sau **glisează în jos** → **ghemuit** (alunecare pe burtă) | `↓` / `S` | `B` / jos |
+| În aer: **jos** → **aterizare în forță** (sparge obstacolele din față) | `↓` | `B` |
+| În aer: **sari din nou și ține** → **planare** | `Space` | `A` |
 | Butonul ⏸ → pauză | `P` / `Esc` | `Start` |
 
-În setări poți inversa zonele (pentru stângaci). La primul joc, un tutorial scurt îți arată comenzile.
+Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atingere se pot inversa pentru stângaci. La primul joc, un tutorial scurt îți arată comenzile.
 
 ## Ce e în joc
 
-- **4 lumi** care se schimbă la fiecare 1000 de puncte: **deșert** (cactuși, tufișuri rostogolitoare, furtuni de nisip), **junglă** (trunchiuri, bambus, ploaie), **zăpadă** (țurțuri, oameni de zăpadă, ninsoare) și **vulcan** (obsidian, coloane de lavă, ploaie de meteoriți). Munții din fundal se scufundă și răsar în noua lume.
-- **Obstacole**: cactuși și echivalentele lor din fiecare lume, pterodactili la 3 înălțimi, bolovani care se rostogolesc spre tine, **gropi** peste care trebuie să sari și **meteoriți** care cad din cer, cu un cerc roșu de avertizare pe jos.
-- **Oase** de strâns (în linie sau în arc deasupra obstacolelor). Ele sunt moneda jocului.
-- **Puteri speciale**: 🛡 **scut** (te salvează de o lovitură, chiar și dintr-o groapă), 🧲 **magnet** pentru oase, ⏳ **încetinirea timpului** și ⏫ **săritura dublă**.
-- **Magazin**: 8 skin-uri (clasic, roșu, albastru, roz, auriu, umbră, schelet, robot) și 7 accesorii (coif de petrecere, pălărie de cowboy, ochelari de soare, joben, căști, coroană). Le vezi pe dino în 3D înainte să le cumperi.
-- **Misiuni**: 3 active odată, cu recompense în oase, înlocuite cu altele mai grele când le termini. Plus **17 realizări**.
-- **Statistici** (sărituri, distanță, timp de joc etc.) și **top 10** local.
-- **Fantoma recordului**: un dino transparent care aleargă pe culoarul de lângă tine, exact cum ai jucat la record.
-- **Efecte**: când te lovești, dinozaurul se sparge în cubulețe 3D, cu slow-motion. Mai sunt praf, ciclu zi/noapte, lună și stele.
-- **Muzică chiptune** generată de joc, diferită în fiecare lume, care se grăbește odată cu viteza.
-- **Stiluri grafice**: Normal, Contur, Game Boy (4 nuanțe de verde, cu dithering) și Ecran CRT.
-- Interfață în **română și engleză** (automat după limba telefonului, sau la alegere).
+- **8 lumi**, câte una la fiecare 1000 de puncte:
+  - **deșert**: furtuni de nisip, tufișuri rostogolitoare;
+  - **junglă**: ploaie;
+  - **plajă**: ocean, castele de nisip;
+  - **zăpadă**: oameni de zăpadă;
+  - **peșteră**: întuneric, doar felinarul dinozaurului și cristale care strălucesc;
+  - **oraș în ruine**;
+  - **vulcan**: meteoriți;
+  - **spațiu**: **gravitație mică**, Pământul pe cer.
+- **Evenimente** în timpul turei: ploaie de meteoriți, un **T-rex uriaș** care te fugărește și **zona bonus** plină de oase.
+- **Obstacole**: specifice fiecărei lumi, pterodactili la 3 înălțimi, bolovani, **gropi** și **meteoriți** cu cerc de avertizare.
+- **Zi și noapte**: cerul trece treptat prin apus în noapte (cu lună, stele și licurici) și înapoi.
+- **Obstacole care se mișcă**: cactuși care răsar din pământ, pterodactili care coboară și urcă în zig-zag, **platforme plutitoare** peste gropi largi (poți ateriza pe ele, sus sunt oase).
+- **Os de aur**: apare rar și valorează 10 oase.
+- **Mini-boss** în modul normal: la fiecare 2000 de puncte vine un pterodactil uriaș; dacă reziști 14 secunde, primești 25 de oase.
+- **Puteri speciale**: scut, magnet, încetinirea timpului, săritură dublă, **rachetă** (zbori peste tot), **gigant** (dinozaur uriaș care sparge obstacolele) și **ploaie de oase**.
+- **Combo**: fiecare 10 obstacole trecute la rând cresc multiplicatorul de puncte (până la x5). O trecere la milimetru e **PERFECT** și grăbește combo-ul.
+- **Upgrade-uri permanente**: puteri mai lungi, scut la start, oase duble, noroc.
+- **A doua șansă**: când mori, continui o dată pentru 50 de oase.
+- **Provocarea zilei**: un traseu nou în fiecare zi, cu țintă și recompensă. Dacă o termini zile la rând, recompensa crește.
+- **Nivel de jucător (XP)**: la nivelurile 5, 10, 15 și 20 se deblochează skin-uri speciale (lavă, gheață, galaxie, curcubeu).
+- **Magazin**: 8 skin-uri, 7 accesorii, **3 animăluțe** (puișor, broscuță țestoasă care aduce oase, pui de pterodactil care prinde oase) și **ou-surpriză**.
+- **Misiuni** cu recompense, **26 de realizări**, **statistici** și un **top 10**.
+- **Fantoma recordului**, care aleargă pe culoarul de lângă tine.
+- **Distribuie recordul**: o imagine cu scorul tău.
+  - pe Android se deschide meniul de partajare (WhatsApp, Telegram…);
+  - pe PC se salvează în *Imagini* și se copiază, gata de lipit.
+- **Efecte**: dinozaurul se sparge în cubulețe cu slow-motion, plus muzică chiptune diferită în fiecare lume.
+- **Stiluri grafice**: Normal, Contur, Game Boy, Ecran CRT.
+- **Confort și accesibilitate**: calitate grafică automată (scade singură pe telefoanele slabe), obstacole evidențiate, text mare.
+- **Moduri de joc** (meniul MODURI):
+  - **Aventură**: 10 lumi × 3 niveluri (cele 8 de mai sus, plus **Sub apă**, unde dinozaurul înoată: fiecare atingere e o tură de înot în sus, și **Lumea dulce**, cu acadele și bastonașe de zahăr), cu linie de sosire și până la 3 stele pe nivel; al treilea nivel din fiecare lume are un **boss** (pterodactil uriaș care aruncă bolovani);
+  - **Zen**: fără moarte, doar alergare și muzică;
+  - **Hardcore**: fără puteri speciale și fără a doua șansă, dar oase duble;
+  - **Contra robotului**: un dinozaur-robot aleargă pe culoarul de lângă tine (3 niveluri de dificultate);
+  - **Provocare QR**: după o tură, butonul PROVOACĂ arată un cod QR cu traseul și scorul tău. Prietenul îl scanează din Moduri și aleargă exact pe același traseu; dacă te întrece, primește 40 de oase.
+- **Album de fosile**: 30 de fosile ascunse (câte 3 în fiecare lume). O lume completă dă 100 de oase, iar albumul complet deblochează skin-ul **Fosilă**.
+- **Urme** în spatele dinozaurului: bule, scântei, inimioare, curcubeu, foc.
+- **Evenimente de sezon** după calendar: **Halloween** (dovleci, pălărie-dovleac), **Crăciun** (brazi, cadouri, căciulă de Moș) și **Anul Nou** (artificii). Se pot opri din Setări.
+- **Mod foto**: din pauză, rotești camera în jurul dinozaurului și salvezi poza.
+- **Replay**: după game over, butonul REPLAY arată ultimele 10 secunde, iar SALVEAZĂ GIF le face GIF animat (pe Android se deschide meniul de partajare, pe PC se salvează în *Imagini*).
+- **Editor de skin**: în Magazin, skin-ul „Al meu” se pictează pixel cu pixel, plus culori pentru corp, burtă, ochi și tălpi.
+- **Dansuri de victorie** (Magazin > Dansuri): la un record nou sau la finalul unui nivel dinozaurul dansează (salt mortal, moonwalk, disco…).
+- **Teme pentru meniu** (Magazin > Teme): culorile meniurilor, lumea din spatele lor și muzica din meniu.
+- **Cufărul zilei**: la prima intrare din zi primești oase și XP; 7 zile la rând înseamnă recompense tot mai mari.
+- **Pass de sezon gratuit**: 30 de trepte umplute cu XP-ul din ture (250 XP pe treaptă), cu oase și 3 obiecte exclusive (coroniță de lauri, urmă de confetti, skin-ul Campion). Se reia în fiecare trimestru.
+- **Transfer de progres fără server** (Setări → Transferă progresul):
+  - **cod QR**: telefonul vechi afișează un QR care conține progresul (oase, XP, skin-uri…), iar cel nou îl scanează cu camera sau dintr-o poză;
+  - **LAN**: pe același Wi-Fi/hotspot, un dispozitiv așteaptă cu un **PIN** din 4 cifre, iar celălalt trimite.
+  - La import, progresul se **combină** (se păstrează maximul și toate lucrurile cumpărate), nu se șterge nimic.
+- **Controale pe ecran configurabile** (Setări): muți granița dintre zona de ghemuit și cea de săritură sau treci pe **butoane** pe care le așezi și le mărești cum vrei.
+- **Widget pe Android**: pe ecranul principal arată recordul și câte ore mai ai pentru provocarea zilei.
+- Interfață în **română, rusă și engleză**.
+
+## 2–4 jucători pe același ecran
+
+Din MULTIPLAYER alege **2, 3 sau 4 JUCĂTORI**. Ecranul se împarte: în două (sus/jos) pentru 2 jucători, în 4 sferturi pentru 3–4 jucători, toți pe același traseu.
+
+- **PC**: P1 `W` / `S` (sau `Space`), P2 `↑` / `↓`, P3 `I` / `K`, P4 `Numpad 8` / `Numpad 5`. Controllerele se dau în ordinea conectării (până la 4).
+- **Telefon/tabletă**: fiecare atinge zona lui de ecran (stânga = ghemuit, dreapta = sari).
 
 ## Multiplayer LAN (fără internet)
 
@@ -35,10 +85,19 @@ Ca în Soul Knight: toți jucătorii sunt pe aceeași rețea, iar unul face pe g
 
 1. Conectați-vă toți la același **Wi-Fi**, sau pornește **hotspot-ul** pe un telefon și conectează-i pe ceilalți la el.
 2. Deschideți **MULTIPLAYER**. Unul apasă **CREEAZĂ CAMERĂ**, iar ceilalți văd camera în listă și apasă **INTRĂ**. Dacă nu apare, merge și **Conectare după IP** (IP-ul gazdei e afișat în cameră).
-3. Gazda apasă **START** (2–4 jucători). Toți aleargă pe **același traseu**, iar ceilalți se văd pe culoarele de alături, cu skin-ul și numele lor.
+3. Gazda apasă **START** (2–8 jucători). Toți aleargă pe **același traseu**, iar ceilalți se văd pe culoarele de alături, cu skin-ul și numele lor.
 4. Câștigă cine rezistă cel mai mult. Gazda poate porni o cursă nouă cu **DIN NOU**.
 
-Merge între telefoane Android și PC-uri (Windows/macOS/Linux) amestecate. Funcționează doar în aplicații, nu în browser. Pe Windows, la prima cursă, permite accesul prin firewall în rețeaua privată. Comunicarea e directă, prin UDP pe portul **47777**.
+Gazda alege și **modul**:
+
+- **Cursă**: cine rezistă mai mult câștigă.
+- **Sabotaj**: strângi bombe și trimiți bolovani pe traseul celorlalți (butonul **BOLOVAN**, tasta `E` sau `X` pe controller).
+- **Eliminare**: viteza crește mult mai repede, iar ultimul rămas primește 100 de oase.
+- **Turneu**: 5 curse la rând, cu puncte pentru fiecare loc (10, 8, 6, 5…) și clasament după fiecare cursă; campionul primește 150 de oase.
+
+În cursă poți trimite **emoticoane** (butoanele 😂 🔥 👋 😱 sau tastele `1`–`4`). După ce ieși din cursă, camera îi urmărește pe cei rămași.
+
+Merge între telefoane Android și PC-uri (Windows/macOS/Linux) amestecate. Funcționează doar în aplicații, nu în browser. Pe Windows, la prima cursă, permite accesul prin firewall în rețeaua privată. Comunicarea e directă, prin UDP pe portul **47777** (transferul de progres folosește portul **47778**).
 
 ## Aplicații (Android, Windows, macOS, Linux)
 
@@ -56,7 +115,14 @@ Jocul există și ca aplicație normală, nu doar în browser. Ultima versiune s
 Aplicațiile merg complet offline. Pe desktop, `F11` (sau `Alt+Enter`) comută ecranul complet.
 Pe Android jocul rulează pe tot ecranul și ecranul nu se stinge cât joci.
 
-**Actualizări:** installerul de Windows și AppImage-ul de Linux se actualizează singure. Celelalte (Android, macOS, Windows portabil) arată în meniu un banner „Versiune nouă” cu link de descărcare. Ambele mecanisme citesc Releases-ul repo-ului, așa că repo-ul trebuie să fie **public** ca să funcționeze.
+**Actualizări dintr-o apăsare:** când apare o versiune nouă, în meniu apare **„Versiune nouă → ACTUALIZEAZĂ”**. Același buton e și în **Setări → Versiunea**. Apeși și restul se face singur:
+
+| Sistem | Ce face butonul |
+| --- | --- |
+| Android | descarcă APK-ul și deschide instalarea; apeși **Actualizează** în fereastra Android (prima dată Android cere să permiți „Instalare aplicații” pentru joc) |
+| Windows (installer) / Linux (AppImage) | descarcă, instalează și repornește jocul singur |
+| Windows portabil | descarcă noul `.exe`, îl pune în locul celui vechi și repornește |
+| macOS | descarcă `.dmg`-ul și îl deschide; tragi jocul în Applications (macOS nu permite mai mult aplicațiilor nesemnate) |
 
 Aplicațiile sunt construite automat de GitHub Actions (`.github/workflows/build-apps.yml`) la fiecare push:
 Android cu [Capacitor](https://capacitorjs.com), desktop cu [Electron](https://www.electronjs.org).
@@ -96,13 +162,17 @@ GitHub Pages pe un repo privat cere un cont plătit. Pe un repo public e gratuit
 
 Pe telefon, deschide link-ul și alege „Adaugă pe ecranul principal” pentru a-l avea ca aplicație full-screen.
 
+## Ce urmează
+
+Ideile pentru versiunile viitoare sunt în [PlanViitor.md](PlanViitor.md).
+
 ## Structură
 
 ```
 index.html            pagina + HUD
 css/style.css         stiluri UI
 js/main.js            bucla jocului, fizică, obstacole, puteri, input, cameră
-js/biomes.js          cele 4 lumi: culori, obstacole și decor voxel
+js/biomes.js          cele 8 lumi: culori, obstacole și decor voxel
 js/models.js          dino (skin-uri + accesorii), pterodactil, oase, puteri
 js/voxel.js           mesher voxel (fețe vizibile + ambient occlusion)
 js/effects.js         praf, spargerea în voxeli, vreme, stiluri grafice
@@ -110,15 +180,25 @@ js/music.js           muzica chiptune procedurală
 js/audio.js           efecte sonore sintetizate
 js/ui.js              meniuri, magazin, misiuni, statistici, setări, LAN
 js/save.js            progresul salvat (oase, skin-uri, statistici, fantoma)
+js/progress.js        upgrade-uri, nivel/XP, provocarea zilei, ou-surpriză
 js/missions.js        misiuni și realizări
-js/i18n.js            textele în română și engleză
+js/modes.js           nivelurile din Aventură și robotul adversar
+js/collection.js      fosile (album), urme, evenimente de sezon
+js/transfer.js        transferul de progres: cod QR și LAN cu PIN; codurile de provocare
+js/extras.js          licurici, platforme mobile, osul de aur, peștii de sub apă
+js/custom.js          dansuri, teme de meniu, datele editorului de skin
+js/editor.js          editorul de skin (pictat pixel cu pixel)
+js/replay.js          înregistrarea ultimelor 10 secunde și encoderul GIF
+js/rewards.js         cufărul zilei și pass-ul de sezon
+js/controls.js        controalele pe ecran și editorul lor
+js/i18n.js            textele în română, rusă și engleză (cu pluralul corect)
 js/net.js             transport UDP (Android / desktop / test în browser)
 js/multiplayer.js     protocolul LAN: camere, lobby, cursă, rezultate
 sw.js                 service worker pentru offline
-vendor/               three.js (MIT), @capacitor/core (MIT), fontul Press Start 2P (OFL)
+vendor/               three.js (MIT), @capacitor/core (MIT), qrcode-generator (MIT), jsQR (Apache-2.0), fontul Press Start 2P (OFL)
 electron/             aplicația desktop (fereastră, UDP pentru LAN, actualizări)
 capacitor.config.json aplicația Android
-native/android/       activitate full-screen, plugin UDP pentru LAN, cheia de semnare
+native/android/       activitate full-screen, plugin-uri (LAN, actualizare, distribuire, widget), widgetul, cheia de semnare
 assets/, build/       iconițe și splash screen pentru aplicații
 scripts/              build (copiază jocul în dist/) și pregătirea proiectului Android
 ```

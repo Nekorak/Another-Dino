@@ -25,7 +25,8 @@
       {
         "imports": {
           "three": "./vendor/three.module.min.js",
-          "@capacitor/core": "./vendor/capacitor-core.js"
+          "@capacitor/core": "./vendor/capacitor-core.js",
+          "qrcode": "./vendor/qrcode.mjs"
         }
       }
     </script>
@@ -34,6 +35,8 @@
   <body>
     <canvas id="game"></canvas>
     <div id="touch"></div>
+    <div id="ctl-jump" class="ctl-btn ctl-jump hidden" aria-hidden="true"><span data-t="jump"></span></div>
+    <div id="ctl-duck" class="ctl-btn ctl-duck hidden" aria-hidden="true"><span data-t="duck"></span></div>
     <div id="crt" aria-hidden="true"></div>
     <p id="fatal"></p>
 
@@ -61,7 +64,17 @@
       </div>
     </div>
     <div id="powerups"></div>
+    <div id="combo" class="hidden"></div>
+    <div id="perfects"></div>
+    <div id="advbar" class="hidden"><i></i></div>
+    <div id="bossbar" class="hidden"><span></span><i></i></div>
     <div id="mp-hud"></div>
+    <div id="split-line" aria-hidden="true"></div>
+    <p id="spectate" class="hidden"></p>
+    <div id="lan-actions" class="hidden">
+      <button id="btn-bomb" class="menu-btn hidden"></button>
+      <div id="emotes"></div>
+    </div>
 
     <div id="hints" class="hidden">
       <div class="zone duck"><span class="arrow">↓</span><span id="hint-duck"></span></div>
@@ -71,6 +84,7 @@
     <div id="menu" class="screen">
       <h1>ANOTHER<br />DINO</h1>
       <div class="menu-info">
+        <span id="menu-level"></span>
         <span id="menu-best"></span>
         <span id="menu-coins"><span id="menu-coins-n">0</span></span>
       </div>
@@ -80,23 +94,92 @@
     </div>
 
     <div id="over" class="screen hidden">
-      <h2>GAME OVER</h2>
+      <h2 id="over-title">GAME OVER</h2>
       <p id="over-score" class="big-score"></p>
       <p id="over-record" class="blink"></p>
       <p id="over-coins"></p>
+      <p id="over-xp" class="small"></p>
+      <div id="over-extra"></div>
       <div id="over-missions"></div>
       <div class="over-buttons">
         <button id="btn-restart" aria-label="Restart">
           <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M1 5h1v1h-1zM1 6h1v1h-1zM1 7h1v1h-1zM1 8h1v1h-1zM2 3h1v1h-1zM2 4h1v1h-1zM2 5h1v1h-1zM2 6h1v1h-1zM2 7h1v1h-1zM2 8h1v1h-1zM2 9h1v1h-1zM2 10h1v1h-1zM3 2h1v1h-1zM3 3h1v1h-1zM3 4h1v1h-1zM3 5h1v1h-1zM3 8h1v1h-1zM3 9h1v1h-1zM3 10h1v1h-1zM3 11h1v1h-1zM4 2h1v1h-1zM4 3h1v1h-1zM4 10h1v1h-1zM4 11h1v1h-1zM5 1h1v1h-1zM5 2h1v1h-1zM5 3h1v1h-1zM5 10h1v1h-1zM5 11h1v1h-1zM5 12h1v1h-1zM6 1h1v1h-1zM6 2h1v1h-1zM6 11h1v1h-1zM6 12h1v1h-1zM7 0h1v1h-1zM7 1h1v1h-1zM7 2h1v1h-1zM7 3h1v1h-1zM7 4h1v1h-1zM7 11h1v1h-1zM7 12h1v1h-1zM8 1h1v1h-1zM8 2h1v1h-1zM8 3h1v1h-1zM8 10h1v1h-1zM8 11h1v1h-1zM8 12h1v1h-1zM9 2h1v1h-1zM9 10h1v1h-1zM9 11h1v1h-1zM10 8h1v1h-1zM10 9h1v1h-1zM10 10h1v1h-1zM10 11h1v1h-1zM11 6h1v1h-1zM11 7h1v1h-1zM11 8h1v1h-1zM11 9h1v1h-1zM11 10h1v1h-1zM12 6h1v1h-1zM12 7h1v1h-1zM12 8h1v1h-1z" /></svg>
         </button>
         <button id="btn-over-menu" class="menu-btn" data-t="menu"></button>
+        <button id="btn-share" class="menu-btn"></button>
+      </div>
+      <div class="over-buttons">
+        <button id="btn-replay" class="menu-btn hidden" data-t="replay"></button>
+        <button id="btn-challenge" class="menu-btn hidden" data-t="chSend"></button>
       </div>
       <p id="again-msg" class="small"></p>
+    </div>
+
+    <div id="replay" class="screen hidden">
+      <h2 data-t="replayTitle"></h2>
+      <canvas id="replay-canvas"></canvas>
+      <div class="over-buttons">
+        <button id="btn-replay-gif" class="menu-btn primary" data-t="replayGif"></button>
+        <button id="btn-replay-close" class="menu-btn" data-t="close"></button>
+      </div>
     </div>
 
     <div id="paused" class="screen hidden">
       <h2 id="paused-title"></h2>
       <p id="paused-msg" class="blink"></p>
+      <div class="over-buttons">
+        <button id="btn-resume" class="menu-btn primary"></button>
+        <button id="btn-photo" class="menu-btn"></button>
+        <button id="btn-zen-end" class="menu-btn hidden"></button>
+        <button id="btn-pause-menu" class="menu-btn"></button>
+      </div>
+    </div>
+
+    <div id="photo-ui" class="hidden">
+      <p id="photo-hint"></p>
+      <div class="over-buttons">
+        <button id="btn-photo-save" class="menu-btn primary"></button>
+        <button id="btn-photo-back" class="menu-btn"></button>
+      </div>
+    </div>
+
+    <div id="win" class="screen hidden">
+      <h2 id="win-title"></h2>
+      <div id="win-stars"></div>
+      <div id="win-details"></div>
+      <div class="over-buttons">
+        <button id="btn-win-next" class="menu-btn primary"></button>
+        <button id="btn-win-retry" class="menu-btn"></button>
+        <button id="btn-win-map" class="menu-btn"></button>
+      </div>
+    </div>
+
+    <div id="revive" class="screen hidden">
+      <h2 id="revive-title"></h2>
+      <p id="revive-timer" class="big-score"></p>
+      <div class="over-buttons">
+        <button id="btn-revive-yes" class="menu-btn primary"></button>
+        <button id="btn-revive-no" class="menu-btn"></button>
+      </div>
+    </div>
+
+    <div id="egg" class="hidden">
+      <div class="egg-box">
+        <div class="egg-big" aria-hidden="true"></div>
+        <div id="egg-result"></div>
+        <button id="egg-ok" class="menu-btn">OK</button>
+      </div>
+    </div>
+
+    <div id="chest" class="hidden">
+      <div class="egg-box chest-box">
+        <h3 id="chest-title"></h3>
+        <div class="chest-big" aria-hidden="true"></div>
+        <div id="chest-days" class="chest-days"></div>
+        <div id="chest-result"></div>
+        <button id="chest-open" class="menu-btn primary" data-t="chestOpen"></button>
+        <button id="chest-ok" class="menu-btn hidden">OK</button>
+      </div>
     </div>
 
     <div id="countdown" class="hidden"></div>

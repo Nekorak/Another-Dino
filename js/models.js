@@ -13,7 +13,47 @@ export const SKINS = {
   shadow: { price: 600, body: '#2d2740', dark: '#1b1728', belly: '#5d4c85', eye: '#d58bff', pupil: '#ffffff', mouth: '#120f1c', foot: '#16121f' },
   skeleton: { price: 800, body: '#ebe5d2', dark: '#b9b09a', belly: '#d2c9b1', eye: '#1b1b1b', pupil: '#e04040', mouth: '#3a3a3a', foot: '#a89f88', pattern: 'ribs' },
   robot: { price: 1000, body: '#a9b4c0', dark: '#6d7884', belly: '#d3dbe3', eye: '#ff3b30', pupil: '#ffd2cf', mouth: '#38404a', foot: '#56606b', pattern: 'panels' },
+  // unlocked by player level, not bought
+  lava: { level: 5, body: '#3a2a2a', dark: '#241818', belly: '#ff8c1a', eye: '#ffcf3a', pupil: '#ff3b00', mouth: '#120a0a', foot: '#241818', pattern: 'lava' },
+  ice: { level: 10, body: '#a8e4ff', dark: '#6cc4ec', belly: '#ffffff', eye: '#ffffff', pupil: '#2a6aa8', mouth: '#3a7ab8', foot: '#6cc4ec', pattern: 'ice' },
+  galaxy: { level: 15, body: '#2a1a4a', dark: '#160c2c', belly: '#6a3ab8', eye: '#ffffff', pupil: '#ff6fd8', mouth: '#0c0618', foot: '#160c2c', pattern: 'galaxy' },
+  rainbow: { level: 20, body: '#ff4f5a', dark: '#c8303a', belly: '#ffffff', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#3a3a3a', foot: '#5a5a5a', pattern: 'rainbow' },
+  // reward for completing the fossil album
+  fossil: { album: true, body: '#e8d8a8', dark: '#b8a070', belly: '#fff4d0', eye: '#1b1b1b', pupil: '#ffd23f', mouth: '#5a4a2a', foot: '#a89060', pattern: 'ribs' },
+  // the last tier of the season pass
+  champion: { pass: true, body: '#7a3ab8', dark: '#552880', belly: '#ffd23f', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#2a1040', foot: '#ffd23f', pattern: 'galaxy' },
+  // painted by the player in the skin editor (colours and paint come from the profile)
+  custom: { price: 300, editor: true, body: '#5fae3e', dark: '#467f2c', belly: '#cfe39a', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#2b4a1c', foot: '#3b6b26', paint: {} },
+  // the giant that chases you during the T-rex event (not in the shop)
+  trex: { hidden: true, body: '#3f5a2a', dark: '#2a3d1c', belly: '#7a8a4a', eye: '#ffcf3a', pupil: '#c8102e', mouth: '#1a2410', foot: '#2a3d1c' },
 };
+
+function hsl(h, sat, l) {
+  const k = (n) => (n + h / 30) % 12;
+  const a = sat * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const hex = (v) => Math.round(v * 255).toString(16).padStart(2, '0');
+  return '#' + hex(f(0)) + hex(f(8)) + hex(f(4));
+}
+
+function patternColor(s, c, x, y, z) {
+  switch (s.pattern) {
+    case 'panels':
+      return (x + y) % 5 === 0 || y % 6 === 0 ? s.dark : c;
+    case 'lava':
+      return (x * 7 + y * 3 + z * 5) % 11 === 0 || (x * 3 + y * 5) % 13 === 0 ? '#ff7a1a' : c;
+    case 'ice':
+      return (x + y * 3 + z) % 9 === 0 ? '#ffffff' : (x + y) % 4 === 0 ? s.dark : c;
+    case 'galaxy': {
+      const h = ((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) >>> 0;
+      return h % 23 === 0 ? '#ffffff' : h % 31 === 0 ? '#ff6fd8' : h % 17 === 0 ? '#4a2a8a' : c;
+    }
+    case 'rainbow':
+      return hsl(((x * 14 + y * 9) % 360 + 360) % 360, 0.75, 0.6);
+    default:
+      return c;
+  }
+}
 
 export const HATS = {
   none: { price: 0 },
@@ -23,11 +63,16 @@ export const HATS = {
   tophat: { price: 250 },
   headphones: { price: 300 },
   crown: { price: 750 },
+  // gifts from seasonal events, not for sale
+  pumpkin: { season: 'halloween' },
+  santa: { season: 'christmas' },
+  // season pass, tier 10
+  laurel: { pass: true },
 };
 
 // ---------------------------------------------------------------- dino grids
 // Facing +x. 'A' arm (only on the outer layers), 'B' belly, 'W'/'K' eye, 'M' mouth.
-const DINO_STAND = [
+export const DINO_STAND = [
   '             GGGGGGGG ',
   '            GGGGGGGGGG',
   '            GGWWGGGGGG',
@@ -91,10 +136,18 @@ function skinColor(s, ch, x, y, z, half) {
       return s.foot;
     default:
       c = s.body;
-      if (s.pattern === 'panels' && ((x + y) % 5 === 0 || y % 6 === 0)) c = s.dark;
       if (s.pattern === 'ribs' && x > 3 && x < 12 && y > 9 && y < 18 && x % 2 === 0) c = s.dark;
-      return c;
+      return patternColor(s, c, x, y, z);
   }
+}
+
+// The skin editor paints on the side view of the standing dino; the crouching pose
+// reuses the painted head (same rows, moved 8 columns to the right).
+function paintAt(skin, grid, x, r) {
+  if (!skin.paint) return null;
+  if (grid === DINO_STAND) return skin.paint[x + ',' + r] || null;
+  if (x >= 20 && r <= 5) return skin.paint[x - 8 + ',' + (r === 5 ? 6 : r)] || null;
+  return null;
 }
 
 function bodyVoxels(grid, headFromX, headRows, skin) {
@@ -106,12 +159,15 @@ function bodyVoxels(grid, headFromX, headRows, skin) {
       const h = half(x, H - 1 - y);
       return [-h, h];
     },
-    color: (ch, x, y, z) => skinColor(skin, ch, x, y + LEG_H, z, half(x, H - 1 - y)),
+    color: (ch, x, y, z) => {
+      const c = skinColor(skin, ch, x, y + LEG_H, z, half(x, H - 1 - y));
+      return c == null ? null : paintAt(skin, grid, x, H - 1 - y) || c;
+    },
     dy: LEG_H,
   });
   // darker ridge along the spine
   for (const v of vs.map.values()) {
-    if (v.z === 0 && !vs.has(v.x, v.y + 1, v.z) && v.color === skin.body) v.color = skin.dark;
+    if (v.z === 0 && !vs.has(v.x, v.y + 1, v.z) && v.color === skin.body && skin.pattern !== 'rainbow') v.color = skin.dark;
   }
   return vs;
 }
@@ -125,7 +181,7 @@ function deadEyeGeometry(ex, ey, originX) {
 
 function legGeometry(skin, z0, z1) {
   const vs = new VoxelSet();
-  extrude(vs, LEG, null, { depth: () => [z0, z1], color: (ch) => (ch === 'F' ? skin.foot : skin.body) });
+  extrude(vs, LEG, null, { depth: () => [z0, z1], color: (ch, x, y, z) => (ch === 'F' ? skin.foot : patternColor(skin, skin.body, x + 6, y, z)) });
   return buildGeometry(vs, [1, LEG_H, 0.5]);
 }
 
@@ -176,6 +232,34 @@ function hatVoxels(id) {
       box(-5, -5, -3, -3, -3, -3, '#111114');
       box(-5, -5, -3, -3, 3, 3, '#111114');
       break;
+    case 'pumpkin':
+      for (let x = -4; x <= 2; x++)
+        for (let y = 0; y <= 4; y++)
+          for (let z = -3; z <= 3; z++) {
+            if (((x + 1) / 3.6) ** 2 + ((y - 2) / 2.6) ** 2 + (z / 3.4) ** 2 > 1) continue;
+            vs.set(x, y, z, Math.abs(z) % 2 ? '#ff8a1a' : '#e8700a');
+          }
+      for (const [y, z] of [[3, -1], [3, 1], [1, -1], [1, 0], [1, 1]]) vs.set(3, y, z, '#ffe066');
+      box(-1, -1, 5, 6, 0, 0, '#4a7a2a');
+      break;
+    case 'laurel':
+      // a wreath of leaves around the head, with a gold berry in front
+      for (let x = -5; x <= 1; x++)
+        for (const z of [-4, 4]) if ((x + 10) % 2 === 0 || x === -5 || x === 1) vs.set(x, 0, z, (x + z) % 3 ? '#4f9a32' : '#3f8a2a');
+      for (let z = -4; z <= 4; z++) {
+        vs.set(-5, 1, z, z % 2 ? '#4f9a32' : '#5fae3e');
+        vs.set(1, 1, z, z % 2 ? '#5fae3e' : '#4f9a32');
+      }
+      vs.set(2, 1, 0, '#ffd23f');
+      break;
+    case 'santa':
+      box(-4, 2, 0, 0, -3, 3, '#ffffff');
+      for (let i = 1; i <= 5; i++) {
+        const r = Math.max(0, 3 - Math.floor(i * 0.6));
+        box(-1 - r - Math.floor(i / 2), -1 + r - Math.floor(i / 2), i, i, -r, r, '#e0303a');
+      }
+      box(-5, -4, 5, 6, -1, 0, '#ffffff');
+      break;
     default:
       return null;
   }
@@ -206,6 +290,14 @@ function hatGeometry(id) {
 
 // ---------------------------------------------------------------- dino
 const dinoCache = new Map();
+
+// the editor saved new colours or paint: rebuild the custom dino next time it is made
+export function setCustomSkin(def) {
+  if (!def) return;
+  for (const k of ['body', 'dark', 'belly', 'eye', 'pupil', 'mouth', 'foot']) if (def[k]) SKINS.custom[k] = def[k];
+  SKINS.custom.paint = { ...(def.paint || {}) };
+  dinoCache.delete('custom');
+}
 function dinoGeometries(skinId) {
   if (dinoCache.has(skinId)) return dinoCache.get(skinId);
   const skin = SKINS[skinId] || SKINS.classic;
@@ -366,8 +458,17 @@ export function boneGeometry() {
   return boneGeo;
 }
 
-export const POWERUPS = ['shield', 'magnet', 'slow', 'double'];
-export const POWERUP_COLOR = { shield: '#4fc3ff', magnet: '#ff5a5a', slow: '#b388ff', double: '#ffd23f' };
+export const POWERUPS = ['shield', 'magnet', 'slow', 'double', 'rocket', 'giant', 'rain'];
+export const POWERUP_COLOR = {
+  shield: '#4fc3ff',
+  magnet: '#ff5a5a',
+  slow: '#b388ff',
+  double: '#ffd23f',
+  rocket: '#ff7043',
+  giant: '#66bb6a',
+  rain: '#fff1a8',
+  bomb: '#ff8a2a',
+};
 
 const puCache = new Map();
 export function powerupGeometry(type) {
@@ -383,12 +484,19 @@ export function powerupGeometry(type) {
     magnet: ['##   ##', '##   ##', '##   ##', '##   ##', '##   ##', '#######', ' ##### '],
     slow: ['#######', ' ##### ', '  ###  ', '   #   ', '  ###  ', ' ##### ', '#######'],
     double: ['   #   ', '  ###  ', ' ##### ', '   #   ', '  ###  ', ' ##### ', '#######'],
+    bomb: ['    **  ', '   *    ', '  ###   ', ' #####  ', ' ##+##  ', ' #####  ', '  ###   '],
+    rocket: ['   #   ', '  ###  ', '  #+#  ', '  ###  ', ' ##### ', '## * ##', '  * *  '],
+    giant: ['# # # #', '#######', '#######', '  ###  ', ' ##### ', '## # ##', '#  #  #'],
+    rain: [' # # # ', '       ', '# # # #', '       ', ' # # # ', '       ', '#######'],
   }[type];
   art.forEach((row, r) => {
     for (let x = 0; x < row.length; x++) {
       if (row[x] === ' ') continue;
       let col = c;
       if (row[x] === '+') col = '#ffffff';
+      if (type === 'bomb') col = row[x] === '*' ? '#ffd23f' : row[x] === '+' ? '#ffffff' : '#2a2a30';
+      if (type === 'rocket' && row[x] === '*') col = '#ffd23f';
+      if (type === 'rain' && r < 6) col = '#fbf6e6';
       if (type === 'magnet' && r === 0) col = '#e8eef3';
       put(x, art.length - 1 - r, col);
     }
@@ -396,4 +504,74 @@ export function powerupGeometry(type) {
   const geo = buildGeometry(vs, [3.5, 3.5, 1], { jitter: 0.03 });
   puCache.set(type, geo);
   return geo;
+}
+
+// ---------------------------------------------------------------- pets
+export const PETS = {
+  none: { price: 0 },
+  chick: { price: 150 },
+  turtle: { price: 250 },
+  ptera: { price: 300 },
+};
+
+function petVoxels(id) {
+  const vs = new VoxelSet();
+  const box = (x0, x1, y0, y1, z0, z1, c) => {
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) vs.set(x, y, z, c);
+  };
+  if (id === 'chick') {
+    box(-2, 2, 1, 4, -2, 2, '#ffd94f');
+    box(-1, 1, 5, 6, -1, 1, '#ffe27a');
+    box(2, 3, 5, 5, 0, 0, '#ff9a2a');
+    for (const z of [-1, 1]) vs.set(1, 6, z, '#1b1b1b');
+    for (const z of [-1, 1]) box(0, 0, 0, 0, z, z, '#ff9a2a');
+    box(-3, -3, 3, 4, 0, 0, '#f2c230');
+  } else if (id === 'turtle') {
+    for (let x = -3; x <= 3; x++)
+      for (let z = -3; z <= 3; z++) {
+        const h = 3 - Math.floor((Math.abs(x) + Math.abs(z)) / 2);
+        for (let y = 1; y <= 1 + Math.max(0, h); y++) vs.set(x, y, z, (x + z) % 2 ? '#3f8a3a' : '#2f6e2c');
+      }
+    box(4, 5, 1, 2, -1, 1, '#8fc46a');
+    vs.set(5, 2, -1, '#1b1b1b');
+    vs.set(5, 2, 1, '#1b1b1b');
+    for (const x of [-2, 2]) for (const z of [-3, 3]) vs.set(x, 0, z, '#8fc46a');
+  }
+  return vs;
+}
+
+const petCache = new Map();
+export function createPet(id) {
+  if (!PETS[id] || id === 'none') return null;
+  if (id === 'ptera') {
+    const p = createPtero();
+    p.root.scale.setScalar(0.45);
+    p.kind = 'ptera';
+    return p;
+  }
+  if (!petCache.has(id)) petCache.set(id, buildGeometry(petVoxels(id), [0.5, 0, 0.5], { scale: VOX * 0.8 }));
+  const root = new THREE.Group();
+  const m = new THREE.Mesh(petCache.get(id), voxelMaterial);
+  m.castShadow = true;
+  root.add(m);
+  return { root, body: m, kind: id };
+}
+
+// front view of a pet for the shop cards
+export function petPixels(id) {
+  if (id === 'ptera') {
+    const out = [];
+    PTERO.forEach((row, r) => {
+      for (let x = 0; x < row.length; x++) if (PC[row[x]]) out.push({ x, y: PTERO.length - 1 - r, z: 0, color: PC[row[x]] });
+    });
+    return out;
+  }
+  if (id === 'none') return [];
+  const best = new Map();
+  for (const v of petVoxels(id).map.values()) {
+    const k = v.x + ',' + v.y;
+    const b = best.get(k);
+    if (!b || v.z > b.z) best.set(k, v);
+  }
+  return [...best.values()];
 }

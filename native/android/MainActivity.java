@@ -9,11 +9,15 @@ import com.getcapacitor.BridgeActivity;
 
 // Full-screen game: hide the status and navigation bars (swipe from the edge
 // shows them briefly), keep the screen awake while playing, and register the
-// LAN plugin used for multiplayer over Wi-Fi / hotspot.
+// LAN plugin (multiplayer over Wi-Fi / hotspot), the one-tap updater,
+// the share-your-record plugin and the home-screen widget.
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(LanPlugin.class);
+        registerPlugin(UpdaterPlugin.class);
+        registerPlugin(SharePlugin.class);
+        registerPlugin(WidgetPlugin.class);
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         hideSystemBars();

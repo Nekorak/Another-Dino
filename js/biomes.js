@@ -1,60 +1,28 @@
-// The four worlds the dino runs through, with their obstacles and scenery.
+// The worlds the dino runs through, with their obstacles and scenery.
 import { VOX, VoxelSet, buildGeometry, rng } from './voxel.js';
 
 export const BIOME_LENGTH = 1000; // points per biome
 
+// gravity / jump: multipliers (space has low gravity and a softer jump);
+// dark: lit only by the dino's lantern; sea: ocean in the background;
+// stars: stars visible all the time; noClouds: hide the clouds.
 export const BIOMES = [
-  {
-    id: 'desert',
-    sky: '#9fdcff',
-    ground: '#f2cf94',
-    path: '#dcb478',
-    hemiGround: '#d8b27a',
-    sun: '#fff1d2',
-    cloud: '#ffffff',
-    dust: '#e2bf86',
-    weather: 'sand',
-    weatherAlways: false,
-  },
-  {
-    id: 'jungle',
-    sky: '#a4e4cf',
-    ground: '#7db84a',
-    path: '#a77f4c',
-    hemiGround: '#5f9a3a',
-    sun: '#fff7d6',
-    cloud: '#f4fff8',
-    dust: '#8a6a3e',
-    weather: 'rain',
-    weatherAlways: false,
-  },
-  {
-    id: 'snow',
-    sky: '#cfe2f2',
-    ground: '#f4f8fc',
-    path: '#cbd7e3',
-    hemiGround: '#dfe8f2',
-    sun: '#f4f8ff',
-    cloud: '#ffffff',
-    dust: '#ffffff',
-    weather: 'snow',
-    weatherAlways: true,
-  },
-  {
-    id: 'volcano',
-    sky: '#e8946a',
-    ground: '#4d3c3a',
-    path: '#2f2727',
-    hemiGround: '#6b3b2a',
-    sun: '#ffb27a',
-    cloud: '#6e5c5a',
-    dust: '#3b3030',
-    weather: 'embers',
-    weatherAlways: true,
-  },
+  { id: 'desert', sky: '#9fdcff', ground: '#f2cf94', path: '#dcb478', hemiGround: '#d8b27a', sun: '#fff1d2', cloud: '#ffffff', dust: '#e2bf86', weather: 'sand', weatherAlways: false },
+  { id: 'jungle', sky: '#a4e4cf', ground: '#7db84a', path: '#a77f4c', hemiGround: '#5f9a3a', sun: '#fff7d6', cloud: '#f4fff8', dust: '#8a6a3e', weather: 'rain', weatherAlways: false },
+  { id: 'beach', sky: '#8fd6ff', ground: '#f6e2a8', path: '#dcc690', hemiGround: '#e8d49a', sun: '#fff6dc', cloud: '#ffffff', dust: '#f0dca0', weather: 'none', weatherAlways: false, sea: true },
+  { id: 'snow', sky: '#cfe2f2', ground: '#f4f8fc', path: '#cbd7e3', hemiGround: '#dfe8f2', sun: '#f4f8ff', cloud: '#ffffff', dust: '#ffffff', weather: 'snow', weatherAlways: true },
+  { id: 'cave', sky: '#0e0c16', ground: '#4a4454', path: '#343040', hemiGround: '#2a2433', sun: '#8a7ab8', cloud: '#0e0c16', dust: '#5a5466', weather: 'drip', weatherAlways: true, dark: true, noClouds: true },
+  { id: 'city', sky: '#b9c3c7', ground: '#767a6e', path: '#4a4d52', hemiGround: '#5f6358', sun: '#fff0dc', cloud: '#d8dcdf', dust: '#8a8d90', weather: 'dust', weatherAlways: false },
+  { id: 'volcano', sky: '#e8946a', ground: '#4d3c3a', path: '#2f2727', hemiGround: '#6b3b2a', sun: '#ffb27a', cloud: '#6e5c5a', dust: '#3b3030', weather: 'embers', weatherAlways: true },
+  { id: 'space', sky: '#05060f', ground: '#9a9ca3', path: '#7a7c83', hemiGround: '#55575e', sun: '#ffffff', cloud: '#05060f', dust: '#b0b2b8', weather: 'shooting', weatherAlways: true, gravity: 0.55, jump: 0.75, stars: true, noClouds: true },
+  // adventure-only worlds (the endless run cycles through the eight above)
+  // under the sea the dino swims: every tap is a stroke upwards, it sinks slowly
+  { id: 'ocean', sky: '#2a7ab8', ground: '#d9c58e', path: '#c2ad78', hemiGround: '#2f7aa8', sun: '#a8e6ff', cloud: '#2a7ab8', dust: '#bfe6ff', weather: 'bubbles', weatherAlways: true, gravity: 0.32, jump: 0.55, swim: true, water: true, noClouds: true, advOnly: true },
+  { id: 'candy', sky: '#ffd0ea', ground: '#fff0f7', path: '#f6b3d4', hemiGround: '#ffc2df', sun: '#fff6fb', cloud: '#ffffff', dust: '#ffb3d9', weather: 'sprinkles', weatherAlways: false, advOnly: true },
 ];
 
-export const biomeAt = (score) => Math.floor(score / BIOME_LENGTH) % BIOMES.length;
+export const ENDLESS_BIOMES = BIOMES.filter((b) => !b.advOnly).length;
+export const biomeAt = (score) => Math.floor(score / BIOME_LENGTH) % ENDLESS_BIOMES;
 
 // ------------------------------------------------------------------ helpers
 function boxFill(vs, x0, x1, y0, y1, z0, z1, color) {
@@ -218,11 +186,181 @@ function lavaPillar(r) {
   return { vs, armTop: 0, trunk: 2, burst: '#ff8c1a' };
 }
 
+
+function sandcastle(r) {
+  const vs = new VoxelSet();
+  const S = (x, y, z) => ((x + y + z) % 3 ? '#e9cf8f' : '#d9bb78');
+  boxFill(vs, -2, 2, 0, 3, -2, 2, S);
+  for (const [x, z] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) boxFill(vs, x, x, 4, 5 + Math.floor(r() * 2), z, z, S);
+  boxFill(vs, 0, 0, 4, 8, 0, 0, '#a08060');
+  vs.set(1, 8, 0, '#ff4f5a');
+  vs.set(1, 7, 0, '#ff4f5a');
+  return { vs, armTop: 0, trunk: 2, burst: '#e9cf8f' };
+}
+
+function lifeguardPole(r) {
+  const vs = new VoxelSet();
+  const H = 16 + Math.floor(r() * 4);
+  for (let y = 0; y < H; y++) boxFill(vs, 0, 1, y, y, 0, 1, Math.floor(y / 3) % 2 ? '#ffffff' : '#e0303a');
+  boxFill(vs, 2, 5, H - 3, H - 1, 0, 0, '#ffd23f');
+  boxFill(vs, -1, 2, 0, 0, -1, 2, '#c9a56a');
+  return { vs, armTop: 0, trunk: 1, burst: '#e0303a' };
+}
+
+function stalagmite(r) {
+  const vs = new VoxelSet();
+  const n = 1 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const cx = i * 3 - (n - 1);
+    const H = 6 + Math.floor(r() * 5);
+    for (let y = 0; y < H; y++) {
+      const w = y < H * 0.4 ? 1 : 0;
+      boxFill(vs, cx - w, cx + w, y, y, -w, w, (x, yy) => ((x + yy) % 3 ? '#6e6780' : '#5a5468'));
+    }
+  }
+  return { vs, armTop: 0, trunk: 2, burst: '#6e6780' };
+}
+
+function crystals(r) {
+  const vs = new VoxelSet();
+  const cols = [['#7fe8ff', '#3fb8e8'], ['#d08cff', '#9a5ad8']];
+  const n = 3 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const [c1, c2] = cols[Math.floor(r() * 2)];
+    const cx = Math.floor((r() - 0.5) * 3);
+    const cz = Math.floor((r() - 0.5) * 3);
+    const H = 9 + Math.floor(r() * 9);
+    const lean = (r() - 0.5) * 0.5;
+    for (let y = 0; y < H; y++) {
+      const x = cx + Math.round(lean * y);
+      const w = y < H - 3 ? 1 : 0;
+      boxFill(vs, x - w, x + w, y, y, cz - w, cz + w, (xx, yy) => (yy > H - 3 ? '#ffffff' : (xx + yy) % 2 ? c1 : c2));
+    }
+  }
+  return { vs, armTop: 0, trunk: 2, burst: '#7fe8ff', glow: true };
+}
+
+function cones(r) {
+  const vs = new VoxelSet();
+  const n = 1 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const cx = i * 4 - (n - 1) * 2;
+    boxFill(vs, cx - 2, cx + 2, 0, 0, -2, 2, '#2a2a2a');
+    for (let y = 1; y < 8; y++) {
+      const w = y < 3 ? 1 : 0;
+      boxFill(vs, cx - w, cx + w, y, y, -w, w, y === 3 || y === 5 ? '#ffffff' : '#ff7a1a');
+    }
+  }
+  return { vs, armTop: 0, trunk: 2, burst: '#ff7a1a' };
+}
+
+function crates(r) {
+  const vs = new VoxelSet();
+  const n = 2 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const y0 = i * 5;
+    const ox = i % 2 ? 1 : 0;
+    boxFill(vs, -2 + ox, 2 + ox, y0, y0 + 4, -2, 2, (x, y, z) => {
+      const edge = (Math.abs(x - ox) === 2 ? 1 : 0) + (y === y0 || y === y0 + 4 ? 1 : 0) + (Math.abs(z) === 2 ? 1 : 0);
+      return edge >= 2 ? '#7a5228' : (x + y) % 2 ? '#b4834a' : '#a8763e';
+    });
+  }
+  return { vs, armTop: 0, trunk: 3, burst: '#b4834a' };
+}
+
+function moonRock(r) {
+  const vs = new VoxelSet();
+  blob(vs, 0, 0, 0, 2.5 + r(), 2.2 + r() * 1.5, 2.5, (x, y, z) => ((x * 3 + y + z * 5) % 7 === 0 ? '#6e7076' : r() < 0.5 ? '#a4a6ad' : '#8e9097'));
+  for (const v of [...vs.map.values()]) if (v.y < 0) vs.set(v.x, v.y, v.z, null);
+  return { vs, armTop: 0, trunk: 2, burst: '#a4a6ad' };
+}
+
+function alienPlant(r) {
+  const vs = new VoxelSet();
+  const H = 14 + Math.floor(r() * 6);
+  for (let y = 0; y < H; y++) boxFill(vs, 0, 1, y, y, 0, 1, y % 4 === 3 ? '#e0a0ff' : '#7a3aa8');
+  for (let k = 0; k < 3; k++) {
+    const y = 5 + k * 4;
+    const d = k % 2 ? 1 : -1;
+    for (let i = 1; i <= 3; i++) vs.set(d > 0 ? 1 + i : -i, y + (i === 3 ? 1 : 0), 0, '#9a5ad8');
+  }
+  blob(vs, 0.5, H + 1, 0.5, 2, 1.6, 2, '#ff6fd8');
+  return { vs, armTop: H - 6, trunk: 1, burst: '#ff6fd8', glow: true };
+}
+
+function coral(r) {
+  const vs = new VoxelSet();
+  const cols = pick(r, [['#ff6f6f', '#e04a5a'], ['#ff9a4a', '#e8702a'], ['#c86fff', '#9a4ad8']]);
+  const branch = (x, y, z, len, dx, dz) => {
+    for (let k = 0; k < len; k++) {
+      vs.set(Math.round(x), y + k, Math.round(z), k % 2 ? cols[0] : cols[1]);
+      x += dx * (r() < 0.5 ? 1 : 0);
+      z += dz * (r() < 0.3 ? 1 : 0);
+    }
+    vs.set(Math.round(x), y + len, Math.round(z), '#ffd0d0');
+  };
+  boxFill(vs, -1, 1, 0, 1, -1, 1, cols[1]);
+  branch(0, 2, 0, 6 + Math.floor(r() * 4), 0, 0);
+  branch(-1, 2, 0, 4 + Math.floor(r() * 3), -1, 0);
+  branch(1, 2, 0, 4 + Math.floor(r() * 3), 1, 0);
+  return { vs, armTop: 0, trunk: 2, burst: cols[0] };
+}
+
+function seaweed(r) {
+  const vs = new VoxelSet();
+  const n = 2 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const H = 14 + Math.floor(r() * 7);
+    const ph = r() * 6;
+    for (let y = 0; y < H; y++) {
+      const x = Math.round(Math.sin(y * 0.45 + ph) * 1.2) + i * 2 - n + 1;
+      vs.set(x, y, 0, y % 3 ? '#2f9a4a' : '#45b85a');
+      if (y % 4 === 2) vs.set(x + 1, y, 0, '#5fd36a');
+    }
+  }
+  return { vs, armTop: 0, trunk: 2, burst: '#2f9a4a' };
+}
+
+function lollipop(r) {
+  const vs = new VoxelSet();
+  const H = 7 + Math.floor(r() * 3);
+  for (let y = 0; y < H; y++) vs.set(0, y, 0, '#ffffff');
+  const cols = pick(r, [['#ff4f8a', '#ffffff'], ['#4fc3ff', '#ffffff'], ['#ffd23f', '#ff7a1a']]);
+  for (let x = -3; x <= 3; x++)
+    for (let y = -3; y <= 3; y++) {
+      if (x * x + y * y > 10) continue;
+      const ring = Math.floor(Math.hypot(x, y) + Math.atan2(y, x) * 0.6) % 2;
+      for (let z = -1; z <= 1; z++) vs.set(x, H + 3 + y, z, ring ? cols[0] : cols[1]);
+    }
+  return { vs, armTop: 0, trunk: 3, burst: cols[0] };
+}
+
+function candyCane(r) {
+  const vs = new VoxelSet();
+  const H = 15 + Math.floor(r() * 5);
+  const col = (k) => (Math.floor(k / 2) % 2 ? '#e0303a' : '#ffffff');
+  for (let y = 0; y < H; y++) boxFill(vs, 0, 1, y, y, 0, 1, col(y));
+  // the hook at the top
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 6) * Math.PI;
+    const x = Math.round(2 - Math.cos(a) * 2);
+    const y = H + Math.round(Math.sin(a) * 2.5);
+    boxFill(vs, x, x + 1, y, y, 0, 1, col(H + k));
+  }
+  return { vs, armTop: 0, trunk: 1, burst: '#e0303a' };
+}
+
 const OBSTACLE_GEN = {
+  ocean: [coral, seaweed],
+  candy: [lollipop, candyCane],
   desert: [(r) => cactus(r, false), (r) => cactus(r, true)],
   jungle: [stump, bamboo],
   snow: [iceSpikes, snowman],
   volcano: [obsidian, lavaPillar],
+  beach: [sandcastle, lifeguardPole],
+  cave: [stalagmite, crystals],
+  city: [cones, crates],
+  space: [moonRock, alienPlant],
 };
 
 export const OBSTACLE_VARIANTS = 6;
@@ -235,7 +373,7 @@ export function obstacleGeometry(biomeId, size, index) {
     const r = rng(1000 + index * 77 + size * 5000 + biomeId.length * 131);
     const o = OBSTACLE_GEN[biomeId][size](r);
     const ext = extent(o.vs);
-    obstacleCache.set(key, { geo: buildGeometry(o.vs, [0.5, 0, 0.5]), ...ext, armTop: o.armTop, trunk: o.trunk, burst: o.burst });
+    obstacleCache.set(key, { geo: buildGeometry(o.vs, [0.5, 0, 0.5]), ...ext, armTop: o.armTop, trunk: o.trunk, burst: o.burst, glow: !!o.glow });
   }
   return obstacleCache.get(key);
 }
@@ -252,7 +390,17 @@ export function boulderGeometry(biomeId) {
           ? ['#3a2e2e', '#2a2222', '#ff7a2a']
           : biomeId === 'jungle'
             ? ['#7d7a6a', '#5e8a3a', '#6b6858']
-            : ['#a08a6e', '#8a7559', '#b59d7f'];
+            : biomeId === 'cave' || biomeId === 'city'
+              ? ['#6a6470', '#55505c', '#7a7480']
+              : biomeId === 'space'
+                ? ['#a4a6ad', '#8e9097', '#6e7076']
+                : biomeId === 'candy'
+                ? ['#ff6fb0', '#ffd23f', '#4fc3ff']
+                : biomeId === 'ocean'
+                  ? ['#6a8a9a', '#56788a', '#7fa0ae']
+                  : biomeId === 'beach'
+                  ? ['#ffffff', '#ff4f5a', '#3f8fff']
+                  : ['#a08a6e', '#8a7559', '#b59d7f'];
     const r = rng(biomeId.length * 991);
     blob(vs, 0, 0, 0, 5.2, 5.2, 4, () => cols[Math.floor(r() * 3)]);
     boulderGeo[biomeId] = buildGeometry(vs, [0, 0, 0]);
@@ -394,7 +542,155 @@ function deadTree(r) {
   return vs;
 }
 
+
+function shells(r) {
+  const vs = new VoxelSet();
+  const cols = ['#ffd6e0', '#ffffff', '#ffb27a', '#f6e2a8'];
+  for (let i = 0; i < 4; i++) {
+    const x = Math.floor((r() - 0.5) * 6);
+    const z = Math.floor((r() - 0.5) * 6);
+    const c = pick(r, cols);
+    vs.set(x, 0, z, c);
+    vs.set(x + 1, 0, z, c);
+  }
+  return vs;
+}
+
+function umbrella(r) {
+  const vs = new VoxelSet();
+  const cols = [['#ff4f5a', '#ffffff'], ['#3f8fff', '#ffd23f'], ['#2ec27e', '#ffffff']][Math.floor(r() * 3)];
+  for (let y = 0; y < 14; y++) vs.set(0, y, 0, '#e8e2cf');
+  for (let x = -5; x <= 5; x++)
+    for (let z = -5; z <= 5; z++) {
+      const d = Math.abs(x) + Math.abs(z);
+      if (d > 6) continue;
+      const y = 14 - Math.floor(d / 2.5);
+      vs.set(x, y, z, Math.floor(Math.atan2(z, x) * 2.5 + 8) % 2 ? cols[0] : cols[1]);
+    }
+  boxFill(vs, 2, 5, 0, 0, -1, 1, '#4fc3ff');
+  return vs;
+}
+
+function beachBall(r) {
+  const vs = new VoxelSet();
+  const cols = ['#ff4f5a', '#ffffff', '#3f8fff', '#ffd23f'];
+  blob(vs, 0, 2, 0, 2.2, 2.2, 2.2, (x, y, z) => cols[(Math.floor(Math.atan2(z, x) * 1.3 + 8) + (y > 3 ? 1 : 0)) % 4]);
+  return vs;
+}
+
+function glowMushrooms(r) {
+  const vs = new VoxelSet();
+  const n = 2 + Math.floor(r() * 3);
+  for (let i = 0; i < n; i++) {
+    const x = Math.floor((r() - 0.5) * 6);
+    const z = Math.floor((r() - 0.5) * 6);
+    const h = 1 + Math.floor(r() * 3);
+    for (let y = 0; y < h; y++) vs.set(x, y, z, '#c8c0d8');
+    const c = r() < 0.5 ? '#5fffd0' : '#c88cff';
+    boxFill(vs, x - 1, x + 1, h, h, z - 1, z + 1, c);
+    vs.set(x, h + 1, z, c);
+  }
+  return { vs, glow: true };
+}
+
+function caveCrystal(r) {
+  return { vs: crystals(r).vs, glow: true };
+}
+
+function lamp(r) {
+  const vs = new VoxelSet();
+  const H = 18 + Math.floor(r() * 4);
+  const bent = r() < 0.4;
+  for (let y = 0; y < H; y++) vs.set(bent && y > H * 0.6 ? 1 : 0, y, 0, '#4a4e55');
+  boxFill(vs, 0, 3, H, H, 0, 0, '#4a4e55');
+  boxFill(vs, 2, 3, H - 1, H - 1, 0, 0, '#ffe8a0');
+  return vs;
+}
+
+function ruinWall(r) {
+  const vs = new VoxelSet();
+  const W = 5 + Math.floor(r() * 5);
+  for (let x = -W; x <= W; x++) {
+    const h = 4 + Math.floor(r() * 8) - Math.abs(x) % 3;
+    for (let y = 0; y < h; y++) vs.set(x, y, 0, (x + y) % 4 === 0 ? '#8a7a70' : y % 2 ? '#a89888' : '#9a8a7c');
+    if (r() < 0.4) vs.set(x, h, 0, '#5a9a3a');
+  }
+  return vs;
+}
+
+function wreck(r) {
+  const vs = new VoxelSet();
+  const body = pick(r, ['#8a4a3a', '#5a6a7a', '#7a7a4a']);
+  boxFill(vs, -6, 6, 1, 4, -3, 3, body);
+  boxFill(vs, -3, 3, 5, 7, -3, 3, (x, y, z) => (Math.abs(z) === 3 || Math.abs(x) === 3 ? '#9fb0c0' : body));
+  for (const x of [-4, 4]) for (const z of [-3, 3]) vs.set(x, 0, z, '#1b1b1b');
+  vs.set(2, 8, 1, '#5a9a3a');
+  return vs;
+}
+
+function crater(r) {
+  const vs = new VoxelSet();
+  const R = 3 + r() * 3;
+  for (let x = -8; x <= 8; x++)
+    for (let z = -8; z <= 8; z++) {
+      const d = Math.hypot(x, z);
+      if (d > R - 1 && d < R + 1) vs.set(x, 0, z, r() < 0.5 ? '#8e9097' : '#7a7c83');
+      if (d >= R - 0.5 && d < R + 0.5 && r() < 0.4) vs.set(x, 1, z, '#a4a6ad');
+    }
+  return vs;
+}
+
+function moonFlag(r) {
+  const vs = new VoxelSet();
+  for (let y = 0; y < 12; y++) vs.set(0, y, 0, '#e8e8ee');
+  // the game's own flag: a little green dino head on yellow
+  boxFill(vs, 1, 6, 8, 11, 0, 0, (x, y) => ((x === 3 || x === 4) && (y === 9 || y === 10) ? '#5fae3e' : x === 5 && y === 10 ? '#5fae3e' : '#ffd23f'));
+  return vs;
+}
+
+function anemone(r) {
+  const vs = new VoxelSet();
+  const c = pick(r, ['#ff8ad8', '#ffb04a', '#8af0ff']);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    for (let k = 0; k < 4; k++) vs.set(Math.round(Math.cos(a) * (1 + k * 0.3)), k, Math.round(Math.sin(a) * (1 + k * 0.3)), k === 3 ? '#ffffff' : c);
+  }
+  boxFill(vs, -1, 1, 0, 0, -1, 1, '#7a4a6a');
+  return { vs, glow: r() < 0.5 };
+}
+
+function treasure(r) {
+  const vs = new VoxelSet();
+  boxFill(vs, -3, 3, 0, 3, -2, 2, (x, y) => (y === 2 ? '#ffd23f' : (x + y) % 3 ? '#8a5a2a' : '#6a4420'));
+  boxFill(vs, -3, 3, 4, 4, -2, 2, '#7a4a22');
+  vs.set(0, 2, 3, '#ffd23f');
+  for (let i = 0; i < 5; i++) vs.set(Math.floor((r() - 0.5) * 6), 5, Math.floor((r() - 0.5) * 4), '#ffe066');
+  return vs;
+}
+
+function gumdrops(r) {
+  const vs = new VoxelSet();
+  const cols = ['#ff4f8a', '#4fc3ff', '#5fd35a', '#ffd23f', '#c86fff'];
+  for (let i = 0; i < 3; i++) {
+    const x = Math.floor((r() - 0.5) * 7);
+    const z = Math.floor((r() - 0.5) * 6);
+    blob(vs, x, 0, z, 1.6, 1.8, 1.6, pick(r, cols));
+  }
+  for (const v of [...vs.map.values()]) if (v.y < 0) vs.set(v.x, v.y, v.z, null);
+  return vs;
+}
+
+function cupcake(r) {
+  const vs = new VoxelSet();
+  for (let y = 0; y < 4; y++) boxFill(vs, -2 - (y > 1 ? 1 : 0), 2 + (y > 1 ? 1 : 0), y, y, -2, 2, (x) => (x % 2 ? '#e8a0c0' : '#d888b0'));
+  blob(vs, 0, 5, 0, 3.4, 2.2, 3, (x, y, z) => ((x * 3 + z + y) % 5 === 0 ? pick(r, ['#ff4f5a', '#4fc3ff', '#ffd23f']) : '#fff4fa'));
+  vs.set(0, 8, 0, '#e0303a');
+  return vs;
+}
+
 const NEAR_GEN = {
+  ocean: [anemone, treasure, (r) => rock(r, ['#6a8a9a', '#56788a', '#7fa0ae']), (r) => seaweed(r).vs],
+  candy: [gumdrops, cupcake, (r) => lollipop(r).vs],
   desert: [
     (r) => rock(r, ['#9c8b74', '#8a7a65', '#b3a189']),
     (r) => bush(r, ['#a57c45', '#8d6838', '#c29455']),
@@ -402,7 +698,11 @@ const NEAR_GEN = {
   ],
   jungle: [fern, palm, (r) => rock(r, ['#7d7a6a', '#5e8a3a', '#6b6858'])],
   snow: [pine, snowPile, (r) => rock(r, ['#8e98a3', '#ffffff', '#a8b2bc'])],
-  volcano: [(r) => rock(r, ['#3a2e2e', '#2a2222', '#4a3a38']), lavaPool, deadTree],
+  volcano: [(r) => rock(r, ['#3a2e2e', '#2a2222', '#4a3a38']), (r) => ({ vs: lavaPool(r), glow: true }), deadTree],
+  beach: [shells, umbrella, beachBall, palm],
+  cave: [glowMushrooms, caveCrystal, (r) => rock(r, ['#4a4454', '#3a3444', '#5a5466'])],
+  city: [lamp, ruinWall, wreck],
+  space: [crater, moonFlag, (r) => rock(r, ['#8e9097', '#a4a6ad', '#7a7c83'])],
 };
 
 const nearCache = new Map();
@@ -410,12 +710,14 @@ const nearCache = new Map();
 export function nearPropGeometry(biomeId, kind, seed) {
   const key = `${biomeId}:${kind}:${seed}`;
   if (!nearCache.has(key)) {
-    const vs = NEAR_GEN[biomeId][kind](rng(seed * 31 + kind * 7 + biomeId.length));
-    nearCache.set(key, { geo: buildGeometry(vs, [0.5, 0, 0.5]), glow: biomeId === 'volcano' && kind === 1 });
+    const gens = NEAR_GEN[biomeId];
+    const out = gens[kind % gens.length](rng(seed * 31 + kind * 7 + biomeId.length));
+    const vs = out instanceof VoxelSet ? out : out.vs;
+    nearCache.set(key, { geo: buildGeometry(vs, [0.5, 0, 0.5]), glow: !(out instanceof VoxelSet) && !!out.glow });
   }
   return nearCache.get(key);
 }
-export const NEAR_KINDS = 3;
+export const NEAR_KINDS = 4;
 
 // ------------------------------------------------------------------ far scenery (5x voxels)
 function mesa(r) {
@@ -477,7 +779,73 @@ function volcanoCone(r) {
   return vs;
 }
 
-const FAR_GEN = { desert: mesa, jungle: hill, snow: peak, volcano: volcanoCone };
+
+function island(r) {
+  const vs = new VoxelSet();
+  const W = 5 + r() * 6;
+  blob(vs, 0, 0, 0, W, 2 + r() * 2, 3 + r() * 2, (x, y) => (y > 1 ? '#5ea83a' : '#f0dca0'));
+  const x0 = Math.round((r() - 0.5) * W);
+  for (let y = 1; y < 6; y++) vs.set(x0, y, 0, '#9a7040');
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0]]) vs.set(x0 + dx, 6, dz, '#3f9a2a');
+  for (const v of [...vs.map.values()]) if (v.y < 0) vs.set(v.x, v.y, v.z, null);
+  return vs;
+}
+
+function caveColumn(r) {
+  const vs = new VoxelSet();
+  const H = 12 + Math.floor(r() * 6);
+  for (let y = 0; y < H; y++) {
+    const w = 1 + Math.round(Math.abs(Math.sin(y * 0.4 + r())) * 2);
+    boxFill(vs, -w, w, y, y, -w, w, (x, yy) => ((x + yy) % 3 ? '#2e2a38' : '#3a3546'));
+  }
+  if (r() < 0.6) boxFill(vs, 2, 3, 2, 4, 0, 1, '#7fe8ff');
+  return vs;
+}
+
+function tower(r) {
+  const vs = new VoxelSet();
+  const W = 3 + Math.floor(r() * 3);
+  const H = 10 + Math.floor(r() * 14);
+  for (let y = 0; y < H; y++)
+    for (let x = -W; x <= W; x++) {
+      const broken = y > H - 4 && r() < 0.45;
+      if (broken) continue;
+      for (const z of [-2, 2]) vs.set(x, y, z, y % 2 && x % 2 ? (r() < 0.2 ? '#ffe8a0' : '#3a4048') : '#8a9098');
+      if (Math.abs(x) === W) for (let z = -1; z <= 1; z++) vs.set(x, y, z, '#7a8088');
+    }
+  return vs;
+}
+
+function moonRidge(r) {
+  const vs = new VoxelSet();
+  const W = 8 + r() * 8;
+  const H = 3 + r() * 4;
+  blob(vs, 0, 0, 0, W, H, 4, (x, y) => (y > H - 1.5 ? '#c4c6cc' : (x + y) % 2 ? '#8e9097' : '#7a7c83'));
+  for (const v of [...vs.map.values()]) if (v.y < 0) vs.set(v.x, v.y, v.z, null);
+  return vs;
+}
+
+function reef(r) {
+  const vs = new VoxelSet();
+  const W = 7 + r() * 8;
+  const H = 3 + r() * 5;
+  const cols = ['#e05a7a', '#ff9a4a', '#c86fff', '#3fb8a8'];
+  blob(vs, 0, 0, 0, W, H, 4, (x, y) => (y > H - 2 ? pick(r, cols) : (x + y) % 2 ? '#3a6a8a' : '#2f5a7a'));
+  for (const v of [...vs.map.values()]) if (v.y < 0) vs.set(v.x, v.y, v.z, null);
+  return vs;
+}
+
+function candyHill(r) {
+  const vs = new VoxelSet();
+  const W = 7 + r() * 8;
+  const H = 4 + r() * 6;
+  const top = pick(r, ['#ffffff', '#fff0a0', '#ffd0ea']);
+  blob(vs, 0, 0, 0, W, H, 4, (x, y) => (y > H - 2 ? top : Math.floor((x + y) / 2) % 2 ? '#ff7ab8' : '#ffb0d6'));
+  for (const v of [...vs.map.values()]) if (v.y < 0) vs.set(v.x, v.y, v.z, null);
+  return vs;
+}
+
+const FAR_GEN = { ocean: reef, candy: candyHill, desert: mesa, jungle: hill, beach: island, snow: peak, cave: caveColumn, city: tower, volcano: volcanoCone, space: moonRidge };
 const farCache = new Map();
 export function farGeometry(biomeId, seed) {
   const key = `${biomeId}:${seed}`;
@@ -508,4 +876,17 @@ export function moonGeometry() {
       if (inA && !inB) vs.set(x, y, 0, (x + y) % 5 === 0 ? '#e9e4b4' : '#fbf8dc');
     }
   return buildGeometry(vs, [0.5, 0.5, 0.5], { scale: VOX * 6, jitter: 0.02 });
+}
+
+// The Earth hanging in the sky of the space world.
+export function earthGeometry() {
+  const vs = new VoxelSet();
+  const r = rng(3);
+  for (let x = -7; x <= 7; x++)
+    for (let y = -7; y <= 7; y++) {
+      if (x * x + y * y > 49) continue;
+      const land = Math.sin(x * 0.8 + r() * 0.6) + Math.cos(y * 0.7) > 0.9;
+      vs.set(x, y, 0, land ? (r() < 0.3 ? '#ffffff' : '#3fa04a') : r() < 0.08 ? '#ffffff' : '#2f6fd8');
+    }
+  return buildGeometry(vs, [0.5, 0.5, 0.5], { scale: VOX * 8, jitter: 0.02 });
 }

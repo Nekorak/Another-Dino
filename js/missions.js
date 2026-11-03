@@ -1,5 +1,11 @@
 // Missions (3 active at a time, replaced when done) and permanent achievements.
 import { profile, save } from './save.js';
+import { levelOf } from './progress.js';
+import { SKINS, HATS } from './models.js';
+import { allFossils } from './collection.js';
+
+// skins and hats that were bought (gifts from levels, seasons and the album do not count)
+const bought = () => profile.owned.skin.filter((id) => SKINS[id]?.price > 0).length + profile.owned.hat.filter((id) => HATS[id]?.price > 0).length;
 
 // scope 'run': counted within one run; 'total': counted since the mission was given
 const TEMPLATES = [
@@ -9,7 +15,7 @@ const TEMPLATES = [
   { kind: 'obstacles', scope: 'run', base: 20, reward: 35 },
   { kind: 'ducks', scope: 'run', base: 4, reward: 35 },
   { kind: 'powerups', scope: 'run', base: 2, reward: 40 },
-  { kind: 'biome', scope: 'run', base: 2, reward: 60, max: 4 },
+  { kind: 'biome', scope: 'run', base: 2, reward: 60, max: 6 },
   { kind: 'coinsTotal', scope: 'total', base: 100, reward: 50 },
   { kind: 'games', scope: 'total', base: 5, reward: 40 },
   { kind: 'distance', scope: 'total', base: 3000, reward: 60 },
@@ -67,11 +73,13 @@ export const ACHIEVEMENTS = [
   { id: 'score2k5', test: (s) => s.best >= 2500 },
   { id: 'score5k', test: (s) => s.best >= 5000 },
   { id: 'jungle', test: (s) => s.maxBiome >= 1 },
-  { id: 'snow', test: (s) => s.maxBiome >= 2 },
-  { id: 'volcano', test: (s) => s.maxBiome >= 3 },
+  { id: 'snow', test: (s) => s.maxBiome >= 3 },
+  { id: 'cave', test: (s) => s.maxBiome >= 4 },
+  { id: 'volcano', test: (s) => s.maxBiome >= 6 },
+  { id: 'space', test: (s) => s.maxBiome >= 7 },
   { id: 'coins100', test: (s) => s.coins >= 100 },
   { id: 'coins1k', test: (s) => s.coins >= 1000 },
-  { id: 'shopper', test: () => profile.owned.skin.length + profile.owned.hat.length > 2 },
+  { id: 'shopper', test: () => bought() >= 1 },
   { id: 'collector', test: () => profile.owned.skin.length >= 4 },
   { id: 'powerups', test: (s) => s.powerups >= 25 },
   { id: 'meteors', test: (s) => s.meteors >= 10 },
@@ -79,6 +87,17 @@ export const ACHIEVEMENTS = [
   { id: 'games50', test: (s) => s.games >= 50 },
   { id: 'lan', test: (s) => s.mpGames >= 1 },
   { id: 'lanWin', test: (s) => s.mpWins >= 1 },
+  { id: 'daily', test: (s) => s.dailies >= 1 },
+  { id: 'daily7', test: () => profile.daily.streak >= 7 },
+  { id: 'revive', test: (s) => s.revives >= 1 },
+  { id: 'pound', test: (s) => s.pounds >= 10 },
+  { id: 'egg', test: (s) => s.eggs >= 1 },
+  { id: 'level10', test: () => levelOf() >= 10 },
+  { id: 'pet', test: () => profile.owned.pet.length > 1 },
+  { id: 'boss', test: (s) => s.bosses >= 1 },
+  { id: 'combo5', test: (s) => s.bestCombo >= 5 },
+  { id: 'bot', test: (s) => s.botWins >= 1 },
+  { id: 'album', test: () => allFossils().every((f) => profile.fossils.includes(f)) },
 ];
 export const ACHIEVEMENT_REWARD = 25;
 

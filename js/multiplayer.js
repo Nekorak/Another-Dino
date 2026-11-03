@@ -3,7 +3,10 @@
 // through the host (star topology), so nobody needs a server or the internet.
 export const LAN_PORT = 47777;
 const PROTO = 1;
-const MAX_PLAYERS = 4;
+const MAX_PLAYERS = 8;
+export const TOUR_RACES = 5;
+// tournament points for 1st, 2nd, 3rd... place in each race
+const TOUR_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
 const TIMEOUT = 6000;
 
 export class LanSession {
@@ -19,6 +22,8 @@ export class LanSession {
     this.timers = [];
     this.raceSeed = null;
     this.hostSeen = 0;
+    this.mode = 'race'; // race | sabotage | elimination | tournament
+    this.tour = null; // host: { race, total, pts: Map id -> points }
   }
 
   async open() {
@@ -113,19 +118,23 @@ export class LanSession {
 
   publishLobby() {
     this.lobby = [...this.players.values()].map(({ id, name, skin, hat }) => ({ id, name, skin, hat }));
-    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state });
+    const tour = this.tour ? { race: this.tour.race, total: this.tour.total } : null;
+    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode, tour });
     this.on.lobby(this.lobby, true);
   }
 
   // -------------------------------------------------------------- race
   startRace() {
     if (this.role !== 'host') return;
+    // a tournament is a series of races; a new one starts after the last race
+    if (this.mode === 'tournament' && (!this.tour || this.tour.race >= this.tour.total)) this.tour = { race: 0, total: TOUR_RACES, pts: new Map() };
+    if (this.mode !== 'tournament') this.tour = null;
     this.state = 'race';
     this.raceSeed = (Math.random() * 2 ** 31) | 0;
     this.peerStates.clear();
     for (const id of this.players.keys()) this.peerStates.set(id, { id, sc: 0, y: 0, d: 0, a: 1 });
-    for (let i = 0; i < 3; i++) setTimeout(() => this.toPeers({ t: 'go', seed: this.raceSeed }), i * 150);
-    this.on.start(this.raceSeed);
+    for (let i = 0; i < 3; i++) setTimeout(() => this.toPeers({ t: 'go', seed: this.raceSeed, mode: this.mode }), i * 150);
+    this.on.start(this.raceSeed, this.mode);
     this.relay = setInterval(() => this.toPeers({ t: 'all', s: [...this.peerStates.values()] }), 66);
   }
 
@@ -134,7 +143,7 @@ export class LanSession {
     const now = performance.now();
     if (now - (this.lastSend || 0) < 60 && st.a) return;
     this.lastSend = now;
-    const s = { id: this.me.id, sc: Math.floor(st.sc), y: Math.round(st.y * 100) / 100, d: st.d ? 1 : 0, a: st.a ? 1 : 0 };
+    const s = { id: this.me.id, sc: Math.floor(st.sc), pt: Math.floor(st.pt ?? st.sc), y: Math.round(st.y * 100) / 100, d: st.d ? 1 : 0, a: st.a ? 1 : 0 };
     if (this.role === 'host') {
       this.peerStates.set(this.me.id, s);
       this.checkEnd();
@@ -147,15 +156,52 @@ export class LanSession {
     if (all.length && all.every((s) => !s.a)) {
       this.state = 'lobby';
       clearInterval(this.relay);
+      // ranked by points (distance plus combo bonus)
       const results = all
-        .map((s) => ({ id: s.id, name: this.players.get(s.id).name, sc: s.sc }))
+        .map((s) => ({ id: s.id, name: this.players.get(s.id).name, sc: s.pt ?? s.sc }))
         .sort((a, b) => b.sc - a.sc);
-      const end = { t: 'end', r: results, seed: this.raceSeed };
+      let tour = null;
+      if (this.tour) {
+        const tr = this.tour;
+        tr.race++;
+        results.forEach((r, i) => tr.pts.set(r.id, (tr.pts.get(r.id) || 0) + (TOUR_POINTS[i] || 0)));
+        const table = [...tr.pts.entries()]
+          .filter(([id]) => this.players.has(id))
+          .map(([id, pts]) => ({ id, name: this.players.get(id).name, pts }))
+          .sort((a, b) => b.pts - a.pts);
+        tour = { race: tr.race, total: tr.total, table, done: tr.race >= tr.total };
+      }
+      const end = { t: 'end', r: results, seed: this.raceSeed, tour };
       this.toPeers(end);
       for (let i = 1; i < 3; i++) setTimeout(() => this.toPeers(end), i * 150);
-      this.on.end(results);
+      this.on.end(results, tour);
       this.publishLobby();
     }
+  }
+
+  setMode(mode) {
+    if (this.role !== 'host') return;
+    this.mode = mode;
+    this.tour = null;
+    this.publishLobby();
+  }
+
+  // sabotage: drop a boulder on everyone else's track
+  attack() {
+    if (this.role === 'host') this.toPeers({ t: 'atk', by: this.me.id });
+    else this.toHost({ t: 'atk' });
+  }
+
+  emote(e) {
+    this.on.emote(this.me.id, e);
+    if (this.role === 'host') this.toPeers({ t: 'emo', by: this.me.id, e });
+    else this.toHost({ t: 'emo', e });
+  }
+
+  // host: pass a client's attack / emote on to the other players
+  relayFrom(m, from) {
+    const data = this.pack({ ...m, by: from });
+    for (const p of this.players.values()) if (p.addr && p.id !== from) this.t.send(p.addr, p.port, data);
   }
 
   others() {
@@ -191,6 +237,13 @@ export class LanSession {
       } else if (m.t === 's' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
         if (this.state === 'race') this.peerStates.set(m.from, { ...m.s, id: m.from });
+      } else if (m.t === 'atk' && this.players.has(m.from) && this.state === 'race') {
+        this.relayFrom({ t: 'atk' }, m.from);
+        this.on.attack(m.from);
+      } else if (m.t === 'emo' && this.players.has(m.from)) {
+        const e = String(m.e).slice(0, 8);
+        this.relayFrom({ t: 'emo', e }, m.from);
+        this.on.emote(m.from, e);
       } else if (m.t === 'bye') {
         this.players.delete(m.from);
         this.peerStates.delete(m.from);
@@ -204,15 +257,17 @@ export class LanSession {
       switch (m.t) {
         case 'lobby':
           this.lobby = m.players;
+          this.mode = m.mode || 'race';
           if (m.st === 'lobby' && this.state === 'race') this.state = 'lobby';
           this.on.lobby(m.players, false);
           break;
         case 'go':
           if (this.raceSeed !== m.seed) {
             this.raceSeed = m.seed;
+            this.mode = m.mode || 'race';
             this.state = 'race';
             this.peerStates.clear();
-            this.on.start(m.seed);
+            this.on.start(m.seed, this.mode);
           }
           break;
         case 'all':
@@ -223,8 +278,14 @@ export class LanSession {
           if (this.endedSeed !== m.seed) {
             this.endedSeed = m.seed;
             this.state = 'lobby';
-            this.on.end(m.r);
+            this.on.end(m.r, m.tour || null);
           }
+          break;
+        case 'atk':
+          if (m.by !== this.me.id) this.on.attack(m.by);
+          break;
+        case 'emo':
+          if (m.by !== this.me.id) this.on.emote(m.by, String(m.e).slice(0, 8));
           break;
         case 'close':
           this.role = 'idle';

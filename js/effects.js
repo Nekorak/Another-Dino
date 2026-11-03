@@ -133,6 +133,12 @@ const WEATHER = {
   rain: { color: '#cfe8ff', size: 2, n: 520 },
   snow: { color: '#ffffff', size: 2, n: 420 },
   embers: { color: '#ffae4a', size: 2, n: 260 },
+  drip: { color: '#8fd3ff', size: 2, n: 160 },
+  dust: { color: '#b8b4aa', size: 2, n: 300 },
+  shooting: { color: '#ffffff', size: 2, n: 90 },
+  bubbles: { color: '#dff6ff', size: 2, n: 220 },
+  sprinkles: { color: '#ff8ad0', size: 2, n: 360 },
+  none: { color: '#ffffff', size: 1, n: 0 },
 };
 
 export class Weather {
@@ -157,15 +163,24 @@ export class Weather {
     const w = WEATHER[type];
     this.mat.color.set(w.color);
     this.mat.size = w.size;
-    this.geo.setDrawRange(0, w.n);
+    this.geo.setDrawRange(0, Math.floor(w.n * (this.density ?? 1)));
     for (let i = 0; i < this.n; i++) this.respawn(i, true);
   }
   respawn(i, anywhere) {
     const p = this.geo.attributes.position.array;
     p[i * 3] = -14 + Math.random() * 56;
-    p[i * 3 + 1] = anywhere ? Math.random() * 16 : this.type === 'embers' ? -0.2 : this.type === 'sand' ? Math.random() * 5 : 16;
+    p[i * 3 + 1] = anywhere ? Math.random() * 16 : this.type === 'embers' || this.type === 'bubbles' ? -0.2 : this.type === 'sand' || this.type === 'dust' ? Math.random() * 5 : 16;
     p[i * 3 + 2] = -16 + Math.random() * 28;
-    if (this.type === 'sand' && !anywhere) p[i * 3] = 42;
+    if ((this.type === 'sand' || this.type === 'dust') && !anywhere) p[i * 3] = 42;
+    if (this.type === 'shooting') {
+      p[i * 3] = 10 + Math.random() * 60;
+      p[i * 3 + 1] = 10 + Math.random() * 10;
+      p[i * 3 + 2] = -60 + Math.random() * 30;
+    }
+  }
+  setDensity(k) {
+    this.density = k;
+    if (this.type) this.geo.setDrawRange(0, Math.floor(WEATHER[this.type].n * k));
   }
   update(dt, worldV, time) {
     this.intensity += Math.max(-dt * 0.4, Math.min(dt * 0.4, this.target - this.intensity));
@@ -173,7 +188,7 @@ export class Weather {
     this.points.visible = this.intensity > 0.01;
     if (!this.points.visible) return;
     const p = this.geo.attributes.position.array;
-    const n = WEATHER[this.type].n;
+    const n = Math.floor(WEATHER[this.type].n * (this.density ?? 1));
     for (let i = 0; i < n; i++) {
       const s = this.seed[i];
       let x = p[i * 3];
@@ -197,11 +212,33 @@ export class Weather {
           x -= (worldV * 0.8 + 14 + s * 8) * dt;
           y += Math.sin(time * 3 + s * 40) * 0.6 * dt;
           break;
+        case 'drip':
+          y -= (6 + s * 5) * dt;
+          x -= worldV * dt;
+          break;
+        case 'dust':
+          x -= (worldV * 0.4 + 2 + s * 2) * dt;
+          y += Math.sin(time * 1.5 + s * 25) * 0.3 * dt;
+          break;
+        case 'bubbles':
+          // rising and wobbling, carried back slowly by the current
+          y += (1.6 + s * 2) * dt;
+          x -= (worldV * 0.35 + Math.sin(time * 3 + s * 40) * 0.8) * dt;
+          break;
+        case 'sprinkles':
+          y -= (2 + s * 1.5) * dt;
+          x -= (worldV * 0.3 + Math.sin(time * 2 + s * 30) * 0.6) * dt;
+          break;
+        case 'shooting':
+          // high in the sky, streaking down and to the left
+          x -= (30 + s * 30) * dt;
+          y -= (6 + s * 6) * dt;
+          break;
       }
       p[i * 3] = x;
       p[i * 3 + 1] = y;
       p[i * 3 + 2] = z;
-      if (y < 0 || y > 17 || x < -16) this.respawn(i, false);
+      if (y < 0 || y > 22 || x < -16 || (this.type === 'shooting' && y < 6)) this.respawn(i, false);
     }
     this.geo.attributes.position.needsUpdate = true;
   }
