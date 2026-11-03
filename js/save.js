@@ -97,6 +97,25 @@ function write(key, value) {
   }
 }
 
+// Fill in what an older version did not save and replace values of the wrong type
+// (a damaged save must never turn the bone counter into text).
+function sanitize(base, p) {
+  const out = p && typeof p === 'object' && !Array.isArray(p) ? p : {};
+  for (const k of Object.keys(base)) {
+    const b = base[k];
+    const v = out[k];
+    if (v === undefined || v === null) out[k] = b;
+    else if (typeof b === 'number') out[k] = typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || b;
+    else if (typeof b === 'string' || typeof b === 'boolean') out[k] = typeof v === typeof b ? v : b;
+    else if (Array.isArray(b)) out[k] = Array.isArray(v) ? v : b;
+    else if (b && typeof b === 'object') {
+      // open-ended maps (achievements, adventure stars, paint) have empty defaults: keep any object
+      out[k] = Object.keys(b).length ? sanitize(b, v) : v && typeof v === 'object' && !Array.isArray(v) ? v : b;
+    }
+  }
+  return out;
+}
+
 function load() {
   const base = defaults();
   const p = read(KEY);
@@ -110,11 +129,8 @@ function load() {
     if (typeof pixel === 'number') base.settings.pixel = pixel;
     return base;
   }
-  for (const k of Object.keys(base)) {
-    if (p[k] === undefined) p[k] = base[k];
-    else if (base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) p[k] = { ...base[k], ...p[k] };
-  }
-  return p;
+  if (typeof p !== 'object' || Array.isArray(p)) return base;
+  return sanitize(base, p);
 }
 
 export const profile = load();

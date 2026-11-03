@@ -9,6 +9,7 @@ import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImag
 import { save, resetProgress } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
+import { MAX_PLAYERS } from './multiplayer.js';
 import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS } from './missions.js';
@@ -231,6 +232,7 @@ export class UI {
     btn('btn-share', () => this.share());
     btn('btn-replay', () => this.showReplay());
     btn('chest-open', () => this.doOpenChest());
+    btn('btn-chest', () => this.showChest());
     btn('chest-ok', () => $('chest').classList.add('hidden'));
     btn('btn-replay-close', () => this.hideReplay());
     btn('btn-replay-gif', () => this.saveReplay());
@@ -486,8 +488,14 @@ export class UI {
     this.refreshTexts();
     this.passBadge();
     this.updateWidget();
-    // the daily chest waits on the menu (not during the very first tutorial run)
-    if (this.p.tutorial && chestInfo().available) setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
+    // the daily chest pops up once per session (not before the tutorial is done); after that
+    // a small chest button on the menu waits until it is opened
+    const chest = this.p.tutorial && chestInfo().available;
+    $('btn-chest').classList.toggle('hidden', !chest);
+    if (chest && !this.chestPopped) {
+      this.chestPopped = true;
+      setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
+    }
   }
 
   // the Android home-screen widget shows the record and the daily challenge
@@ -532,6 +540,7 @@ export class UI {
       $('chest-result').replaceChildren(el('p', {}, bone(), ' +' + r.bones), el('p', { class: 'small', text: '+' + r.xp + ' XP' }));
       for (const l of r.levelUps) this.toast(t('levelUp', { n: l }), 'gold');
       $('chest-ok').classList.remove('hidden');
+      $('btn-chest').classList.add('hidden');
       this.setCoins();
       this.passBadge();
     }, 900);
@@ -784,6 +793,17 @@ export class UI {
   // ------------------------------------------------------------ panels
   panelOpen() {
     return this.panel;
+  }
+  // a window on top of the menu (chest, egg, replay, controls editor): keys must not start a run behind it
+  modalOpen() {
+    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay'].some((id) => !$(id).classList.contains('hidden'));
+  }
+  closeModal() {
+    const ed = document.getElementById('ctl-editor');
+    if (ed) return ed.querySelector('.ctl-bar .ctl-row:last-child .menu-btn:not(.primary)')?.click();
+    if (!$('replay').classList.contains('hidden')) return this.hideReplay();
+    if (!$('chest').classList.contains('hidden') && !$('chest').classList.contains('shaking')) return $('chest').classList.add('hidden');
+    if (!$('egg').classList.contains('hidden') && $('egg').classList.contains('open')) $('egg').classList.add('hidden');
   }
   openPanel(name) {
     this.panel = name;
@@ -1179,6 +1199,8 @@ export class UI {
           text: t('xferApply'),
           onclick: () => {
             mergeProgress(data);
+            this.g.setCustomSkin(this.p.customSkin);
+            this.g.applyTheme(this.p.theme);
             this.g.previewDino(this.p.skin, this.p.hat, this.p.pet);
             this.g.applySettings();
             this.toast(t('xferDone'), 'gold');
@@ -1437,8 +1459,8 @@ export class UI {
       el(
         'div',
         { class: 'room' },
-        el('span', { text: `${r.name} (${r.n}/4)` }),
-        r.st === 'race' || r.n >= 4
+        el('span', { text: `${r.name} (${r.n}/${MAX_PLAYERS})` }),
+        r.st === 'race' || r.n >= MAX_PLAYERS
           ? el('span', { class: 'muted', text: r.st === 'race' ? t('mpRacing') : t('mpFull') })
           : el('button', {
               text: t('mpJoin'),
