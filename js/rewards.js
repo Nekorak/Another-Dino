@@ -72,7 +72,7 @@ export function passReward(n) {
 
 export function claimTier(n) {
   const st = passState();
-  if (n > st.tier || profile.pass.claimed.includes(n)) return null;
+  if (!Number.isInteger(n) || n < 1 || n > st.tier || profile.pass.claimed.includes(n)) return null;
   const r = passReward(n);
   if (r.kind === 'bones') profile.coins += r.n;
   else profile.owned[r.kind].push(r.id);

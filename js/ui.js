@@ -232,6 +232,7 @@ export class UI {
     btn('btn-share', () => this.share());
     btn('btn-replay', () => this.showReplay());
     btn('chest-open', () => this.doOpenChest());
+    btn('btn-chest', () => this.showChest());
     btn('chest-ok', () => $('chest').classList.add('hidden'));
     btn('btn-replay-close', () => this.hideReplay());
     btn('btn-replay-gif', () => this.saveReplay());
@@ -487,8 +488,14 @@ export class UI {
     this.refreshTexts();
     this.passBadge();
     this.updateWidget();
-    // the daily chest waits on the menu (not during the very first tutorial run)
-    if (this.p.tutorial && chestInfo().available) setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
+    // the daily chest pops up once per session (not before the tutorial is done); after that
+    // a small chest button on the menu waits until it is opened
+    const chest = this.p.tutorial && chestInfo().available;
+    $('btn-chest').classList.toggle('hidden', !chest);
+    if (chest && !this.chestPopped) {
+      this.chestPopped = true;
+      setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
+    }
   }
 
   // the Android home-screen widget shows the record and the daily challenge
@@ -533,6 +540,7 @@ export class UI {
       $('chest-result').replaceChildren(el('p', {}, bone(), ' +' + r.bones), el('p', { class: 'small', text: '+' + r.xp + ' XP' }));
       for (const l of r.levelUps) this.toast(t('levelUp', { n: l }), 'gold');
       $('chest-ok').classList.remove('hidden');
+      $('btn-chest').classList.add('hidden');
       this.setCoins();
       this.passBadge();
     }, 900);

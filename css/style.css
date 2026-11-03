@@ -2225,3 +2225,31 @@ body.photo .ctl-btn {
     font-size: clamp(18px, 5.5vh, 28px);
   }
 }
+
+/* the daily chest waiting on the menu */
+#btn-chest {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  top: calc(max(12px, env(safe-area-inset-top)) + 56px);
+  z-index: 25;
+  padding: 6px;
+  border: 3px solid var(--line);
+  background: var(--gold);
+  cursor: pointer;
+  animation: dance-hop 1s steps(2) infinite;
+}
+#btn-chest.hidden,
+body.playing #btn-chest,
+body.panel-open #btn-chest {
+  display: none;
+}
+.chest-mini {
+  display: block;
+  width: 30px;
+  height: 22px;
+  border: 3px solid var(--line);
+  background:
+    linear-gradient(#ffd23f, #ffd23f) 50% 40% / 8px 8px no-repeat,
+    linear-gradient(var(--line), var(--line)) 50% 34% / 100% 3px no-repeat,
+    linear-gradient(#b4733a, #8a5228);
+}
