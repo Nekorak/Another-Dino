@@ -6,11 +6,18 @@ function defaults() {
   return {
     v: 1,
     coins: 0,
-    owned: { skin: ['classic'], hat: ['none'], pet: ['none'], trail: ['none'] },
+    owned: { skin: ['classic'], hat: ['none'], pet: ['none'], trail: ['none'], dance: ['hop'], theme: ['classic'] },
     skin: 'classic',
     hat: 'none',
     pet: 'none',
     trail: 'none',
+    dance: 'hop', // victory dance on a record or a finished level
+    theme: 'classic', // menu colours, scenery and music
+    // the dino painted in the skin editor
+    customSkin: { body: '#5fae3e', dark: '#467f2c', belly: '#cfe39a', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#2b4a1c', foot: '#3b6b26', paint: {} },
+    chest: { last: '', streak: 0 }, // daily chest: last day it was opened, days in a row
+    pass: { season: '', xp: 0, claimed: [] }, // free season pass
+    challenges: { made: 0, beaten: 0 }, // QR challenges
     fossils: [], // ids like 'desert-1'
     adventure: {}, // 'world-level' -> stars (1..3)
     seasonGifts: [], // seasons whose free hat was already given
@@ -35,6 +42,9 @@ function defaults() {
       keyDuck: 'ArrowDown',
       seasons: true,
       botLevel: 1,
+      menuMusic: true,
+      // on-screen controls: 'zones' (left/right halves) or movable 'buttons'
+      controls: { mode: 'zones', split: 0.5, jump: { x: 0.86, y: 0.78, s: 1 }, duck: { x: 0.14, y: 0.78, s: 1 } },
     },
     stats: {
       games: 0,
@@ -58,6 +68,11 @@ function defaults() {
       bestCombo: 0,
       botWins: 0,
       bosses: 0,
+      goldBones: 0,
+      miniBosses: 0,
+      chests: 0,
+      tournaments: 0,
+      challengesWon: 0,
     },
     top: [],
     missions: { active: [], done: 0 },

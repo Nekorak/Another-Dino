@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { VOX, voxelMaterial, rng } from './voxel.js';
-import { createDino, DINO_BOXES, createPtero, createPet, boneGeometry, powerupGeometry, POWERUPS, glowMaterial, SKINS, HATS } from './models.js';
+import { createDino, DINO_BOXES, createPtero, createPet, boneGeometry, powerupGeometry, POWERUPS, glowMaterial, SKINS, HATS, setCustomSkin } from './models.js';
+import { danceDino, THEMES, applyThemeVars } from './custom.js';
 import {
   BIOMES,
   BIOME_LENGTH,
@@ -27,9 +28,12 @@ import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD } 
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
 import { levelDef, scoreLevel, saveLevel, BotBrain } from './modes.js';
+import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession } from './multiplayer.js';
 import { UI } from './ui.js';
+
+setCustomSkin(profile.customSkin); // the dino painted in the skin editor
 
 // ------------------------------------------------------------------ tuning
 const START_SPEED = 13;
@@ -44,7 +48,9 @@ const GLIDE_FALL = 3.2; // max falling speed while gliding
 const SPAWN_X = 42;
 const DESPAWN_X = -16;
 const NIGHT_EVERY = 700;
-const NIGHT_LEN = 12;
+const NIGHT_LEN = 20;
+const MINI_BOSS_EVERY = 2000; // endless modes: a short boss fight every 2000 points
+const MINI_BOSS_TIME = 14;
 const PIXEL_LEVELS = [110, 160, 240]; // render pixels along the short screen side
 const BASE_POWER_TIME = { shield: 15, magnet: 10, slow: 6, double: 12, rocket: 5, giant: 6, rain: 6 };
 const GHOST_STEP = 0.05;
@@ -249,6 +255,7 @@ const dust = new Dust(scene);
 const shatter = new Shatter(scene);
 const trail = new Trail(scene);
 const fireworks = new Fireworks(scene);
+const fireflies = new Fireflies(scene);
 const flame = new Dust(scene, 40); // rocket exhaust
 flame.setColor('#ff8a2a');
 const weather = new Weather(scene);
@@ -267,6 +274,8 @@ const NIGHT_SKY_VOLCANO = new THREE.Color('#2a1414');
 const RAIN_SKY = new THREE.Color('#7f8c96');
 const STORM_SKY = new THREE.Color('#e0bd85');
 const BONUS_SKY = new THREE.Color('#ffd86a');
+const SUNSET_SKY = new THREE.Color('#ff9a5a');
+const SUNSET_SUN = new THREE.Color('#ffb070');
 const MOON_LIGHT = new THREE.Color('#9fb4ff');
 const HEMI_SKY = new THREE.Color('#e6f6ff');
 const cur = {
@@ -306,7 +315,9 @@ function setBiome(i, instant) {
     far.forEach((p, k) => (p.delay = k * 0.25 + Math.random() * 0.5));
   }
 }
-setBiome(0, true);
+const menuBiome = () => (THEMES[profile.theme] || THEMES.classic).biome;
+setBiome(menuBiome(), true);
+applyThemeVars(profile.theme);
 
 // ------------------------------------------------------------------ materials (accessibility)
 const highlightMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: '#ff2a2a', emissiveIntensity: 0.45 });
@@ -459,6 +470,8 @@ let trex = null;
 let boss = null; // adventure boss: { mesh, t, drop }
 let tutorial = null;
 let nextFossilAt = 600;
+let nextBossAt = MINI_BOSS_EVERY;
+let forceKind = null; // testing: always spawn this kind of obstacle
 const weatherNotes = new Set(); // weather effects already announced this run
 
 const boneGeo = boneGeometry();
@@ -505,6 +518,23 @@ function bird(heightIndex) {
     flap: R() * 6,
     burst: '#8a5aa0',
   };
+}
+
+// a pterodactyl that swoops up and down: duck when it is high, jump when it is low
+function zigBird() {
+  const o = bird(1);
+  o.zig = true;
+  o.extra = 0;
+  o.zigPh = R() * Math.PI * 2;
+  return o;
+}
+
+// a cactus (or whatever grows in this world) hidden underground that shoots up when you get close
+function riser(biomeId) {
+  const o = groundObstacle(biomeId, true);
+  o.rise = true;
+  o.y = -2.6;
+  return o;
 }
 
 function boulder(biomeId) {
@@ -557,6 +587,33 @@ function pit() {
     root.add(rim);
   }
   return { kind: 'pit', root, boxes: [], width: w, y: 0, extra: 0, pit: w };
+}
+
+// a wide hole with a floating slab that bobs up and down; land on it or jump the whole hole
+function platform() {
+  const w = 6.2 + R() * 1.2;
+  const root = new THREE.Group();
+  const hole = new THREE.Mesh(new THREE.PlaneGeometry(w, PATH_D + 0.4), pitMat);
+  hole.rotation.x = -Math.PI / 2;
+  hole.position.set(w / 2, 0.02, 0);
+  root.add(hole);
+  for (const x of [-0.06, w + 0.06]) {
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, PATH_D + 0.4), profile.settings.highlight ? pitRimHiMat : pitRimMat);
+    rim.position.set(x, 0.04, 0);
+    root.add(rim);
+  }
+  const slab = new THREE.Mesh(platformGeometry(), voxelMaterial);
+  slab.castShadow = slab.receiveShadow = true;
+  const sx0 = (w - PLATFORM_W) / 2;
+  slab.position.set(sx0, 1.2, 0);
+  root.add(slab);
+  return { kind: 'platform', root, slab, boxes: [], width: w, y: 0, extra: 0, pit: w, sx0, sx1: sx0 + PLATFORM_W, base: 1.1 + R() * 0.3, amp: 0.65, ph: R() * 6, top: 1.2 };
+}
+
+// the platform the dino is standing over (feet inside the slab's length), or null
+function platformUnder(p) {
+  for (const o of obstacles) if (o.kind === 'platform' && o.x + o.sx0 < 0.5 && o.x + o.sx1 > -0.4) return o;
+  return null;
 }
 
 // Every obstacle is drawn once per lane (two lanes in local two-player mode);
@@ -618,16 +675,19 @@ function syncViews(o) {
 }
 
 function addCoin(x, y, vy = 0, only = null) {
-  const mat = profile.settings.highlight ? coinHighlightMat : voxelMaterial;
+  // now and then a golden bone worth ten
+  const gold = !tutorial && state === 'running' && Math.random() < 0.012;
+  const mat = gold ? goldMaterial : profile.settings.highlight ? coinHighlightMat : voxelMaterial;
   if (adv) adv.bonesSpawned++;
   for (const p of players) {
     if (only && p !== only) continue;
     const m = new THREE.Mesh(boneGeo, mat);
     m.castShadow = true;
     m.position.set(x, y, p.lane);
+    if (gold) m.scale.setScalar(1.25);
     laneLayer(m, p.index);
     scene.add(m);
-    coins.push({ m, x, y, vy, owner: p.index });
+    coins.push({ m, x, y, vy, owner: p.index, gold });
   }
 }
 
@@ -686,13 +746,13 @@ function spawnNext() {
       gapLeft = 50;
       return;
     }
-    if (boss) {
-      // during the boss fight only a few small obstacles, the rocks do the rest
-      gapLeft = speed * 2.2;
-      if (R() < 0.5) addObstacle(groundObstacle(biomeId, true));
-      coinWave(SPAWN_X + 4, 6);
-      return;
-    }
+  }
+  if (boss) {
+    // during a boss fight only a few small obstacles, the rocks do the rest
+    gapLeft = speed * 2.2;
+    if (R() < 0.5) addObstacle(groundObstacle(biomeId, true));
+    coinWave(SPAWN_X + 4, 6);
+    return;
   }
   if (event && event.type === 'bonus') {
     // bonus zone: no obstacles, just waves of bones
@@ -714,15 +774,20 @@ function spawnNext() {
     if (s > 500) opts.push(['meteor', biomeId === 'volcano' ? 0.4 : 0.06]);
     if (event && event.type === 'meteors') opts.push(['meteor', 2.5]);
     if (s > 350 && biomeId !== 'space') opts.push(['pit', 0.12]);
+    // moving obstacles
+    if (s > 650) opts.push(['riser', 0.12]);
+    if (s > 900) opts.push(['zig', 0.1]);
+    if (s > 750 && biomeId !== 'space') opts.push(['platform', 0.07]);
     let pick = R() * opts.reduce((a, b) => a + b[1], 0);
-    let kind = 'ground';
+    let kind = forceKind || 'ground';
+    if (forceKind) pick = Infinity;
     for (const [k, w] of opts) {
       if ((pick -= w) <= 0) {
         kind = k;
         break;
       }
     }
-    const make = { bird: () => bird(), boulder: () => boulder(biomeId), tumble: tumbleweed, meteor, pit, ground: () => groundObstacle(biomeId) };
+    const make = { bird: () => bird(), boulder: () => boulder(biomeId), tumble: tumbleweed, meteor, pit, ground: () => groundObstacle(biomeId), riser: () => riser(biomeId), zig: zigBird, platform };
     o = make[kind]();
   }
   addObstacle(o);
@@ -733,7 +798,10 @@ function spawnNext() {
 
   // bones: an arc over ground obstacles and pits, or a line in the gap after
   const roll = R();
-  if ((o.kind === 'ground' || o.kind === 'pit') && roll < 0.3) {
+  if (o.kind === 'platform') {
+    // a reward for whoever lands on the slab
+    for (let x = o.sx0 + 0.3; x < o.sx1; x += 0.8) addCoin(SPAWN_X + x, o.base + o.amp + 1.3);
+  } else if ((o.kind === 'ground' || o.kind === 'pit') && roll < 0.3) {
     const cx = SPAWN_X + o.width / 2;
     for (let k = -3; k <= 3; k++) addCoin(cx + k * 0.95, 1.1 + 2.6 * (1 - (k / 3.6) ** 2));
   } else if (roll < 0.65 || o.tutorial) {
@@ -789,7 +857,7 @@ function clearance(p, o) {
 
 // true when both feet are over a hole
 function overPit() {
-  for (const o of obstacles) if (o.kind === 'pit' && o.x < -0.55 && o.x + o.pit > 0.05) return true;
+  for (const o of obstacles) if ((o.kind === 'pit' || o.kind === 'platform') && o.x < -0.55 && o.x + o.pit > 0.05) return true;
   return false;
 }
 
@@ -862,6 +930,7 @@ function resetPlayer(p) {
     chain: 0,
     slip: 0,
     giantK: 1,
+    plat: null,
   });
   p.input.jump = p.input.duck = false;
   for (const k of Object.keys(p.power)) p.power[k] = 0;
@@ -894,6 +963,7 @@ const comboMult = (p) => 1 + Math.min(4, Math.floor(p.chain / 10));
 let adv = null; // adventure level being played
 
 function resetRun(seed) {
+  stopDance();
   clearTrack();
   shatter.clear();
   trail.clear();
@@ -912,6 +982,7 @@ function resetRun(seed) {
   nextBombAt = 200 + R() * 100;
   nextEventAt = 900 + R() * 600;
   nextFossilAt = 350 + R() * 500;
+  nextBossAt = MINI_BOSS_EVERY;
   slowK = 1;
   speedBoost = 1;
   for (const p of players) resetPlayer(p);
@@ -1125,6 +1196,12 @@ function finishRun() {
     mode,
   });
   celebrate(res);
+  // a new record: the dino pulls itself together and dances
+  if (res.isRecord && res.s > 0 && mode !== 'lan' && !isLocal()) {
+    player.y = 0;
+    player.inPit = false;
+    startDance();
+  }
   // in a LAN race, keep watching the others until everyone is out
   if (mode === 'lan' && lan && lan.others().some((r) => r.a)) {
     state = 'spectate';
@@ -1136,13 +1213,14 @@ function finishRun() {
 // adventure: crossing the finish line
 function winLevel() {
   state = 'won';
-  const s = scoreLevel(run.coins, adv.bonesSpawned, adv.hits);
+  const s = scoreLevel(adv.bonesTaken || 0, adv.bonesSpawned, adv.hits);
   const reward = saveLevel(adv.world, adv.level, s);
   if (adv.boss) profile.stats.bosses++;
   const res = recordRun(player.points);
   sfx.reward();
   music.stop(0.6);
-  ui.showWin({ stars: s, reward, adv, coins: run.coins, spawned: adv.bonesSpawned, hits: adv.hits, xp: Math.floor(res.xp.gained) });
+  startDance();
+  ui.showWin({ stars: s, reward, adv, coins: adv.bonesTaken || 0, spawned: adv.bonesSpawned, hits: adv.hits, xp: Math.floor(res.xp.gained) });
   celebrate(res);
 }
 
@@ -1171,6 +1249,35 @@ function endZen() {
   finishRun();
 }
 
+// the menu plays the theme's song once the audio is unlocked (after the first tap)
+function menuMusic() {
+  if (state !== 'menu' || !profile.settings.menuMusic || !profile.settings.music) return;
+  music.biome = (THEMES[profile.theme] || THEMES.classic).song;
+  music.rate = 0.92;
+  music.start();
+}
+addEventListener('pointerdown', () => state === 'menu' && !music.playing && (sfx.unlock(), menuMusic()), { capture: true });
+
+// ------------------------------------------------------------------ victory dance
+let dance = null; // { id, t, until }
+function startDance(until) {
+  const d = player.dino;
+  d.root.visible = true;
+  for (const m of d.deadMeshes) m.visible = false;
+  player.ducking = false;
+  d.stand.visible = true;
+  d.duck.visible = false;
+  dance = { id: profile.dance, t: 0, until };
+}
+function stopDance() {
+  if (!dance) return;
+  dance = null;
+  const r = player.dino.root;
+  r.rotation.set(0, 0, 0);
+  r.scale.setScalar(player.giantK || 1);
+  r.position.x = 0;
+}
+
 function toMenu() {
   if (lan) leaveLan();
   mode = 'solo';
@@ -1190,8 +1297,10 @@ function toMenu() {
   setPlayerCount(1);
   resetPlayer(player);
   player.shield.visible = false;
-  if (env.biome !== 0) setBiome(0, true);
+  stopDance();
+  if (env.biome !== menuBiome()) setBiome(menuBiome(), true);
   music.stop(0.2);
+  setTimeout(menuMusic, 300);
   ui.hideRevive();
   ui.photoMode(false);
   ui.setPlaying(false);
@@ -1227,14 +1336,14 @@ function endEvent(silent) {
 
 // ------------------------------------------------------------------ adventure boss
 // a giant pterodactyl that circles above the track and drops burning rocks
-function startBoss() {
+function startBoss(dur = adv ? adv.bossTime : MINI_BOSS_TIME) {
   const b = createPtero();
   b.root.scale.setScalar(3.4);
   b.root.position.set(30, 7, -3);
   b.root.rotation.y = 0;
   scene.add(b.root);
-  boss = { ...b, t: adv.bossTime, drop: 1.5, phase: 0 };
-  ui.toast(t('bossArrives'), 'red');
+  boss = { ...b, t: dur, dur, drop: 1.5, phase: 0, mini: !adv };
+  ui.toast(t(adv ? 'bossArrives' : 'miniBossArrives'), 'red');
   ui.bossBar(1);
   sfx.boom();
   shake = 0.4;
@@ -1267,24 +1376,31 @@ function updateBoss(dt) {
   boss.root.position.y = 7 + Math.sin(boss.phase * 1.3) * 0.8;
   boss.t -= dt;
   boss.drop -= dt;
-  ui.bossBar(Math.max(0, boss.t / adv.bossTime));
+  ui.bossBar(Math.max(0, boss.t / boss.dur));
   if (boss.drop <= 0 && boss.t > 1.5) {
     boss.drop = 1.1 + R() * 0.7;
     // far enough ahead that the red warning is visible before the rock lands
     addObstacle(meteor(), 32 + R() * 8);
   }
   if (boss.t <= 0) {
-    adv.bossDone = true;
+    const mini = boss.mini;
+    if (adv) adv.bossDone = true;
     endBoss(false);
     ui.bossBar(null);
-    ui.toast(t('bossDefeated'), 'gold');
     sfx.reward();
+    if (mini) {
+      // survived the mini-boss: a handful of bones
+      nextBossAt = score + MINI_BOSS_EVERY;
+      giveBone(player, 25);
+      run.miniBosses = (run.miniBosses || 0) + 1;
+      ui.toast(t('miniBossDone', { n: 25 }), 'gold');
+    } else ui.toast(t('bossDefeated'), 'gold');
   }
 }
 
 function updateEvent(dt) {
   if (!event) {
-    if (!tutorial && !adv && score > nextEventAt && (mode !== 'lan' || lanMode !== 'elimination')) startEvent();
+    if (!tutorial && !adv && !boss && score > nextEventAt && (mode !== 'lan' || lanMode !== 'elimination')) startEvent();
   } else {
     event.t -= dt;
     if (event.type === 'trex') speedBoost = 1.15;
@@ -1312,6 +1428,7 @@ function vibrate(pattern) {
 function doJump(p) {
   p.vy = JUMP_V * feat.jump;
   p.onGround = false;
+  p.plat = null;
   p.jumpReleased = !p.input.jump;
   p.jumpBuffer = 0;
   p.airJumps = 0;
@@ -1756,10 +1873,11 @@ function updateWorld(dt, v) {
 
   // day / night
   nightTimer = Math.max(0, nightTimer - (state === 'running' ? dt : 0));
-  night += clamp((nightTimer > 0 ? 1 : 0) - night, -dt / 1.5, dt / 1.5);
+  night += clamp((nightTimer > 0 ? 1 : 0) - night, -dt / 4, dt / 4); // dusk and dawn take a few seconds
   const nightSky = env.biome === 6 ? NIGHT_SKY_VOLCANO : NIGHT_SKY;
   const n = night * (1 - feat.dark) * (1 - feat.stars); // no extra night in the cave or in space
-  scene.background.copy(cur.sky).lerp(RAIN_SKY, rain * 0.35).lerp(STORM_SKY, storm * 0.45).lerp(nightSky, n).lerp(BONUS_SKY, bonusTint * 0.5);
+  const dusk = Math.sin(Math.PI * clamp(n, 0, 1)) * (1 - feat.stars); // orange sky on the way into the night and out of it
+  scene.background.copy(cur.sky).lerp(SUNSET_SKY, dusk * 0.55).lerp(RAIN_SKY, rain * 0.35).lerp(STORM_SKY, storm * 0.45).lerp(nightSky, n * n).lerp(BONUS_SKY, bonusTint * 0.5);
   scene.fog.color.copy(scene.background);
   scene.fog.near = lerp(lerp(40, 12, storm), 8, feat.dark);
   scene.fog.far = lerp(lerp(120, 50, storm), 42, feat.dark);
@@ -1770,7 +1888,8 @@ function updateWorld(dt, v) {
   hemi.intensity = lerp(1.7, 0.45, n) * (1 - rain * 0.2) * dim;
   hemi.color.copy(HEMI_SKY).lerp(nightSky, n * 0.3);
   sun.intensity = lerp(2.6, 0.9, n) * (1 - rain * 0.35) * dim;
-  sun.color.copy(cur.sun).lerp(MOON_LIGHT, n);
+  sun.color.copy(cur.sun).lerp(SUNSET_SUN, dusk * 0.6).lerp(MOON_LIGHT, n * n);
+  fireflies.update(dt, v, BIOMES[env.biome].id === 'space' ? 0 : Math.max(clamp((n - 0.4) / 0.4, 0, 1), feat.dark * 0.8));
   cloudMat.color.copy(cur.cloud);
   cloudMat.emissiveIntensity = lerp(0.35, 0.02, n);
   cloudMat.opacity = 1 - feat.noClouds;
@@ -1800,7 +1919,7 @@ let bonusTint = 0;
 
 function landingPuff(p) {
   for (let i = 0; i < 8; i++)
-    dust.puff(-0.6 + Math.random() * 1.2, 0.05, p.lane + (Math.random() - 0.5) * 0.9, (Math.random() - 0.5) * 3, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 3);
+    dust.puff(-0.6 + Math.random() * 1.2, p.y + 0.05, p.lane + (Math.random() - 0.5) * 0.9, (Math.random() - 0.5) * 3, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 3);
 }
 
 function shieldRescue(p) {
@@ -1841,6 +1960,23 @@ function note(key) {
   ui.toast(t(key), 'gold');
 }
 
+function land(p) {
+  p.vy = 0;
+  p.onGround = true;
+  p.inPit = false;
+  p.fullJump = false;
+  p.gliding = false;
+  if (p.pounding) shockwave(p);
+  p.pounding = false;
+  landingPuff(p);
+  // snow world: icy ground, the dino slides a moment before it can jump again
+  if (BIOMES[env.biome].id === 'snow') {
+    p.slip = 0.2;
+    note('weatherIce');
+  }
+  if (p.jumpBuffer > 0 && p.slip <= 0) doJump(p);
+}
+
 function updatePlayer(p, dt) {
   if (!p.alive) return;
   p.slip = Math.max(0, p.slip - dt);
@@ -1857,7 +1993,19 @@ function updatePlayer(p, dt) {
     p.invuln = Math.max(p.invuln, 0.8); // a moment to land safely
   }
   const giant = p.power.giant > 0;
-  if (p.onGround && !giant && overPit()) {
+  if (p.plat) {
+    // riding the moving slab, until it slides out from under the feet
+    const o = p.plat;
+    if (p.onGround && obstacles.includes(o) && o.x + o.sx0 < 0.5 && o.x + o.sx1 > -0.4) p.y = o.top;
+    else {
+      p.plat = null;
+      if (p.onGround) {
+        p.onGround = false;
+        p.vy = 0;
+      }
+    }
+  }
+  if (p.onGround && !p.plat && !giant && overPit()) {
     p.onGround = false;
     p.inPit = true;
     p.vy = 0;
@@ -1872,8 +2020,15 @@ function updatePlayer(p, dt) {
     }
     if (p.jumpReleased && !p.fullJump && p.vy > CUT_V * feat.jump && p.y > MIN_JUMP_H) p.vy = CUT_V * feat.jump;
     p.vy -= g * dt;
+    const prevY = p.y;
     p.y += p.vy * dt;
-    if (p.y <= 0) {
+    const pl = p.vy <= 0 && !p.inPit ? platformUnder(p) : null;
+    if (pl && p.y <= pl.top && prevY >= pl.top - 0.3) {
+      // landed on a moving platform (only from above)
+      p.y = pl.top;
+      p.plat = pl;
+      land(p);
+    } else if (p.y <= 0) {
       const holeBelow = !giant && overPit();
       if (holeBelow || (p.inPit && p.y < -0.05)) {
         // falling into a pit (or hitting its far wall after it scrolled past)
@@ -1884,20 +2039,7 @@ function updatePlayer(p, dt) {
         }
       } else {
         p.y = 0;
-        p.vy = 0;
-        p.onGround = true;
-        p.inPit = false;
-        p.fullJump = false;
-        p.gliding = false;
-        if (p.pounding) shockwave(p);
-        p.pounding = false;
-        landingPuff(p);
-        // snow world: icy ground, the dino slides a moment before it can jump again
-        if (BIOMES[env.biome].id === 'snow') {
-          p.slip = 0.2;
-          note('weatherIce');
-        }
-        if (p.jumpBuffer > 0 && p.slip <= 0) doJump(p);
+        land(p);
       }
     }
   }
@@ -1923,7 +2065,7 @@ function animateDino(d, p, dt, moving) {
   d.stand.visible = !p.ducking;
   d.duck.visible = !!p.ducking;
   if (moving) {
-    if (p.y <= 0.001 && !p.inPit) {
+    if ((p.onGround ?? p.y <= 0.001) && !p.inPit) {
       p.legPhase = (p.legPhase || 0) + dt * speed * slowK * 1.15;
       const a = Math.sin(p.legPhase) * 0.75;
       d.legs[0].rotation.z = a;
@@ -1952,6 +2094,28 @@ function updateObstacles(dt, v) {
       o.wings[0].pivot.rotation.x = -a;
       o.wings[1].pivot.rotation.x = a;
       o.root.position.y = o.y + Math.sin(o.flap) * 0.05;
+    }
+    if (o.zig) {
+      o.zigPh += dt * 2.1;
+      o.y = 2.05 + Math.sin(o.zigPh) * 1.25;
+      o.root.position.y = o.y + Math.sin(o.flap) * 0.05;
+    }
+    if (o.rise) {
+      // the ground trembles, then the obstacle shoots up
+      if (o.x < 24 && !o.rumbled) {
+        o.rumbled = true;
+        for (let k = 0; k < 12; k++) dust.puff(o.x + Math.random() * o.width, 0.1, players[0].lane + (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 3, 1 + Math.random() * 2, (Math.random() - 0.5) * 2);
+      }
+      if (o.x < 16 && o.y < 0) {
+        o.y = Math.min(0, o.y + dt * 10);
+        if (o.y === 0) sfx.tone(140, 0.12, { to: 260, vol: 0.06 });
+      }
+      o.root.position.y = o.y;
+    }
+    if (o.kind === 'platform') {
+      o.ph += dt * 1.5;
+      o.top = o.base + Math.sin(o.ph) * o.amp;
+      o.slab.position.y = o.top;
     }
     if (o.kind === 'boulder') o.spin.rotation.z += ((v + o.extra) * dt) / BOULDER_RADIUS;
     if (o.kind === 'tumble') {
@@ -2068,8 +2232,8 @@ function hitCheck(p) {
   }
 }
 
-function giveBone(p) {
-  let n = (Math.random() < doubleBoneChance() ? 2 : 1) * rules().bones;
+function giveBone(p, value = 1) {
+  let n = value * (Math.random() < doubleBoneChance() ? 2 : 1) * rules().bones;
   n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); // zen counts a quarter of the bones
   if (p === player || isLocal()) {
     run.coins += n;
@@ -2102,7 +2266,7 @@ function updatePickups(dt, v) {
       c.y += (dy / d) * step;
     }
     c.m.position.set(c.x, c.y, p ? p.lane : 0);
-    c.m.rotation.y += dt * 4;
+    c.m.rotation.y += dt * (c.gold ? 7 : 4);
     // the baby pterodactyl catches bones a bit above and ahead of the dino
     const reach = p === player && pet && pet.kind === 'ptera' ? 1.4 : 0;
     const top = p ? p.y + (p.ducking ? 1.7 : 2.9) * p.giantK + reach : 0;
@@ -2110,7 +2274,17 @@ function updatePickups(dt, v) {
     if (p && p.alive && state === 'running' && c.x > -0.8 && c.x < front + reach * 0.4 && c.y > p.y - 0.2 && c.y < top) {
       scene.remove(c.m);
       coins.splice(i, 1);
-      giveBone(p);
+      if (adv && p === player) adv.bonesTaken = (adv.bonesTaken || 0) + 1;
+      if (c.gold) {
+        giveBone(p, GOLD_BONE_VALUE);
+        if (p === player) {
+          run.goldBones = (run.goldBones || 0) + 1;
+          profile.stats.goldBones = (profile.stats.goldBones || 0) + 1;
+          ui.toast(t('goldBone', { n: GOLD_BONE_VALUE }), 'gold');
+          sfx.reward();
+        }
+        for (let k = 0; k < 10; k++) dust.puff(0.3, c.y, p.lane, (Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 4);
+      } else giveBone(p);
     } else if (c.x < DESPAWN_X) {
       scene.remove(c.m);
       coins.splice(i, 1);
@@ -2370,7 +2544,7 @@ function beginCountdown(seed, m) {
   let lane = 0;
   for (const p of lan.lobby) {
     if (p.id === lan.me.id || lane >= RIVAL_LANES.length) continue;
-    const d = createDino(SKINS[p.skin] ? p.skin : 'classic', HATS[p.hat] ? p.hat : 'none');
+    const d = createDino(SKINS[p.skin] && p.skin !== 'custom' ? p.skin : 'classic', HATS[p.hat] ? p.hat : 'none');
     const label = makeLabel(p.name);
     d.root.position.z = RIVAL_LANES[lane];
     scene.add(d.root, label);
@@ -2522,8 +2696,8 @@ function update(rawDt) {
       if (adv.bossDone && adv.finishAt == null) adv.finishAt = score + 160;
       const total = adv.boss ? (adv.finishAt ?? adv.length) : adv.length;
       ui.advProgress(clamp(score / total, 0, 1));
-      updateBoss(dt);
-    }
+    } else if (!boss && !event && !tutorial && mode !== 'lan' && score >= nextBossAt && state === 'running') startBoss();
+    updateBoss(dt);
     if (daily && player.alive && player.points >= daily.target && !daily.rewarded) {
       daily.rewarded = true;
       const reward = completeDaily();
@@ -2580,6 +2754,11 @@ function update(rawDt) {
     player.dino.root.position.y = Math.abs(Math.sin(time * 2.2)) * 0.08;
     player.dino.root.rotation.y = shopBlend * Math.sin(time * 0.8) * 0.6;
   } else player.dino.root.rotation.y = 0;
+  if (dance) {
+    dance.t += rawDt;
+    danceDino(player.dino, dance.id, dance.t);
+    if (dance.until && dance.t > dance.until) stopDance();
+  }
   // the trail streams from the tail of player 1
   const tp = player;
   trail.update(dt, profile.trail, -1.3 * tp.giantK, tp.y + 1.2 * tp.giantK, tp.lane, v, live && tp.alive && !frozen && tp.dino.root.visible);
@@ -2723,6 +2902,21 @@ const game = {
   get mode() {
     return mode;
   },
+  previewDance: (id) => {
+    if (state !== 'menu') return;
+    startDance(3.2);
+    dance.id = id;
+  },
+  applyTheme: (id) => {
+    applyThemeVars(id);
+    const th = THEMES[id] || THEMES.classic;
+    if (state === 'menu') {
+      if (env.biome !== th.biome) setBiome(th.biome, false);
+      music.biome = th.song;
+    }
+  },
+  setCustomSkin: (def) => setCustomSkin(def),
+  menuMusic: () => (profile.settings.menuMusic ? menuMusic() : state === 'menu' && music.stop(0.2)),
   previewDino: (skin, hat, petId) => {
     rebuildDino(player, skin, hat);
     if (petId !== undefined && petId !== null) setPet(petId);
@@ -2835,4 +3029,8 @@ window.__dino = {
   game,
   RIG,
   night: (on) => (nightTimer = on ? 999 : 0),
+  force: (k) => (forceKind = k),
+  set nextBossAt(v) {
+    nextBossAt = v;
+  },
 };

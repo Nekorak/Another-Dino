@@ -7,6 +7,8 @@ import { ADV_LEVELS, stars as advStars, unlocked as advUnlocked, totalStars } fr
 import { TRAILS, FOSSIL_KINDS, FOSSIL_WORLD_REWARD, fossilId, fossilPixels, allFossils } from './collection.js';
 import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImage, CameraScanner, LanSync } from './transfer.js';
 import { save, resetProgress } from './save.js';
+import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
+import { skinEditorView } from './editor.js';
 import { missionProgress, ACHIEVEMENTS } from './missions.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -56,6 +58,22 @@ const ICON = [
 ];
 function dinoIcon(skin) {
   const s = SKINS[skin];
+  if (skin === 'custom') {
+    // the painted side view, as drawn in the editor
+    const c = document.createElement('canvas');
+    c.className = 'dino-icon';
+    c.width = EDITOR_GRID[0].length;
+    c.height = EDITOR_GRID.length;
+    const g = c.getContext('2d');
+    for (let r = 0; r < c.height; r++)
+      for (let x = 0; x < c.width; x++) {
+        const col = editorCell(s, x, r);
+        if (!col) continue;
+        g.fillStyle = col;
+        g.fillRect(x, r, 1, 1);
+      }
+    return c;
+  }
   const c = document.createElement('canvas');
   c.width = 16;
   c.height = 14;
@@ -69,6 +87,32 @@ function dinoIcon(skin) {
       g.fillRect(x, y, 1, 1);
     }
   });
+  return c;
+}
+
+// a dino that does a little of its dance (CSS animation)
+function danceIcon(id, skin) {
+  const c = dinoIcon(SKINS[skin] ? skin : 'classic');
+  c.classList.add('dance-icon', 'dance-' + id);
+  return c;
+}
+
+// the theme's sheet, line and accent colours as a small flag
+function themeIcon(id) {
+  const v = THEMES[id].vars;
+  const c = document.createElement('canvas');
+  c.className = 'dino-icon';
+  c.width = 12;
+  c.height = 10;
+  const g = c.getContext('2d');
+  g.fillStyle = v['--line'] || '#3b3326';
+  g.fillRect(0, 0, 12, 10);
+  g.fillStyle = v['--sheet'] || '#fff8ea';
+  g.fillRect(1, 1, 10, 8);
+  g.fillStyle = v['--accent'] || '#5fae3e';
+  g.fillRect(2, 5, 8, 3);
+  g.fillStyle = v['--sheet-ink'] || '#3b3326';
+  g.fillRect(2, 2, 5, 1);
   return c;
 }
 
@@ -514,7 +558,7 @@ export class UI {
     $('panel').classList.remove('hidden');
     $('panel').dataset.panel = name;
     document.body.classList.add('panel-open');
-    if (name === 'shop') this.preview = { skin: this.p.skin, hat: this.p.hat, pet: this.p.pet, trail: this.p.trail };
+    if (name === 'shop') this.preview = { skin: this.p.skin, hat: this.p.hat, pet: this.p.pet, trail: this.p.trail, dance: this.p.dance, theme: this.p.theme };
     if (name === 'lan') this.lanView = this.g.lan && this.g.lan.role !== 'idle' ? this.lanView : 'home';
     this.renderPanel();
     if (name === 'lan') this.startLan();
@@ -525,14 +569,18 @@ export class UI {
     this.panel = null;
     $('panel').classList.add('hidden');
     document.body.classList.remove('panel-open');
-    if (was === 'shop' && (this.preview.skin !== this.p.skin || this.preview.hat !== this.p.hat || this.preview.pet !== this.p.pet)) this.g.previewDino(this.p.skin, this.p.hat, this.p.pet);
+    if ((was === 'shop' || was === 'editor') && (this.preview.skin !== this.p.skin || this.preview.hat !== this.p.hat || this.preview.pet !== this.p.pet || was === 'editor')) {
+      if (was === 'editor') this.g.setCustomSkin(this.p.customSkin); // leaving without saving
+      this.g.previewDino(this.p.skin, this.p.hat, this.p.pet);
+    }
+    if (was === 'shop' && this.preview.theme !== this.p.theme) this.g.applyTheme(this.p.theme); // only tried on
     if (!silent) this.menuInfo();
     if (was === 'lan' && !silent) this.g.lanLeave();
     if (was === 'transfer') this.stopTransfer();
     if (!silent && this.g.state === 'menu') $('menu').classList.remove('hidden');
   }
   renderPanel() {
-    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer' };
+    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
@@ -546,6 +594,11 @@ export class UI {
       adventure: () => this.adventureView(),
       album: () => this.albumView(),
       transfer: () => this.transferView(),
+      editor: () =>
+        skinEditorView(this, () => {
+          this.shopTab = 'skin';
+          this.openPanel('shop');
+        }),
     }[this.panel];
     const scroll = body.scrollTop;
     body.replaceChildren(render());
@@ -555,7 +608,7 @@ export class UI {
   // ------------------------------------------------------------ shop
   shopView() {
     const p = this.p;
-    const TABS = { skin: 'shopSkins', hat: 'shopHats', pet: 'shopPets', trail: 'shopTrails', upgrade: 'shopUpgrades' };
+    const TABS = { skin: 'shopSkins', hat: 'shopHats', pet: 'shopPets', trail: 'shopTrails', dance: 'shopDances', theme: 'shopThemes', upgrade: 'shopUpgrades' };
     const tabs = el(
       'div',
       { class: 'tabs' },
@@ -572,16 +625,17 @@ export class UI {
     );
     if (this.shopTab === 'upgrade') return el('div', {}, tabs, this.upgradesView());
     const kind = this.shopTab;
-    const list = { skin: SKINS, hat: HATS, pet: PETS, trail: TRAILS }[kind];
+    const list = { skin: SKINS, hat: HATS, pet: PETS, trail: TRAILS, dance: DANCES, theme: THEMES }[kind];
     const owned = p.owned[kind];
     const grid = el('div', { class: 'cards' });
-    if (kind !== 'trail') grid.append(this.eggCard());
+    if (kind === 'skin' || kind === 'hat' || kind === 'pet') grid.append(this.eggCard());
     for (const [id, item] of Object.entries(list)) {
       if (item.hidden) continue;
       const have = owned.includes(id);
-      const status = id === p[kind] ? t('equipped') : have ? t('owned') : null;
+      const status = item.editor && have ? t('edOpen') : id === p[kind] ? t('equipped') : have ? t('owned') : null;
       if ((item.season || item.album) && !have) continue; // gifts are shown once you have them
-      const icon = kind === 'skin' ? dinoIcon(id) : kind === 'hat' ? hatIcon(id) : kind === 'pet' ? petIcon(id) : trailIcon(id);
+      const icon =
+        kind === 'skin' ? dinoIcon(id) : kind === 'hat' ? hatIcon(id) : kind === 'pet' ? petIcon(id) : kind === 'dance' ? danceIcon(id, p.skin) : kind === 'theme' ? themeIcon(id) : trailIcon(id);
       const price = item.level
         ? el('span', { class: 'card-price' }, t('levelShort', { n: item.level }))
         : el('span', { class: 'card-price' }, bone(), ' ' + item.price);
@@ -658,6 +712,9 @@ export class UI {
     const p = this.p;
     const selected = this.preview[kind] === id;
     this.preview[kind] = id;
+    if (kind === 'dance') this.g.previewDance(id);
+    if (kind === 'theme') this.g.applyTheme(id);
+    if (item.editor && have && selected) return this.openPanel('editor');
     if (have) {
       p[kind] = id;
       save();
@@ -674,6 +731,7 @@ export class UI {
         this.g.sfx.reward();
         this.toast(t('bought'), 'gold');
         this.g.lanSetLook();
+        if (item.editor) return this.openPanel('editor');
       } else {
         this.toast(t('notEnough'), 'red');
       }
@@ -1067,6 +1125,12 @@ export class UI {
       this.g.isTouch ? null : this.keyRow('keyJump'),
       this.g.isTouch ? null : this.keyRow('keyDuck'),
       toggle('seasons'),
+      this.row(t('set_menuMusic'), s.menuMusic ? t('on') : t('off'), () => {
+        s.menuMusic = !s.menuMusic;
+        save();
+        this.g.menuMusic();
+        this.renderPanel();
+      }),
       this.row(t('transfer'), t('open'), () => this.openPanel('transfer')),
       this.g.isApp ? this.updateRow() : null,
       reset,

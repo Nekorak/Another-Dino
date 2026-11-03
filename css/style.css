@@ -1799,3 +1799,109 @@ body.over #perfects {
     height: 26px;
   }
 }
+
+/* ------------------------------------------------------------ v1.3: skin editor, dances, themes */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.editor-grid {
+  width: min(100%, 330px);
+  aspect-ratio: 22 / 20;
+  align-self: center;
+  image-rendering: pixelated;
+  touch-action: none;
+  cursor: crosshair;
+  background:
+    linear-gradient(45deg, rgba(0, 0, 0, 0.06) 25%, transparent 25%, transparent 75%, rgba(0, 0, 0, 0.06) 75%),
+    linear-gradient(45deg, rgba(0, 0, 0, 0.06) 25%, transparent 25%, transparent 75%, rgba(0, 0, 0, 0.06) 75%);
+  background-size: calc(100% / 11) calc(100% / 10);
+  background-position: 0 0, calc(100% / 22) calc(100% / 20);
+  border: 3px solid var(--line);
+}
+.editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.editor-tools .chip {
+  padding: 8px 8px;
+  border: 2px solid var(--line);
+  background: transparent;
+  color: var(--sheet-ink);
+  font: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+.editor-tools .chip[style*='--c']::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  background: var(--c);
+  border: 1px solid var(--line);
+  vertical-align: -1px;
+}
+.editor-tools .chip.on {
+  background: var(--line);
+  color: var(--sheet);
+}
+.editor-palette {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+.editor-palette .swatch {
+  aspect-ratio: 1;
+  border: 2px solid var(--line);
+  cursor: pointer;
+  padding: 0;
+}
+.editor-palette .swatch.on {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.dance-icon {
+  animation: dance-hop 0.6s steps(4) infinite;
+}
+.dance-spin {
+  animation-name: dance-spin;
+}
+.dance-wiggle {
+  animation-name: dance-wiggle;
+}
+.dance-flip {
+  animation: dance-flip 1.2s steps(8) infinite;
+}
+.dance-moonwalk {
+  animation: dance-moon 1.6s steps(8) infinite;
+}
+.dance-disco {
+  animation: dance-disco 0.8s steps(4) infinite;
+}
+@keyframes dance-hop {
+  50% { transform: translateY(-5px); }
+}
+@keyframes dance-spin {
+  50% { transform: scaleX(-1) translateY(-4px); }
+}
+@keyframes dance-wiggle {
+  25% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
+}
+@keyframes dance-flip {
+  60%, 100% { transform: rotate(-360deg); }
+}
+@keyframes dance-moon {
+  50% { transform: translateX(-8px); }
+}
+@keyframes dance-disco {
+  25% { transform: rotate(-8deg) scale(1.1); filter: hue-rotate(90deg); }
+  75% { transform: rotate(8deg) scale(1.1); filter: hue-rotate(250deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dance-icon { animation: none; }
+}

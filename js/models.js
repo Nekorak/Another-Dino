@@ -20,6 +20,8 @@ export const SKINS = {
   rainbow: { level: 20, body: '#ff4f5a', dark: '#c8303a', belly: '#ffffff', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#3a3a3a', foot: '#5a5a5a', pattern: 'rainbow' },
   // reward for completing the fossil album
   fossil: { album: true, body: '#e8d8a8', dark: '#b8a070', belly: '#fff4d0', eye: '#1b1b1b', pupil: '#ffd23f', mouth: '#5a4a2a', foot: '#a89060', pattern: 'ribs' },
+  // painted by the player in the skin editor (colours and paint come from the profile)
+  custom: { price: 300, editor: true, body: '#5fae3e', dark: '#467f2c', belly: '#cfe39a', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#2b4a1c', foot: '#3b6b26', paint: {} },
   // the giant that chases you during the T-rex event (not in the shop)
   trex: { hidden: true, body: '#3f5a2a', dark: '#2a3d1c', belly: '#7a8a4a', eye: '#ffcf3a', pupil: '#c8102e', mouth: '#1a2410', foot: '#2a3d1c' },
 };
@@ -66,7 +68,7 @@ export const HATS = {
 
 // ---------------------------------------------------------------- dino grids
 // Facing +x. 'A' arm (only on the outer layers), 'B' belly, 'W'/'K' eye, 'M' mouth.
-const DINO_STAND = [
+export const DINO_STAND = [
   '             GGGGGGGG ',
   '            GGGGGGGGGG',
   '            GGWWGGGGGG',
@@ -135,6 +137,15 @@ function skinColor(s, ch, x, y, z, half) {
   }
 }
 
+// The skin editor paints on the side view of the standing dino; the crouching pose
+// reuses the painted head (same rows, moved 8 columns to the right).
+function paintAt(skin, grid, x, r) {
+  if (!skin.paint) return null;
+  if (grid === DINO_STAND) return skin.paint[x + ',' + r] || null;
+  if (x >= 20 && r <= 5) return skin.paint[x - 8 + ',' + (r === 5 ? 6 : r)] || null;
+  return null;
+}
+
 function bodyVoxels(grid, headFromX, headRows, skin) {
   const vs = new VoxelSet();
   const H = grid.length;
@@ -144,7 +155,10 @@ function bodyVoxels(grid, headFromX, headRows, skin) {
       const h = half(x, H - 1 - y);
       return [-h, h];
     },
-    color: (ch, x, y, z) => skinColor(skin, ch, x, y + LEG_H, z, half(x, H - 1 - y)),
+    color: (ch, x, y, z) => {
+      const c = skinColor(skin, ch, x, y + LEG_H, z, half(x, H - 1 - y));
+      return c == null ? null : paintAt(skin, grid, x, H - 1 - y) || c;
+    },
     dy: LEG_H,
   });
   // darker ridge along the spine
@@ -262,6 +276,14 @@ function hatGeometry(id) {
 
 // ---------------------------------------------------------------- dino
 const dinoCache = new Map();
+
+// the editor saved new colours or paint: rebuild the custom dino next time it is made
+export function setCustomSkin(def) {
+  if (!def) return;
+  for (const k of ['body', 'dark', 'belly', 'eye', 'pupil', 'mouth', 'foot']) if (def[k]) SKINS.custom[k] = def[k];
+  SKINS.custom.paint = { ...(def.paint || {}) };
+  dinoCache.delete('custom');
+}
 function dinoGeometries(skinId) {
   if (dinoCache.has(skinId)) return dinoCache.get(skinId);
   const skin = SKINS[skinId] || SKINS.classic;

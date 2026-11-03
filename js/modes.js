@@ -78,11 +78,13 @@ export class BotBrain {
       const miss = Math.random() < this.cfg.miss;
       const lead = (speed + (ahead.extra || 0)) * 0.2 + 1.2 + (Math.random() - 0.5) * this.cfg.jitter * 4;
       let act = 'jump';
-      if (ahead.kind === 'bird') act = ahead.y > 3 ? null : ahead.y > 1.5 ? 'duck' : 'jump';
-      this.plan.set(ahead, { act: miss ? (act === 'duck' ? 'jump' : null) : act, lead: ahead.kind === 'pit' ? lead - 0.3 : act === 'duck' ? lead + 2 : lead });
+      if (ahead.kind === 'bird' && !ahead.zig) act = ahead.y > 3 ? null : ahead.y > 1.5 ? 'duck' : 'jump';
+      this.plan.set(ahead, { act: miss ? (act === 'duck' ? 'jump' : null) : act, lead: ahead.kind === 'pit' || ahead.kind === 'platform' ? lead - 0.3 : act === 'duck' ? lead + 2 : lead });
       if (this.plan.size > 12) this.plan.delete(this.plan.keys().next().value);
     }
     const pl = this.plan.get(ahead);
+    // a swooping pterodactyl: decide at the last moment from where it is now
+    if (ahead.zig && pl.act) return ahead.x < pl.lead && ahead.x > -1 ? (ahead.y > 1.7 ? 'duck' : 'jump') : null;
     if (!pl.act) return null;
     if (ahead.x < pl.lead && ahead.x > -1) return pl.act;
     return null;
