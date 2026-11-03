@@ -1191,6 +1191,8 @@ export class UI {
           text: t('xferApply'),
           onclick: () => {
             mergeProgress(data);
+            this.g.setCustomSkin(this.p.customSkin);
+            this.g.applyTheme(this.p.theme);
             this.g.previewDino(this.p.skin, this.p.hat, this.p.pet);
             this.g.applySettings();
             this.toast(t('xferDone'), 'gold');
@@ -1450,7 +1452,7 @@ export class UI {
         'div',
         { class: 'room' },
         el('span', { text: `${r.name} (${r.n}/${MAX_PLAYERS})` }),
-        r.st === 'race' || r.n >= 4
+        r.st === 'race' || r.n >= MAX_PLAYERS
           ? el('span', { class: 'muted', text: r.st === 'race' ? t('mpRacing') : t('mpFull') })
           : el('button', {
               text: t('mpJoin'),

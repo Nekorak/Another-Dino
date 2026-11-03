@@ -7,6 +7,7 @@ import { profile, save } from './save.js';
 import { SKINS, HATS, PETS } from './models.js';
 import { TRAILS, allFossils } from './collection.js';
 import { ACHIEVEMENTS } from './missions.js';
+import { DANCES, THEMES, EDITOR_GRID, EDITOR_PALETTE } from './custom.js';
 import { UPGRADES } from './progress.js';
 import qrcode from 'qrcode';
 
@@ -14,6 +15,8 @@ const HEADER = 'ANOTHERDINO';
 const STAT_KEYS = [
   'games', 'distance', 'jumps', 'ducks', 'coins', 'best', 'time', 'powerups', 'obstacles', 'meteors', 'maxBiome',
   'mpGames', 'mpWins', 'revives', 'dailies', 'pounds', 'eggs', 'perfects', 'bestCombo', 'botWins', 'bosses',
+  // v1.3 (always appended at the end, so older codes still read correctly)
+  'goldBones', 'miniBosses', 'chests', 'tournaments', 'challengesWon',
 ];
 
 function fnv(str) {
@@ -44,6 +47,39 @@ function hexToFossils(hex) {
   return out;
 }
 
+// the painted dino: six colours as hex, then every painted pixel as 2 base-36 digits
+// (its place in the 22x20 grid) + 1 hex digit (the palette colour)
+const SLOT_KEYS = ['body', 'belly', 'eye', 'pupil', 'mouth', 'foot', 'dark'];
+const GRID_W = EDITOR_GRID[0].length;
+function customToText(c) {
+  if (!c) return '';
+  const slots = SLOT_KEYS.map((k) => String(c[k] || '#000000').slice(1, 7)).join('.');
+  let px = '';
+  for (const [k, col] of Object.entries(c.paint || {})) {
+    const [x, r] = k.split(',').map(Number);
+    const ci = EDITOR_PALETTE.indexOf(col);
+    if (ci < 0) continue;
+    px += (r * GRID_W + x).toString(36).padStart(2, '0') + ci.toString(16);
+  }
+  return slots + '/' + px;
+}
+function textToCustom(t) {
+  if (!t || !t.includes('/')) return null;
+  const [slots, px] = t.split('/');
+  const cols = slots.split('.');
+  if (cols.length !== SLOT_KEYS.length || !cols.every((h) => /^[0-9a-f]{6}$/i.test(h))) return null;
+  const out = { paint: {} };
+  SLOT_KEYS.forEach((k, i) => (out[k] = '#' + cols[i].toLowerCase()));
+  for (let i = 0; i + 3 <= px.length; i += 3) {
+    const at = parseInt(px.slice(i, i + 2), 36);
+    const col = EDITOR_PALETTE[parseInt(px[i + 2], 16)];
+    const x = at % GRID_W;
+    const r = Math.floor(at / GRID_W);
+    if (col && r < EDITOR_GRID.length && EDITOR_GRID[r][x] && EDITOR_GRID[r][x] !== ' ') out.paint[x + ',' + r] = col;
+  }
+  return out;
+}
+
 export function encodeProgress() {
   const p = profile;
   const adv = Object.entries(p.adventure)
@@ -67,6 +103,12 @@ export function encodeProgress() {
     ['daily', `${p.daily.streak || 0},${p.daily.done || ''}`],
     ['missions', p.missions.done || 0],
     ['tut', p.tutorial ? 1 : 0],
+    // v1.3
+    ['dances', p.owned.dance.join(',')],
+    ['themes', p.owned.theme.join(',')],
+    ['wear2', [p.dance, p.theme].join(',')],
+    ['custom', customToText(p.customSkin)],
+    ['pass', `${p.pass.season},${p.pass.xp},${p.pass.claimed.join('.')}`],
   ];
   const body = HEADER + ';' + fields.map(([k, v]) => `${k}=${v}`).join(';');
   return body + ';sum=' + fnv(body);
@@ -116,6 +158,14 @@ export function decodeProgress(text) {
     daily: { streak: num(streak), done: done || '' },
     missions: num(vars.missions),
     tutorial: vars.tut === '1',
+    dances: list('dances').filter((id) => DANCES[id]),
+    themes: list('themes').filter((id) => THEMES[id]),
+    wear2: { dance: list('wear2')[0], theme: list('wear2')[1] },
+    custom: textToCustom(vars.custom),
+    pass: (() => {
+      const [season, xp, claimed] = (vars.pass || '').split(',');
+      return season ? { season, xp: num(xp), claimed: (claimed || '').split('.').filter(Boolean).map(Number).filter((n) => n >= 1 && n <= 30) } : null;
+    })(),
   };
 }
 
@@ -162,6 +212,18 @@ export function mergeProgress(d) {
   if (d.daily.streak > (p.daily.streak || 0)) Object.assign(p.daily, d.daily);
   p.missions.done = Math.max(p.missions.done || 0, d.missions);
   if (d.tutorial) p.tutorial = true;
+  for (const [kind, items] of [['dance', d.dances], ['theme', d.themes]]) {
+    for (const id of items || []) if (!p.owned[kind].includes(id)) p.owned[kind].push(id);
+    const w = d.wear2 && d.wear2[kind];
+    if (w && p.owned[kind].includes(w)) p[kind] = w;
+  }
+  // the painted dino comes along if this device has none yet
+  if (d.custom && !Object.keys(p.customSkin.paint || {}).length) p.customSkin = d.custom;
+  // the season pass: same season -> keep the most XP and every claimed tier
+  if (d.pass && d.pass.season === p.pass.season) {
+    p.pass.xp = Math.max(p.pass.xp, d.pass.xp);
+    for (const n of d.pass.claimed) if (!p.pass.claimed.includes(n)) p.pass.claimed.push(n);
+  } else if (d.pass && d.pass.season > p.pass.season) p.pass = d.pass;
   if (!p.name && d.name) p.name = d.name;
   save();
 }
