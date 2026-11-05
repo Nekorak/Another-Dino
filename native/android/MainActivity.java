@@ -2,6 +2,7 @@ package io.github.nekorak.anotherdino;
 
 import android.os.Bundle;
 import android.view.WindowManager;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -21,6 +22,20 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         hideSystemBars();
+        // the back button steps back inside the game (closes a panel, pauses a run);
+        // only on the main menu does it send the app to the background
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (getBridge() == null || getBridge().getWebView() == null) {
+                    moveTaskToBack(true);
+                    return;
+                }
+                getBridge().getWebView().evaluateJavascript(
+                    "(window.dinoBack && window.dinoBack()) ? 1 : 0",
+                    value -> { if (!"1".equals(value)) moveTaskToBack(true); });
+            }
+        });
     }
 
     @Override
