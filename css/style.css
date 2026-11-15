@@ -2511,3 +2511,25 @@ body.photo #coop-hearts {
 #photo-view .small {
   color: #ffffff;
 }
+
+/* visual fixes after the screenshot round */
+.gallery-empty {
+  grid-column: 1 / -1;
+}
+.photo-box .over-buttons {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#win-details,
+#over-extra:not(:empty) {
+  padding: 6px 14px;
+  border: 2px solid var(--line);
+  background: rgba(255, 248, 234, 0.88);
+  color: var(--sheet-ink);
+  text-shadow: none;
+}
+.lv-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

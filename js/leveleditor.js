@@ -54,7 +54,7 @@ export function levelsView(ui) {
         { class: 'lv-info' },
         h('b', { text: lv.name || t('lvUntitled') }),
         h('span', { class: 'small muted', text: `${t('biome_' + BIOMES[lv.w].id)} · ${t('lvSpeed_' + lv.s)} · ${t('lvPieces', { n: pieceCount(lv) })}` }),
-        h('span', { class: 'small' }, stars(best), lv.from ? h('span', { class: 'muted', text: ' ' + t('lvFrom') }) : null),
+        h('span', { class: 'small lv-meta' }, stars(best), lv.from ? h('span', { class: 'muted', text: t('lvFrom') }) : null),
       ),
       h(
         'div',
@@ -64,8 +64,7 @@ export function levelsView(ui) {
         h('button', { class: 'val', text: t('lvShare'), onclick: () => ((ui.lvShare = ui.lvShare === i ? -1 : i), ui.renderPanel()) }),
         h('button', {
           class: 'val',
-          text: '✕',
-          'aria-label': t('lvDelete'),
+          text: t('photoDelete'),
           onclick: () => {
             if (ui.lvConfirm !== i) {
               ui.lvConfirm = i;
@@ -224,7 +223,7 @@ export function levelEditView(ui) {
       }),
       h('button', {
         class: 'menu-btn',
-        text: t('edSave'),
+        text: t('lvSave'),
         onclick: () => {
           if (!keep()) return;
           ui.g.sfx.reward();
