@@ -1126,7 +1126,7 @@ export class UI {
     const d = dailyInfo();
     const s = this.p.settings;
     const card = (key, desc, fn, extra) =>
-      el('button', { class: 'mode-card', onclick: fn }, el('b', { text: t(key) }), el('span', { class: 'small muted', text: desc }), extra || null);
+      el('button', { class: 'mode-card', onclick: fn, 'aria-label': t(key) + '. ' + desc }, el('b', { text: t(key) }), el('span', { class: 'small muted', text: desc }), extra || null);
     const botBtn = el('button', {
       class: 'val',
       text: t('bot_' + s.botLevel),

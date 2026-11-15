@@ -1735,7 +1735,16 @@ export function setLang(pref) {
     lang = STR[nav] ? nav : 'en';
   } else lang = pref;
   document.documentElement.lang = lang;
+  // подписи иконок для скринридера: в index.html они статичные, меняем под язык
+  const labels = A11Y[lang] || A11Y.en;
+  for (const id in labels) document.getElementById(id)?.setAttribute('aria-label', labels[id]);
 }
+
+const A11Y = {
+  ro: { 'btn-pause': 'Pauză', 'btn-sound': 'Sunet', 'btn-fs': 'Ecran complet', 'btn-restart': 'Restart', 'btn-chest': 'Cufăr' },
+  ru: { 'btn-pause': 'Пауза', 'btn-sound': 'Звук', 'btn-fs': 'Полный экран', 'btn-restart': 'Заново', 'btn-chest': 'Сундук' },
+  en: { 'btn-pause': 'Pause', 'btn-sound': 'Sound', 'btn-fs': 'Full screen', 'btn-restart': 'Restart', 'btn-chest': 'Chest' },
+};
 
 export function t(key, vars) {
   let s = STR[lang][key] ?? STR.en[key] ?? key;

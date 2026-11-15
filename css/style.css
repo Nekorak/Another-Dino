@@ -2571,3 +2571,24 @@ body.coop #powerups {
     top: calc(max(12px, env(safe-area-inset-top)) + 92px);
   }
 }
+
+/* COMBO стоит под колонкой тостов: пока висит сообщение, прячем его, чтобы не было наложения */
+body:has(#toasts .toast:not(.out)) #combo {
+  visibility: hidden;
+}
+
+/* вертикальный телефон: подсказка управления лежит поверх дино, даём ей подложку для читаемости */
+@media (orientation: portrait) {
+  #controls-msg:not(:empty) {
+    padding: 6px 10px;
+    border: 2px solid var(--line);
+    background: var(--sheet);
+  }
+}
+
+/* горизонтальный телефон: на подсказку не хватает высоты, она обрезалась внизу */
+@media (orientation: landscape) and (max-height: 420px) {
+  #controls-msg {
+    display: none;
+  }
+}
