@@ -67,7 +67,8 @@ export class Recorder {
 }
 
 function stamp(g, w, h, score) {
-  const size = Math.max(6, Math.round(h / 22));
+  // the title and the score must both fit on a narrow (portrait) frame: 12 + 5 letters and the margins
+  const size = Math.max(5, Math.round(Math.min(h / 22, w / 19.5)));
   g.font = `${size}px "Press Start 2P", monospace`;
   g.textBaseline = 'top';
   const s = String(score).padStart(5, '0');

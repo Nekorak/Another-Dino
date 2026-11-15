@@ -1427,7 +1427,7 @@ body.big-text #hud {
   left: 50%;
   top: calc(max(12px, env(safe-area-inset-top)) + 14px);
   transform: translateX(-50%);
-  width: min(40vw, 260px);
+  width: min(28vw, 240px); /* leaves room for the score on the right in landscape */
   height: 12px;
   border: 2px solid var(--line);
   background: var(--panel);
@@ -2255,7 +2255,7 @@ body.panel-open #btn-chest {
 }
 
 /* ------------------------------------------------------------ v1.4: level editor, medals, photos, pets, co-op */
-.levels,
+.lv-list,
 .lv-editor {
   display: flex;
   flex-direction: column;
@@ -2532,4 +2532,42 @@ body.photo #coop-hearts {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* co-op hearts on the right, under the bones, so the LAN scoreboard on the left never covers them */
+#coop-hearts {
+  left: auto;
+  right: max(16px, env(safe-area-inset-right));
+  transform: none;
+  top: calc(max(12px, env(safe-area-inset-top)) + 76px); /* under the bones; the power-up timers move down in co-op */
+}
+
+/* narrow (portrait) phones: the level bar and the boss bar go below the buttons, and messages
+   keep to the left so they don't cover the power-up timers on the right */
+@media (max-width: 560px) {
+  #advbar {
+    top: calc(max(12px, env(safe-area-inset-top)) + 54px);
+    width: 56vw;
+  }
+  #bossbar {
+    top: calc(max(12px, env(safe-area-inset-top)) + 74px);
+    left: max(16px, env(safe-area-inset-left));
+    transform: none;
+    width: calc(100vw - 170px);
+  }
+  #toasts {
+    top: calc(max(12px, env(safe-area-inset-top)) + 112px);
+    left: max(16px, env(safe-area-inset-left));
+    transform: none;
+    width: calc(100vw - 168px);
+    align-items: flex-start;
+  }
+}
+body.coop #powerups {
+  top: calc(max(12px, env(safe-area-inset-top)) + 104px);
+}
+/* during a boss fight the messages go below the boss bar */
+@media (min-width: 561px) {
+  body:has(#bossbar:not(.hidden)) #toasts {
+    top: calc(max(12px, env(safe-area-inset-top)) + 92px);
+  }
 }

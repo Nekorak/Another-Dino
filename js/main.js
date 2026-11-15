@@ -3335,6 +3335,7 @@ window.__dino = {
   items,
   profile,
   game,
+  ui,
   RIG,
   night: (on) => (nightTimer = on ? 999 : 0),
   force: (k) => (forceKind = k),
