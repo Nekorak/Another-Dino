@@ -69,6 +69,7 @@
     <div id="advbar" class="hidden"><i></i></div>
     <div id="bossbar" class="hidden"><span></span><i></i></div>
     <div id="mp-hud"></div>
+    <div id="coop-hearts" class="hidden"></div>
     <div id="split-line" aria-hidden="true"></div>
     <p id="spectate" class="hidden"></p>
     <div id="lan-actions" class="hidden">
@@ -139,6 +140,7 @@
       <p id="photo-hint"></p>
       <div class="over-buttons">
         <button id="btn-photo-save" class="menu-btn primary"></button>
+        <button id="btn-photo-share" class="menu-btn"></button>
         <button id="btn-photo-back" class="menu-btn"></button>
       </div>
     </div>
@@ -180,6 +182,18 @@
         <div id="chest-result"></div>
         <button id="chest-open" class="menu-btn primary" data-t="chestOpen"></button>
         <button id="chest-ok" class="menu-btn hidden">OK</button>
+      </div>
+    </div>
+
+    <div id="photo-view" class="hidden">
+      <div class="photo-box">
+        <img id="photo-view-img" alt="" />
+        <p id="photo-view-date" class="small"></p>
+        <div class="over-buttons">
+          <button id="photo-view-share" class="menu-btn primary"></button>
+          <button id="photo-view-del" class="menu-btn"></button>
+          <button id="photo-view-close" class="menu-btn"></button>
+        </div>
       </div>
     </div>
 

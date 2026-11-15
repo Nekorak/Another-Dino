@@ -73,10 +73,21 @@ function defaults() {
       chests: 0,
       tournaments: 0,
       challengesWon: 0,
+      coopGames: 0,
+      coopBest: 0,
+      levelsWon: 0,
+      levelsMade: 0,
+      photos: 0,
+      weeklies: 0,
     },
     top: [],
     missions: { active: [], done: 0 },
+    weekly: { week: '', list: [], bonus: false }, // weekly missions (bigger, longer)
     achievements: {},
+    medals: {}, // stat -> 1 bronze | 2 silver | 3 gold
+    petXp: {}, // pet id -> distance run together (pets grow with it)
+    levels: [], // tracks made in the level editor or received by QR: { name, w, s, t, from }
+    levelStars: {}, // level code hash -> best stars
   };
 }
 

@@ -66,6 +66,77 @@ export function checkMissions(run) {
   return done;
 }
 
+// ------------------------------------------------------------------ weekly missions
+// Three longer missions every week (Monday to Sunday), counted over all the runs of the
+// week, with bigger rewards; finishing all three gives a bonus on top.
+const WEEKLY = [
+  { kind: 'distance', base: 25000, reward: 250 },
+  { kind: 'games', base: 30, reward: 200 },
+  { kind: 'coins', base: 500, reward: 250 },
+  { kind: 'obstacles', base: 600, reward: 200 },
+  { kind: 'jumps', base: 1500, reward: 200 },
+  { kind: 'perfects', base: 60, reward: 300 },
+  { kind: 'powerups', base: 35, reward: 250 },
+  { kind: 'dailies', base: 4, reward: 350 },
+  { kind: 'miniBosses', base: 3, reward: 350 },
+  { kind: 'goldBones', base: 4, reward: 300 },
+];
+export const WEEKLY_BONUS = 400;
+
+// "2026-W46" for the ISO week of the date, and the days left until Monday
+export function weekInfo(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const w = Math.ceil(((d - y0) / 86400000 + 1) / 7);
+  return { id: `${d.getUTCFullYear()}-W${String(w).padStart(2, '0')}`, daysLeft: 8 - day, seed: d.getUTCFullYear() * 100 + w };
+}
+
+export function ensureWeekly() {
+  const wk = weekInfo();
+  const W = profile.weekly;
+  if (W.week === wk.id && W.list.length) return W;
+  // the same three missions for everybody in a given week (seeded by the week)
+  let s = wk.seed;
+  const r = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const pool = [...WEEKLY];
+  const list = [];
+  const level = Math.min(10, Math.floor((profile.missions.done || 0) / 10)); // a bit harder for veterans
+  while (list.length < 3) {
+    const t = pool.splice(Math.floor(r() * pool.length), 1)[0];
+    let target = Math.round(t.base * (1 + level * 0.08));
+    if (target > 50) target = Math.round(target / 10) * 10;
+    list.push({ kind: t.kind, target, reward: t.reward, start: profile.stats[t.kind] || 0, done: false });
+  }
+  profile.weekly = { week: wk.id, list, bonus: false };
+  save();
+  return profile.weekly;
+}
+
+export const weeklyProgress = (m) => Math.max(0, Math.min(m.target, (profile.stats[m.kind] || 0) - m.start));
+
+// after a run: returns { done: [missions], bonus: bones or 0 }
+export function checkWeekly() {
+  const W = ensureWeekly();
+  const done = [];
+  for (const m of W.list) {
+    if (m.done || weeklyProgress(m) < m.target) continue;
+    m.done = true;
+    profile.coins += m.reward;
+    profile.stats.weeklies = (profile.stats.weeklies || 0) + 1;
+    done.push(m);
+  }
+  let bonus = 0;
+  if (!W.bonus && W.list.every((m) => m.done)) {
+    W.bonus = true;
+    bonus = WEEKLY_BONUS;
+    profile.coins += bonus;
+  }
+  if (done.length || bonus) save();
+  return { done, bonus };
+}
+
 // ------------------------------------------------------------------ achievements
 export const ACHIEVEMENTS = [
   { id: 'first', test: (s) => s.games >= 1 },

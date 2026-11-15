@@ -9,6 +9,7 @@ import { TRAILS, allFossils } from './collection.js';
 import { ACHIEVEMENTS } from './missions.js';
 import { DANCES, THEMES, EDITOR_GRID, EDITOR_PALETTE } from './custom.js';
 import { UPGRADES } from './progress.js';
+import { MEDALS } from './medals.js';
 import qrcode from 'qrcode';
 
 const HEADER = 'ANOTHERDINO';
@@ -17,6 +18,8 @@ const STAT_KEYS = [
   'mpGames', 'mpWins', 'revives', 'dailies', 'pounds', 'eggs', 'perfects', 'bestCombo', 'botWins', 'bosses',
   // v1.3 (always appended at the end, so older codes still read correctly)
   'goldBones', 'miniBosses', 'chests', 'tournaments', 'challengesWon',
+  // v1.4
+  'coopGames', 'coopBest', 'levelsWon', 'levelsMade', 'photos', 'weeklies',
 ];
 
 function fnv(str) {
@@ -109,6 +112,9 @@ export function encodeProgress() {
     ['wear2', [p.dance, p.theme].join(',')],
     ['custom', customToText(p.customSkin)],
     ['pass', `${p.pass.season},${p.pass.xp},${p.pass.claimed.join('.')}`],
+    // v1.4: how much each pet has grown, and the medals
+    ['petxp', Object.entries(p.petXp).map(([k, v]) => `${k}:${Math.floor(v)}`).join(',')],
+    ['medals', Object.entries(p.medals).map(([k, v]) => `${k}:${v}`).join(',')],
   ];
   const body = HEADER + ';' + fields.map(([k, v]) => `${k}=${v}`).join(';');
   return body + ';sum=' + fnv(body);
@@ -162,6 +168,18 @@ export function decodeProgress(text) {
     themes: list('themes').filter((id) => THEMES[id]),
     wear2: { dance: list('wear2')[0], theme: list('wear2')[1] },
     custom: textToCustom(vars.custom),
+    petXp: Object.fromEntries(
+      list('petxp')
+        .map((e) => e.split(':'))
+        .filter(([k]) => PETS[k])
+        .map(([k, v]) => [k, num(v)]),
+    ),
+    medals: Object.fromEntries(
+      list('medals')
+        .map((e) => e.split(':'))
+        .filter(([k]) => MEDALS[k])
+        .map(([k, v]) => [k, Math.min(3, num(v))]),
+    ),
     pass: (() => {
       const [season, xp, claimed] = (vars.pass || '').split(',');
       return season ? { season, xp: num(xp), claimed: (claimed || '').split('.').filter(Boolean).map(Number).filter((n) => n >= 1 && n <= 30) } : null;
@@ -224,6 +242,8 @@ export function mergeProgress(d) {
     p.pass.xp = Math.max(p.pass.xp, d.pass.xp);
     for (const n of d.pass.claimed) if (!p.pass.claimed.includes(n)) p.pass.claimed.push(n);
   } else if (d.pass && d.pass.season > p.pass.season) p.pass = d.pass;
+  for (const [k, v] of Object.entries(d.petXp || {})) p.petXp[k] = Math.max(p.petXp[k] || 0, v);
+  for (const [k, v] of Object.entries(d.medals || {})) p.medals[k] = Math.max(p.medals[k] || 0, v);
   if (!p.name && d.name) p.name = d.name;
   save();
 }
