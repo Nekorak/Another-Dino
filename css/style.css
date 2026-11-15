@@ -435,7 +435,15 @@ body.playing #runcoins {
   }
 }
 
+/* плашка закреплена внизу экрана: в потоке меню она уходила за нижний край на 1280x720 */
 #banner {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: calc(100vw - 32px);
+  white-space: nowrap;
   pointer-events: auto;
   display: flex;
   gap: 12px;
@@ -2570,4 +2578,68 @@ body.coop #powerups {
   body:has(#bossbar:not(.hidden)) #toasts {
     top: calc(max(12px, env(safe-area-inset-top)) + 92px);
   }
+}
+
+/* COMBO стоит под колонкой тостов: пока висит сообщение, прячем его, чтобы не было наложения */
+body:has(#toasts .toast:not(.out)) #combo {
+  visibility: hidden;
+}
+
+/* вертикальный телефон: подсказка управления лежит поверх дино, даём ей подложку для читаемости */
+@media (orientation: portrait) {
+  #controls-msg:not(:empty) {
+    padding: 6px 10px;
+    border: 2px solid var(--line);
+    background: var(--sheet);
+  }
+}
+
+/* горизонтальный телефон: на подсказку не хватает высоты, она обрезалась внизу */
+@media (orientation: landscape) and (max-height: 420px) {
+  #controls-msg {
+    display: none;
+  }
+}
+
+/* плашка обновления: под колонкой меню, а подсказку управления на это время убираем, чтобы не было наложения */
+@media (orientation: landscape) {
+  #banner {
+    left: 69%;
+  }
+}
+#menu:has(#banner:not(.hidden)) #controls-msg {
+  display: none;
+}
+
+/* окно «Что нового» при первом запуске новой версии */
+#news {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 70;
+  padding: 16px;
+}
+#news.hidden {
+  display: none;
+}
+.news-box {
+  width: min(460px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.news-box h3 {
+  margin: 0;
+  font-size: 12px;
+}
+#news-list {
+  margin: 0;
+  padding: 0 0 0 16px;
+  text-align: left;
+  font-size: 10px;
+  line-height: 1.7;
+}
+#news-list li + li {
+  margin-top: 8px;
 }

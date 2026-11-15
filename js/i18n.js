@@ -476,6 +476,9 @@ const STR = {
     updateLatest: 'Ai ultima versiune ({v})',
     updateFailed: 'Actualizarea nu a mers: {msg}',
     set_version: 'Versiunea {v}',
+    newsTitle: "Ce e nou?",
+    newsOk: "AM ÎNȚELES",
+    set_news: "Ce e nou",
     miniBossArrives: 'UN BOSS MIC! Rezistă 14 secunde!',
     miniBossDone: 'Ai scăpat de boss! +{n} oase',
     goldBone: 'OS DE AUR! +{n}',
@@ -1051,6 +1054,9 @@ const STR = {
     updateLatest: 'У тебя последняя версия ({v})',
     updateFailed: 'Не удалось обновить: {msg}',
     set_version: 'Версия {v}',
+    newsTitle: "Что нового?",
+    newsOk: "ПОНЯТНО",
+    set_news: "Что нового",
     miniBossArrives: 'МИНИ-БОСС! Продержись 14 секунд!',
     miniBossDone: 'Босс улетел! +{n} косточек',
     goldBone: 'ЗОЛОТАЯ КОСТОЧКА! +{n}',
@@ -1626,6 +1632,9 @@ const STR = {
     updateLatest: 'You have the latest version ({v})',
     updateFailed: 'Update failed: {msg}',
     set_version: 'Version {v}',
+    newsTitle: "What's new?",
+    newsOk: "GOT IT",
+    set_news: "What's new",
     miniBossArrives: 'MINI-BOSS! Survive 14 seconds!',
     miniBossDone: 'Boss escaped! +{n} bones',
     goldBone: 'GOLDEN BONE! +{n}',
@@ -1735,7 +1744,18 @@ export function setLang(pref) {
     lang = STR[nav] ? nav : 'en';
   } else lang = pref;
   document.documentElement.lang = lang;
+  // подписи иконок для скринридера: в index.html они статичные, меняем под язык
+  const labels = A11Y[lang] || A11Y.en;
+  for (const id in labels) document.getElementById(id)?.setAttribute('aria-label', labels[id]);
 }
+
+const A11Y = {
+  ro: { 'btn-pause': 'Pauză', 'btn-sound': 'Sunet', 'btn-fs': 'Ecran complet', 'btn-restart': 'Restart', 'btn-chest': 'Cufăr' },
+  ru: { 'btn-pause': 'Пауза', 'btn-sound': 'Звук', 'btn-fs': 'Полный экран', 'btn-restart': 'Заново', 'btn-chest': 'Сундук' },
+  en: { 'btn-pause': 'Pause', 'btn-sound': 'Sound', 'btn-fs': 'Full screen', 'btn-restart': 'Restart', 'btn-chest': 'Chest' },
+};
+
+export const getLang = () => lang;
 
 export function t(key, vars) {
   let s = STR[lang][key] ?? STR.en[key] ?? key;

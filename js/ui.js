@@ -1,5 +1,6 @@
 // All menus, panels and HUD elements (plain DOM on top of the 3D canvas).
-import { t, LANGS } from './i18n.js';
+import { t, LANGS, getLang } from './i18n.js';
+import { NEWS } from './whatsnew.js';
 import { SKINS, HATS, PETS, POWERUP_COLOR, hatPixels, petPixels } from './models.js';
 import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dailyInfo, EGG_PRICE, openEgg, eggPoolSize } from './progress.js';
 import { BIOMES } from './biomes.js';
@@ -240,6 +241,7 @@ export class UI {
     btn('chest-open', () => this.doOpenChest());
     btn('btn-chest', () => this.showChest());
     btn('chest-ok', () => $('chest').classList.add('hidden'));
+    btn('news-ok', () => this.closeNews());
     btn('btn-replay-close', () => this.hideReplay());
     btn('btn-replay-gif', () => this.saveReplay());
     btn('btn-challenge', () => this.openPanel('challenge'));
@@ -519,7 +521,7 @@ export class UI {
 
   // ------------------------------------------------------------ screens
   hideScreens() {
-    for (const id of ['menu', 'over', 'paused', 'win', 'chest', 'egg']) $(id).classList.add('hidden');
+    for (const id of ['menu', 'over', 'paused', 'win', 'chest', 'egg', 'news']) $(id).classList.add('hidden');
     this.hideReplay();
     document.body.classList.remove('over');
     this.closePanel(true);
@@ -537,6 +539,18 @@ export class UI {
     // a small chest button on the menu waits until it is opened
     const chest = this.p.tutorial && chestInfo().available;
     $('btn-chest').classList.toggle('hidden', !chest);
+    // «Что нового» один раз на новую запись; сундук ждёт, пока окно не закроют
+    if (this.p.newsSeen !== NEWS[0].id) {
+      if (!this.p.tutorial || !this.p.stats.games) {
+        // новичку (обучение ещё не пройдено) список изменений ни к чему: отмечаем как прочитанное
+        this.p.newsSeen = NEWS[0].id;
+        save();
+      } else if (!this.newsPopped) {
+        this.newsPopped = true;
+        setTimeout(() => this.g.state === 'menu' && !this.panel && this.showNews(), 600);
+        return;
+      }
+    }
     if (chest && !this.chestPopped) {
       this.chestPopped = true;
       setTimeout(() => this.g.state === 'menu' && !this.panel && this.showChest(), 600);
@@ -556,6 +570,27 @@ export class UI {
       dailyDoneText: t('widgetDailyDone'),
       streakText: d.streak ? t('widgetStreak', { n: d.streak }) : '',
     }).catch(() => {});
+  }
+
+  // ------------------------------------------------------------ what's new
+  showNews() {
+    const items = NEWS[0][getLang()] || NEWS[0].en;
+    // как и t(): в пиксельном шрифте есть ş/ţ, но нет ș/ț
+    const fix = (s) => (getLang() === 'ro' ? s.replace(/ș/g, 'ş').replace(/Ș/g, 'Ş').replace(/ț/g, 'ţ').replace(/Ț/g, 'Ţ') : s);
+    $('news-list').replaceChildren(...items.map((s) => el('li', { text: fix(s) })));
+    $('news').classList.remove('hidden');
+  }
+  closeNews() {
+    $('news').classList.add('hidden');
+    if (this.p.newsSeen !== NEWS[0].id) {
+      this.p.newsSeen = NEWS[0].id;
+      save();
+    }
+    // окно открыли при запуске: теперь можно показать сундук дня
+    if (this.g.state === 'menu' && !this.panel && this.p.tutorial && chestInfo().available && !this.chestPopped) {
+      this.chestPopped = true;
+      this.showChest();
+    }
   }
 
   // ------------------------------------------------------------ daily chest
@@ -882,11 +917,12 @@ export class UI {
   }
   // a window on top of the menu (chest, egg, replay, controls editor): keys must not start a run behind it
   modalOpen() {
-    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay', 'photo-view'].some((id) => !$(id).classList.contains('hidden'));
+    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay', 'photo-view', 'news'].some((id) => !$(id).classList.contains('hidden'));
   }
   closeModal() {
     const ed = document.getElementById('ctl-editor');
     if (ed) return ed.querySelector('.ctl-bar .ctl-row:last-child .menu-btn:not(.primary)')?.click();
+    if (!$('news').classList.contains('hidden')) return this.closeNews();
     if (!$('replay').classList.contains('hidden')) return this.hideReplay();
     if (!$('photo-view').classList.contains('hidden')) return this.closePhoto();
     if (!$('chest').classList.contains('hidden') && !$('chest').classList.contains('shaking')) return $('chest').classList.add('hidden');
@@ -1126,7 +1162,7 @@ export class UI {
     const d = dailyInfo();
     const s = this.p.settings;
     const card = (key, desc, fn, extra) =>
-      el('button', { class: 'mode-card', onclick: fn }, el('b', { text: t(key) }), el('span', { class: 'small muted', text: desc }), extra || null);
+      el('button', { class: 'mode-card', onclick: fn, 'aria-label': t(key) + '. ' + desc }, el('b', { text: t(key) }), el('span', { class: 'small muted', text: desc }), extra || null);
     const botBtn = el('button', {
       class: 'val',
       text: t('bot_' + s.botLevel),
@@ -1665,6 +1701,7 @@ export class UI {
           })
         : null,
       this.row(t('transfer'), t('open'), () => this.openPanel('transfer')),
+      this.row(t('set_news'), t('open'), () => this.showNews()),
       this.g.isApp ? this.updateRow() : null,
       reset,
     );
