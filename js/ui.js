@@ -431,12 +431,14 @@ export class UI {
     const box = $('coop-hearts');
     if (n == null) {
       box.classList.add('hidden');
+      document.body.classList.remove('coop');
       this.heartsShown = null;
       return;
     }
     if (this.heartsShown === n) return;
     this.heartsShown = n;
     box.classList.remove('hidden');
+    document.body.classList.add('coop');
     box.replaceChildren(el('span', { class: 'small', text: t('coopTeam') }), ...Array.from({ length: COOP_HEARTS }, (_, i) => el('i', { class: 'heart' + (i < n ? '' : ' lost') })));
   }
 
@@ -517,7 +519,7 @@ export class UI {
 
   // ------------------------------------------------------------ screens
   hideScreens() {
-    for (const id of ['menu', 'over', 'paused', 'win']) $(id).classList.add('hidden');
+    for (const id of ['menu', 'over', 'paused', 'win', 'chest', 'egg']) $(id).classList.add('hidden');
     this.hideReplay();
     document.body.classList.remove('over');
     this.closePanel(true);
@@ -899,6 +901,7 @@ export class UI {
     if (name === 'shop') this.preview = { skin: this.p.skin, hat: this.p.hat, pet: this.p.pet, trail: this.p.trail, dance: this.p.dance, theme: this.p.theme };
     if (name === 'lan') this.lanView = this.g.lan && this.g.lan.role !== 'idle' ? this.lanView : 'home';
     if (name === 'levels') this.lvConfirm = -1;
+    $('panel-body').scrollTop = 0; // a new panel starts at the top, not where the last one was scrolled
     this.renderPanel();
     if (name === 'lan') this.startLan();
   }

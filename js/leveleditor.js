@@ -83,7 +83,7 @@ export function levelsView(ui) {
   });
   return h(
     'div',
-    { class: 'levels' },
+    { class: 'lv-list' },
     h('p', { class: 'small', text: t('lvHelp') }),
     h('div', { class: 'row-btns' }, h('button', { class: 'menu-btn primary', text: t('lvNew'), onclick: () => ui.editLevel(-1) }), h('button', { class: 'menu-btn', text: t('lvScan'), onclick: () => ((ui.xferTab = 'scan'), ui.openPanel('transfer')) })),
     list.length ? list : h('p', { class: 'muted', text: t('lvNone') }),
