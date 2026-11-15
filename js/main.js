@@ -500,10 +500,13 @@ function createFish() {
 // The speed the track "expects" at this distance: what the speed would be with no
 // slow-motion. Obstacle sizes and gaps use it, so a shared seed builds the same track
 // for everyone, even for a player who slowed time down (speed itself grows with time).
+// While an obstacle is being built, the distance is the exact point where it was due
+// (not the score of the frame that noticed it), so the frame rate cannot change the track.
+let spawnScore = null;
 function trackSpeed() {
   const s0 = adv ? adv.startSpeed : START_SPEED;
   const a = mode === 'lan' && lanMode === 'elimination' ? ACCEL * 2.5 : ACCEL;
-  return Math.min(MAX_SPEED, Math.sqrt(s0 * s0 + (2 * a * score) / 0.75));
+  return Math.min(MAX_SPEED, Math.sqrt(s0 * s0 + (2 * a * (spawnScore ?? score)) / 0.75));
 }
 
 function groundObstacle(biomeId, forceSmall) {
@@ -763,8 +766,19 @@ function finishLine() {
   return { kind: 'finish', root, boxes: [], width: 0.3, y: 0, extra: 0 };
 }
 
-function spawnNext() {
-  const biomeId = BIOMES[env.biome].id;
+// over: how far past the spawn point the track already moved this frame
+function spawnNext(over = 0) {
+  spawnScore = score - over * 0.75;
+  try {
+    buildNext(over);
+  } finally {
+    spawnScore = null;
+  }
+}
+
+function buildNext(over) {
+  const s = spawnScore;
+  const biomeId = BIOMES[adv ? adv.world : biomeAt(s)].id;
   if (adv) {
     // the finish line, then nothing more
     const toFinish = (adv.finishAt ?? adv.length) - score;
@@ -800,7 +814,6 @@ function spawnNext() {
     o = step === 'bird' ? bird(1) : groundObstacle(biomeId, true);
     o.tutorial = step === 'bird' ? 'duck' : 'jump';
   } else {
-    const s = score;
     const opts = [['ground', 1]];
     if (s > 280) opts.push(['bird', 0.32]);
     if (s > 400) opts.push(['boulder', 0.12]);
@@ -826,39 +839,40 @@ function spawnNext() {
     const make = { bird: () => bird(), boulder: () => boulder(biomeId), tumble: tumbleweed, meteor, pit, ground: () => groundObstacle(biomeId), riser: () => riser(biomeId), zig: zigBird, platform };
     o = make[kind]();
   }
-  addObstacle(o);
+  const x0 = SPAWN_X - over;
+  addObstacle(o, x0);
   // low gravity means longer jumps, so space gets wider gaps
   const air = feat.gravity < 1 ? 1.35 : 1;
   const gap = o.width + trackSpeed() * (0.72 * air + R() * 0.85) + R() * 2 + o.extra * 0.6 + (o.tutorial ? 10 : 0);
-  gapLeft = gap;
+  gapLeft = gap - over; // the leftover distance counts, or the gaps would depend on the frame rate
 
   // bones: an arc over ground obstacles and pits, or a line in the gap after
   const roll = R();
   if (o.kind === 'platform') {
     // a reward for whoever lands on the slab
-    for (let x = o.sx0 + 0.3; x < o.sx1; x += 0.8) addCoin(SPAWN_X + x, o.base + o.amp + 1.3);
+    for (let x = o.sx0 + 0.3; x < o.sx1; x += 0.8) addCoin(x0 + x, o.base + o.amp + 1.3);
   } else if ((o.kind === 'ground' || o.kind === 'pit') && roll < 0.3) {
-    const cx = SPAWN_X + o.width / 2;
+    const cx = x0 + o.width / 2;
     for (let k = -3; k <= 3; k++) addCoin(cx + k * 0.95, 1.1 + 2.6 * (1 - (k / 3.6) ** 2));
   } else if (roll < 0.65 || o.tutorial) {
-    const x0 = SPAWN_X + o.width + 2.5;
-    const x1 = SPAWN_X + gap - 3;
-    for (let x = x0; x < x1 && x < x0 + 8; x += 0.95) addCoin(x, 0.75);
+    const c0 = x0 + o.width + 2.5;
+    const c1 = x0 + gap - 3;
+    for (let x = c0; x < c1 && x < c0 + 8; x += 0.95) addCoin(x, 0.75);
   }
   // bones up high for whoever is flying with the rocket
-  if (players.some((p) => p.alive && p.power.rocket > 1)) for (let x = SPAWN_X; x < SPAWN_X + gap - 1; x += 1.2) addCoin(x, 4.4);
+  if (players.some((p) => p.alive && p.power.rocket > 1)) for (let x = x0; x < x0 + gap - 1; x += 1.2) addCoin(x, 4.4);
   // a power-up roughly every 300-600 points, floating in the gap
-  if (!tutorial && rules().powerups && score > nextPowerAt && gap > o.width + 5) {
-    nextPowerAt = score + (300 + IR() * 300) * powerGapK();
-    addItem(POWERUPS[Math.floor(IR() * POWERUPS.length)], SPAWN_X + o.width + gap * 0.5, 1.1);
-  } else if (!tutorial && mode !== 'lan' && !isLocal() && score > nextFossilAt && gap > o.width + 5) {
+  if (!tutorial && rules().powerups && s > nextPowerAt && gap > o.width + 5) {
+    nextPowerAt = s + (300 + IR() * 300) * powerGapK();
+    addItem(POWERUPS[Math.floor(IR() * POWERUPS.length)], x0 + o.width + gap * 0.5, 1.1);
+  } else if (!tutorial && mode !== 'lan' && !isLocal() && s > nextFossilAt && gap > o.width + 5) {
     // a rare fossil for the album
-    nextFossilAt = score + 700 + IR() * 600;
+    nextFossilAt = s + 700 + IR() * 600;
     const id = mode === 'challenge' ? null : missingFossil(biomeId, Math.random); // depends on the album, so not seeded
-    if (id) addItem('fossil', SPAWN_X + o.width + gap * 0.5, 1.6, id);
-  } else if (mode === 'lan' && lanMode === 'sabotage' && score > nextBombAt && gap > o.width + 5) {
-    nextBombAt = score + 220 + IR() * 120;
-    addItem('bomb', SPAWN_X + o.width + gap * 0.5, 1.1);
+    if (id) addItem('fossil', x0 + o.width + gap * 0.5, 1.6, id);
+  } else if (mode === 'lan' && lanMode === 'sabotage' && s > nextBombAt && gap > o.width + 5) {
+    nextBombAt = s + 220 + IR() * 120;
+    addItem('bomb', x0 + o.width + gap * 0.5, 1.1);
   }
 }
 
@@ -1114,8 +1128,11 @@ function killPlayer(p, o) {
     for (const m of p.dino.deadMeshes) m.visible = true;
   }
   sfx.hit();
-  vibrate([60, 40, 90]);
-  shake = 0.45;
+  if (!p.brain) {
+    // the robot falling should not shake the screen or the phone
+    vibrate([60, 40, 90]);
+    shake = 0.45;
+  }
   if (mode === 'bot' && p.index === 1 && player.alive) ui.toast(t('botDown'), 'gold');
   if (players.some((q) => q.alive && !q.brain)) return; // someone (human) is still running
   state = 'dying';
@@ -1244,7 +1261,7 @@ function finishRun() {
       save();
     }
   }
-  challengeable = (mode === 'solo' && !run.hadTutorial) || mode === 'challenge' ? { seed: runSeed, score: Math.floor(pts) } : null;
+  challengeable = ((mode === 'solo' && !run.hadTutorial) || mode === 'challenge') && !player.revived ? { seed: runSeed, score: Math.floor(pts) } : null;
   music.sting();
   ui.showOver({
     challenge: chResult,
@@ -1713,6 +1730,18 @@ addEventListener('keydown', (e) => {
     else duckDown(tgt[0]);
   } else if (e.code === 'KeyP' || e.code === 'Escape') setPaused(state === 'running');
 });
+// Android back button (sent by MainActivity): step back one screen like Escape does.
+// Returns false on the main menu, and the app then goes to the background.
+window.dinoBack = () => {
+  if (ui.modalOpen()) ui.closeModal();
+  else if (ui.panelOpen()) ui.closePanel();
+  else if (state === 'photo') endPhoto();
+  else if (state === 'menu') return false;
+  else if (state === 'running' || state === 'dying' || state === 'countdown') setPaused(true);
+  else if (state === 'paused') setPaused(false);
+  else toMenu();
+  return true;
+};
 addEventListener('keyup', (e) => {
   const tgt = keyTarget(e.code);
   if (!tgt) return;
@@ -2308,7 +2337,7 @@ function updateObstacles(dt, v) {
     if (o.x < DESPAWN_X) removeObstacle(i);
   }
   gapLeft -= v * dt;
-  if (gapLeft <= 0) spawnNext();
+  if (gapLeft <= 0) spawnNext(-gapLeft);
 }
 
 function hitCheck(p) {
@@ -2351,7 +2380,7 @@ function giveBone(p, value = 1) {
     profile.stats.coins += n;
     ui.setRunCoins(run.coins);
   }
-  sfx.coin();
+  if (!p.brain) sfx.coin();
 }
 
 function updatePickups(dt, v) {
@@ -2432,6 +2461,7 @@ function updatePickups(dt, v) {
         run.powerups++;
         profile.stats.powerups++;
       }
+      if (p.brain) continue; // the robot's power-ups are its own business: no sound, buzz or message
       sfx.powerup();
       vibrate(25);
       ui.toast((isLocal() ? 'P' + (p.index + 1) + ': ' : '') + t('pu_' + it.type), it.type);
@@ -2447,7 +2477,7 @@ function updatePowers(dt) {
   for (const p of players) {
     for (const k of Object.keys(p.power)) if (p.power[k] > 0) p.power[k] = Math.max(0, p.power[k] - dt);
     p.invuln = Math.max(0, p.invuln - dt);
-    if (p.alive && p.power.slow > 0) slow = true;
+    if (p.alive && p.power.slow > 0 && !p.brain) slow = true; // a robot's slow-motion must not slow you down
     p.shield.visible = p.power.shield > 0 && p.dino.root.visible && p.alive;
     if (p.shield.visible) {
       p.shield.position.set(0.35, p.y + (p.ducking ? 1.0 : 1.45), p.lane);
