@@ -179,10 +179,24 @@ async function startUpdate(version) {
     const script = path.join(os.tmpdir(), 'another-dino-update.cmd');
     fs.writeFileSync(
       script,
-      ['@echo off', 'ping 127.0.0.1 -n 3 > nul', `move /y "${fresh}" "${target}" > nul`, `start "" "${target}"`, 'del "%~f0"'].join('\r\n'),
+      // exe занят, пока игра и обёртка portable не закроются: пробуем заменить раз в секунду, до 30 секунд
+      [
+        '@echo off',
+        'set n=0',
+        ':wait',
+        'ping 127.0.0.1 -n 2 > nul',
+        `move /y "${fresh}" "${target}" > nul 2>&1`,
+        'if not errorlevel 1 goto run',
+        'set /a n+=1',
+        'if %n% lss 30 goto wait',
+        ':run',
+        `start "" "${target}"`,
+        'del "%~f0"',
+      ].join('\r\n'),
     );
     spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    setTimeout(() => app.quit(), 300);
+    // app.quit() после обновления зависал и держал exe; exit закрывает процесс сразу
+    setTimeout(() => app.exit(0), 300);
     return 'restarting';
   }
   if (updateMode === 'dmg') {
