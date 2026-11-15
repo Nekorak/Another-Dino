@@ -2637,7 +2637,7 @@ function updatePet(dt) {
   const p = player;
   const tt = time;
   if (pet.kind === 'ptera') {
-    pet.root.position.set(-0.6 + Math.sin(tt * 1.3) * 0.3, Math.max(0, p.y) + 3.4 + Math.sin(tt * 3) * 0.2, p.lane + 0.9);
+    pet.root.position.set(-0.6 + Math.sin(tt * 1.3) * 0.3, Math.max(0, p.y) + 3.4 + (petPw.scale - 1) * 2.5 + Math.sin(tt * 3) * 0.2, p.lane + 0.9);
     const a = Math.sin(tt * 12) * 0.9;
     pet.wings[0].pivot.rotation.x = -a;
     pet.wings[1].pivot.rotation.x = a;
@@ -3275,6 +3275,8 @@ applySettings();
 ui.setHi(profile.stats.best);
 ui.showMenu();
 requestAnimationFrame(frame);
+// medals for what was already done before the medal album existed
+setTimeout(() => celebrateMedals(checkMedals()), 1500);
 ui.checkUpdates();
 // seasonal event: a free hat and a greeting
 if (season) {

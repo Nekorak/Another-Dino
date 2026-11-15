@@ -470,7 +470,7 @@ export class UI {
     $('win-stars').replaceChildren(...[0, 1, 2].map((i) => el('span', { class: 'star' + (i < stars ? ' on' : '') })));
     // replaceChildren would print a null as the text "null"
     const lines = [
-      el('p', { text: t('advBones', { a: coins, b: spawned }) }),
+      spawned ? el('p', { text: t('advBones', { a: coins, b: spawned }) }) : null,
       el('p', { text: hits ? t('advHits', { n: hits }) : t('advNoHits') }),
       reward ? el('p', { class: 'mission-done', text: t('coinsEarned', { n: reward }) }) : null,
       xp ? el('p', { class: 'small', text: t('xpGained', { n: xp }) }) : null,
@@ -1221,6 +1221,9 @@ export class UI {
 
   // a bronze, silver and gold medal for every statistic
   medalsView() {
+    // medals earned since the last run (or by an older version of the game) are given right away
+    for (const m of checkMedals()) this.toast(t('medalGot', { medal: t('medal_' + MEDAL_NAMES[m.tier]), name: t('st_' + m.stat), n: m.reward }), 'gold');
+    this.setCoins();
     const s = this.p.stats;
     const c = medalCount();
     const fmt = (k, v) => (k === 'time' ? `${Math.floor(v / 3600)}h` : String(v));
@@ -1253,10 +1256,10 @@ export class UI {
 
   // the photo gallery: pictures from photo mode
   photosView() {
-    const box = el('div', { class: 'gallery' }, el('p', { class: 'muted', text: '…' }));
+    const box = el('div', { class: 'gallery' }, el('p', { class: 'muted gallery-empty', text: '…' }));
     listPhotos()
       .then((list) => {
-        if (!list.length) return box.replaceChildren(el('p', { class: 'muted', text: t('photosNone') }));
+        if (!list.length) return box.replaceChildren(el('p', { class: 'muted gallery-empty', text: t('photosNone') }));
         box.replaceChildren(
           ...list.map((ph) => {
             const b = el('button', { class: 'thumb', 'aria-label': new Date(ph.d).toLocaleString() }, el('img', { src: ph.thumb, alt: '' }));
@@ -1265,7 +1268,7 @@ export class UI {
           }),
         );
       })
-      .catch(() => box.replaceChildren(el('p', { class: 'muted', text: t('photoFailed') })));
+      .catch(() => box.replaceChildren(el('p', { class: 'muted gallery-empty', text: t('photoFailed') })));
     return el('div', {}, el('p', { class: 'small', text: t('photosHelp', { n: MAX_PHOTOS }) }), box);
   }
   async openPhoto(id) {
@@ -1571,7 +1574,7 @@ export class UI {
       el('h3', { text: t('missionsTitle') }),
       ms,
       el('h3', { text: t('weeklyTitle') }),
-      el('p', { class: 'small muted', text: t('weeklyHelp', { d: wk.daysLeft, n: WEEKLY_BONUS }) + (W.bonus ? ' ✓' : '') }),
+      el('p', { class: 'small muted', text: t(wk.daysLeft > 1 ? 'weeklyHelp' : 'weeklyHelpLast', { d: wk.daysLeft, n: WEEKLY_BONUS }) + (W.bonus ? ' ✓' : '') }),
       weekly,
       el('h3', { text: `${t('achievementsTitle')} ${count}/${ACHIEVEMENTS.length}` }),
       el('div', { class: 'ach-grid' }, ach),
