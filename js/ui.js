@@ -9,10 +9,16 @@ import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImag
 import { save, resetProgress } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
-import { MAX_PLAYERS } from './multiplayer.js';
+import { MAX_PLAYERS, COOP_HEARTS } from './multiplayer.js';
 import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
-import { missionProgress, ACHIEVEMENTS } from './missions.js';
+import { missionProgress, ACHIEVEMENTS, ensureWeekly, weeklyProgress, weekInfo, WEEKLY_BONUS } from './missions.js';
+import { MEDALS, MEDAL_REWARD, MEDAL_NAMES, medalOf, medalCount } from './medals.js';
+import { petLevel, petProgress, petPower, PET_MAX } from './pets.js';
+import { addPhoto, listPhotos, getPhoto, deletePhoto, toPng, MAX_PHOTOS } from './gallery.js';
+import { isLevel, decodeLevel, storeLevel } from './levels.js';
+import { levelsView, levelEditView, startEdit } from './leveleditor.js';
+import { checkMedals } from './medals.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const Updater = registerPlugin('Updater');
@@ -258,11 +264,14 @@ export class UI {
     btn('btn-pause-menu', () => g.toMenu());
     btn('btn-zen-end', () => g.endZen());
     btn('btn-photo-back', () => g.endPhoto());
-    btn('btn-photo-save', () => this.share(true));
+    btn('btn-photo-save', () => this.savePhoto());
+    btn('btn-photo-share', () => this.share(true));
+    btn('photo-view-close', () => this.closePhoto());
     btn('btn-win-next', () => this.nextLevel());
     btn('btn-win-map', () => {
+      const custom = g.adv && g.adv.custom;
       g.toMenu();
-      this.openPanel('adventure');
+      this.openPanel(custom ? 'levels' : 'adventure');
     });
     btn('btn-win-retry', () => g.restart());
 
@@ -304,7 +313,7 @@ export class UI {
     $('btn-revive-no').textContent = t('reviveNo');
     $('btn-share').textContent = t('share');
     $('btn-bomb').textContent = t('bombSend');
-    for (const [id, key] of [['btn-resume', 'resumeBtn'], ['btn-photo', 'photo'], ['btn-pause-menu', 'menu'], ['btn-zen-end', 'zenEnd'], ['btn-photo-back', 'back'], ['btn-photo-save', 'photoSave'], ['btn-win-next', 'advNext'], ['btn-win-map', 'advMap'], ['btn-win-retry', 'again']]) $(id).textContent = t(key);
+    for (const [id, key] of [['btn-resume', 'resumeBtn'], ['btn-photo', 'photo'], ['btn-pause-menu', 'menu'], ['btn-zen-end', 'zenEnd'], ['btn-photo-back', 'back'], ['btn-photo-save', 'photoSave'], ['btn-photo-share', 'share'], ['btn-win-next', 'advNext'], ['btn-win-map', 'advMap'], ['btn-win-retry', 'again']]) $(id).textContent = t(key);
     $('photo-hint').textContent = t('photoHint');
     this.setCoins();
     this.menuInfo();
@@ -417,13 +426,47 @@ export class UI {
       b.querySelector('span').textContent = t('bossName');
     }
   }
+  // co-op: the team's shared hearts (null hides them)
+  coopHearts(n) {
+    const box = $('coop-hearts');
+    if (n == null) {
+      box.classList.add('hidden');
+      this.heartsShown = null;
+      return;
+    }
+    if (this.heartsShown === n) return;
+    this.heartsShown = n;
+    box.classList.remove('hidden');
+    box.replaceChildren(el('span', { class: 'small', text: t('coopTeam') }), ...Array.from({ length: COOP_HEARTS }, (_, i) => el('i', { class: 'heart' + (i < n ? '' : ' lost') })));
+  }
+
+  // photo mode: the picture goes into the album in the game
+  async savePhoto() {
+    const b = $('btn-photo-save');
+    if (b.disabled) return;
+    b.disabled = true;
+    try {
+      const data = await this.g.photoImage();
+      await addPhoto(data, { biome: this.g.biomeId });
+      this.p.stats.photos = (this.p.stats.photos || 0) + 1;
+      save();
+      for (const m of checkMedals()) this.toast(t('medalGot', { medal: t('medal_' + MEDAL_NAMES[m.tier]), name: t('st_' + m.stat), n: m.reward }), 'gold');
+      this.g.sfx.reward();
+      this.toast(t('photoKept'), 'gold');
+    } catch {
+      this.toast(t('photoFailed'), 'red');
+    }
+    b.disabled = false;
+  }
+
   photoMode(on) {
     document.body.classList.toggle('photo', on);
     $('photo-ui').classList.toggle('hidden', !on);
   }
   showWin({ stars, reward, adv, coins, spawned, hits, xp }) {
     this.overShownAt = performance.now() / 1000;
-    $('win-title').textContent = adv.boss ? t('bossDefeated') : t('advWin');
+    $('win-title').textContent = adv.custom ? t('lvWin') : adv.boss ? t('bossDefeated') : t('advWin');
+    $('btn-win-map').textContent = adv.custom ? t('lvList') : t('advMap');
     $('win-stars').replaceChildren(...[0, 1, 2].map((i) => el('span', { class: 'star' + (i < stars ? ' on' : '') })));
     // replaceChildren would print a null as the text "null"
     const lines = [
@@ -439,7 +482,7 @@ export class UI {
     document.body.classList.add('over');
   }
   nextLevelOf(adv) {
-    if (!adv) return null;
+    if (!adv || adv.custom) return null;
     if (adv.level < ADV_LEVELS - 1) return { world: adv.world, level: adv.level + 1 };
     if (adv.world < BIOMES.length - 1) return { world: adv.world + 1, level: 0 };
     return null;
@@ -745,6 +788,47 @@ export class UI {
     box.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
+  // a track from a friend's level editor
+  askLevel(text) {
+    let lv;
+    try {
+      lv = decodeLevel(text);
+    } catch (err) {
+      return this.toast(t(err.message || 'xferBadCode'), 'red');
+    }
+    this.stopTransfer();
+    const box = $('xfer-confirm');
+    if (!box) return;
+    const keep = () => storeLevel(lv, 'qr');
+    box.replaceChildren(
+      el(
+        'div',
+        { class: 'confirm' },
+        el('p', { text: t('lvGot', { name: lv.name || t('lvUntitled') }) }),
+        el('p', { class: 'small muted', text: `${t('biome_' + BIOMES[lv.w].id)} · ${t('lvSpeed_' + lv.s)}` }),
+        el('button', {
+          class: 'menu-btn primary',
+          text: t('lvPlay'),
+          onclick: () => {
+            const i = keep();
+            this.closePanel(true);
+            this.g.startMode('custom', { level: this.p.levels[i] });
+          },
+        }),
+        el('button', {
+          class: 'menu-btn',
+          text: t('lvKeep'),
+          onclick: () => {
+            keep();
+            this.toast(t('lvSaved'), 'gold');
+            this.openPanel('levels');
+          },
+        }),
+      ),
+    );
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   hideOver() {
     $('over').classList.add('hidden');
     document.body.classList.remove('over');
@@ -796,12 +880,13 @@ export class UI {
   }
   // a window on top of the menu (chest, egg, replay, controls editor): keys must not start a run behind it
   modalOpen() {
-    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay'].some((id) => !$(id).classList.contains('hidden'));
+    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay', 'photo-view'].some((id) => !$(id).classList.contains('hidden'));
   }
   closeModal() {
     const ed = document.getElementById('ctl-editor');
     if (ed) return ed.querySelector('.ctl-bar .ctl-row:last-child .menu-btn:not(.primary)')?.click();
     if (!$('replay').classList.contains('hidden')) return this.hideReplay();
+    if (!$('photo-view').classList.contains('hidden')) return this.closePhoto();
     if (!$('chest').classList.contains('hidden') && !$('chest').classList.contains('shaking')) return $('chest').classList.add('hidden');
     if (!$('egg').classList.contains('hidden') && $('egg').classList.contains('open')) $('egg').classList.add('hidden');
   }
@@ -813,12 +898,21 @@ export class UI {
     document.body.classList.add('panel-open');
     if (name === 'shop') this.preview = { skin: this.p.skin, hat: this.p.hat, pet: this.p.pet, trail: this.p.trail, dance: this.p.dance, theme: this.p.theme };
     if (name === 'lan') this.lanView = this.g.lan && this.g.lan.role !== 'idle' ? this.lanView : 'home';
+    if (name === 'levels') this.lvConfirm = -1;
     this.renderPanel();
     if (name === 'lan') this.startLan();
+  }
+  // the level editor: i = index in the list, -1 for a new track
+  editLevel(i) {
+    this.lvEdit = startEdit(i);
+    this.lvEditIdx = i;
+    this.openPanel('leveledit');
   }
   closePanel(silent) {
     if (!this.panel) return;
     const was = this.panel;
+    // leaving the editor goes back to the list of tracks, not to the menu
+    if (was === 'leveledit' && !silent) return this.openPanel('levels');
     this.panel = null;
     $('panel').classList.add('hidden');
     document.body.classList.remove('panel-open');
@@ -833,7 +927,7 @@ export class UI {
     if (!silent && this.g.state === 'menu') $('menu').classList.remove('hidden');
   }
   renderPanel() {
-    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle' };
+    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
@@ -849,6 +943,8 @@ export class UI {
       transfer: () => this.transferView(),
       challenge: () => this.challengeView(),
       pass: () => this.passView(),
+      levels: () => levelsView(this),
+      leveledit: () => levelEditView(this),
       editor: () =>
         skinEditorView(this, () => {
           this.shopTab = 'skin';
@@ -894,17 +990,41 @@ export class UI {
       const price = item.level
         ? el('span', { class: 'card-price' }, t('levelShort', { n: item.level }))
         : el('span', { class: 'card-price' }, bone(), ' ' + item.price);
+      const petLv = kind === 'pet' && have && id !== 'none' ? petLevel(id) : 0;
       const card = el(
         'button',
         { class: 'card' + (id === this.preview[kind] ? ' sel' : '') + (have ? '' : ' locked') },
         icon,
         el('span', { class: 'card-name', text: t(kind + '_' + id) }),
+        petLv ? el('span', { class: 'small', text: t('petLevel', { n: petLv }) }) : null,
         status ? el('span', { class: 'card-tag', text: status }) : price,
       );
       card.addEventListener('click', () => this.shopClick(kind, id, item, have));
       grid.append(card);
     }
-    return el('div', {}, tabs, grid);
+    const info = kind === 'pet' ? this.petInfo(this.preview.pet) : null;
+    return el('div', {}, tabs, info, grid);
+  }
+  // what the chosen pet can do now, and what it learns as it grows
+  petInfo(id) {
+    if (!id || id === 'none') return el('p', { class: 'small muted', text: t('petHelp') });
+    const pr = petProgress(id);
+    const owned = this.p.owned.pet.includes(id);
+    const lines = [];
+    for (let l = 1; l <= PET_MAX; l++) {
+      const pw = petPower(id, l);
+      const what =
+        id === 'turtle' ? t('petPw_turtle', { n: pw.bones100 }) : id === 'ptera' ? t('petPw_ptera', { n: Math.round((pw.reach / 1.4) * 100) }) : id === 'frog' ? t('petPw_frog', { n: pw.tongue.toFixed(1) }) : t('petPw_chick', { n: Math.round((pw.powerK - 1) * 100) });
+      lines.push(el('li', { class: owned && l <= pr.level ? 'on' : 'muted' }, `${t('petLevel', { n: l })}: ${what}${l === PET_MAX ? ' · ' + t('petPw_shield') : ''}`));
+    }
+    return el(
+      'div',
+      { class: 'pet-info' },
+      el('b', { text: t('pet_' + id) + (owned ? ' · ' + t('petLevel', { n: pr.level }) : '') }),
+      owned && pr.need ? el('div', { class: 'bar' }, el('i', { style: `width:${Math.round((pr.into / pr.need) * 100)}%` })) : null,
+      el('p', { class: 'small muted', text: owned ? (pr.need ? t('petGrow', { a: pr.into, b: pr.need }) : t('petMax')) : t('petHelp') }),
+      el('ul', { class: 'pet-levels small' }, lines),
+    );
   }
   eggCard() {
     const left = eggPoolSize();
@@ -1036,6 +1156,7 @@ export class UI {
       card('mode_zen', t('modeDesc_zen'), () => g.startMode('zen')),
       card('mode_hardcore', t('modeDesc_hardcore'), () => g.startMode('hardcore')),
       card('mode_bot', t('modeDesc_bot'), () => g.startMode('bot'), botBtn),
+      card('mode_custom', t('modeDesc_custom', { n: this.p.levels.length }), () => this.openPanel('levels')),
       card('mode_challenge', t('modeDesc_challenge'), () => {
         // scanning a friend's challenge uses the same scanner as the progress transfer
         this.xferTab = 'scan';
@@ -1073,8 +1194,125 @@ export class UI {
     return el('div', {}, el('p', { class: 'small muted', text: t('advHelp') }), el('div', { class: 'worlds' }, worlds));
   }
 
-  // ------------------------------------------------------------ fossil album
+  // ------------------------------------------------------------ album: fossils, medals, photos
   albumView() {
+    const tab = this.albumTab || 'fossils';
+    const tabs = el(
+      'div',
+      { class: 'tabs' },
+      [
+        ['fossils', 'albumFossils'],
+        ['medals', 'albumMedals'],
+        ['photos', 'albumPhotos'],
+      ].map(([id, key]) =>
+        el('button', {
+          class: 'tab' + (tab === id ? ' on' : ''),
+          text: t(key),
+          onclick: () => {
+            this.albumTab = id;
+            this.renderPanel();
+          },
+        }),
+      ),
+    );
+    const body = tab === 'medals' ? this.medalsView() : tab === 'photos' ? this.photosView() : this.fossilsView();
+    return el('div', {}, tabs, body);
+  }
+
+  // a bronze, silver and gold medal for every statistic
+  medalsView() {
+    const s = this.p.stats;
+    const c = medalCount();
+    const fmt = (k, v) => (k === 'time' ? `${Math.floor(v / 3600)}h` : String(v));
+    const rows = Object.entries(MEDALS).map(([k, steps]) => {
+      const have = medalOf(k);
+      const v = s[k] || 0;
+      const next = steps[have];
+      const prev = have ? steps[have - 1] : 0;
+      const pct = next == null ? 100 : Math.round((Math.max(0, v - prev) / (next - prev)) * 100);
+      return el(
+        'div',
+        { class: 'medal-row' + (have === 3 ? ' done' : '') },
+        el('div', { class: 'medals' }, [1, 2, 3].map((tier) => el('i', { class: 'medal ' + MEDAL_NAMES[tier] + (tier <= have ? ' on' : ''), title: t('medal_' + MEDAL_NAMES[tier]) }))),
+        el(
+          'div',
+          { class: 'medal-info' },
+          el('span', { text: t('st_' + k) }),
+          el('div', { class: 'bar' }, el('i', { style: `width:${Math.min(100, pct)}%` })),
+          el('small', { class: 'muted', text: next == null ? t('medalAll') : `${fmt(k, v)} / ${fmt(k, next)} · +${MEDAL_REWARD[have + 1]}` }),
+        ),
+      );
+    });
+    return el(
+      'div',
+      {},
+      el('p', { class: 'small', text: t('medalsHelp', { g: c.gold, s: c.silver, b: c.bronze, max: c.total }) }),
+      el('div', { class: 'medal-list' }, rows),
+    );
+  }
+
+  // the photo gallery: pictures from photo mode
+  photosView() {
+    const box = el('div', { class: 'gallery' }, el('p', { class: 'muted', text: '…' }));
+    listPhotos()
+      .then((list) => {
+        if (!list.length) return box.replaceChildren(el('p', { class: 'muted', text: t('photosNone') }));
+        box.replaceChildren(
+          ...list.map((ph) => {
+            const b = el('button', { class: 'thumb', 'aria-label': new Date(ph.d).toLocaleString() }, el('img', { src: ph.thumb, alt: '' }));
+            b.addEventListener('click', () => this.openPhoto(ph.id));
+            return b;
+          }),
+        );
+      })
+      .catch(() => box.replaceChildren(el('p', { class: 'muted', text: t('photoFailed') })));
+    return el('div', {}, el('p', { class: 'small', text: t('photosHelp', { n: MAX_PHOTOS }) }), box);
+  }
+  async openPhoto(id) {
+    let ph;
+    try {
+      ph = await getPhoto(id);
+    } catch {
+      ph = null;
+    }
+    if (!ph) return this.toast(t('photoFailed'), 'red');
+    this.photoShown = ph;
+    this.photoDelAsk = false;
+    $('photo-view-img').src = ph.full;
+    $('photo-view-date').textContent = new Date(ph.d).toLocaleString();
+    $('photo-view').classList.remove('hidden');
+    const share = $('photo-view-share');
+    share.textContent = t('share');
+    share.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        this.shareData(await toPng(ph.full));
+      } catch {
+        this.toast(t('shareFailed'), 'red');
+      }
+    };
+    const del = $('photo-view-del');
+    del.textContent = t('photoDelete');
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      if (!this.photoDelAsk) {
+        this.photoDelAsk = true;
+        del.textContent = t('photoDeleteSure');
+        return;
+      }
+      await deletePhoto(ph.id).catch(() => {});
+      this.closePhoto();
+      if (this.panel === 'album') this.renderPanel();
+    };
+    $('photo-view-close').textContent = t('close');
+  }
+  closePhoto() {
+    $('photo-view').classList.add('hidden');
+    $('photo-view-img').removeAttribute('src');
+    this.photoShown = null;
+  }
+
+  fossilsView() {
     const have = new Set(this.p.fossils);
     const total = allFossils().length;
     const rows = BIOMES.map((b) => {
@@ -1177,6 +1415,7 @@ export class UI {
 
   askImport(text) {
     if (isChallenge(text)) return this.askChallenge(text);
+    if (isLevel(text)) return this.askLevel(text);
     let data;
     try {
       data = decodeProgress(text);
@@ -1313,11 +1552,27 @@ export class UI {
       return el('div', { class: 'ach' + (done ? ' done' : '') }, el('span', { class: 'ach-mark' }), el('span', { text: t('a_' + a.id) }));
     });
     const count = Object.keys(this.p.achievements).length;
+    // the weekly missions: longer, counted over every run of the week
+    const W = ensureWeekly();
+    const wk = weekInfo();
+    const weekly = W.list.map((m) => {
+      const prog = weeklyProgress(m);
+      return el(
+        'div',
+        { class: 'mission weekly' + (m.done ? ' done' : '') },
+        el('p', { text: t('w_' + m.kind, { n: m.target }) }),
+        el('div', { class: 'bar' }, el('i', { style: `width:${Math.round((prog / m.target) * 100)}%` })),
+        el('p', { class: 'mission-meta' }, m.done ? el('span', { class: 'mission-done', text: t('weeklyClaimed') }) : `${prog}/${m.target}  `, m.done ? null : bone(), m.done ? null : ' +' + m.reward),
+      );
+    });
     return el(
       'div',
       {},
       el('h3', { text: t('missionsTitle') }),
       ms,
+      el('h3', { text: t('weeklyTitle') }),
+      el('p', { class: 'small muted', text: t('weeklyHelp', { d: wk.daysLeft, n: WEEKLY_BONUS }) + (W.bonus ? ' ✓' : '') }),
+      weekly,
       el('h3', { text: `${t('achievementsTitle')} ${count}/${ACHIEVEMENTS.length}` }),
       el('div', { class: 'ach-grid' }, ach),
     );
@@ -1329,8 +1584,8 @@ export class UI {
     const fmtTime = (sec) => `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
     const lp = levelProgress();
     const level = el('div', { class: 'stat' }, el('span', { text: t('levelShort', { n: lp.level }) }), el('b', { text: `${lp.into}/${lp.need} XP` }));
-    const rows = ['best', 'games', 'distance', 'jumps', 'ducks', 'coins', 'obstacles', 'perfects', 'bestCombo', 'powerups', 'meteors', 'pounds', 'revives', 'dailies', 'eggs', 'bosses', 'botWins', 'time', 'mpGames', 'mpWins'].map((k) =>
-      el('div', { class: 'stat' }, el('span', { text: t('st_' + k) }), el('b', { text: k === 'time' ? fmtTime(s[k]) : String(s[k]) })),
+    const rows = ['best', 'games', 'distance', 'jumps', 'ducks', 'coins', 'obstacles', 'perfects', 'bestCombo', 'powerups', 'meteors', 'pounds', 'revives', 'dailies', 'eggs', 'bosses', 'botWins', 'time', 'mpGames', 'mpWins', 'coopGames', 'coopBest', 'goldBones', 'miniBosses', 'chests', 'challengesWon', 'tournaments', 'levelsMade', 'levelsWon', 'weeklies', 'photos'].map((k) =>
+      el('div', { class: 'stat' }, el('span', { text: t('st_' + k) }), el('b', { text: k === 'time' ? fmtTime(s[k] || 0) : String(s[k] || 0) })),
     );
     const top = this.p.top.length
       ? el(
@@ -1567,7 +1822,7 @@ export class UI {
       ),
     );
     const canStart = this.lobby.length >= 2;
-    const MODES = ['race', 'sabotage', 'elimination', 'tournament'];
+    const MODES = ['race', 'sabotage', 'elimination', 'tournament', 'coop'];
     const modeRow = this.lanIsHost
       ? this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => this.g.lanSetMode(MODES[(MODES.indexOf(this.lanMode || 'race') + 1) % MODES.length]))
       : this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => {});
@@ -1589,7 +1844,8 @@ export class UI {
   resultsEl() {
     const r = this.results || [];
     const winner = r[0];
-    const head = winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
+    const coop = this.lanMode === 'coop';
+    const head = coop && winner ? t('coopResult', { n: Math.max(...r.map((p) => p.sc)) }) : winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
     const tour = this.tour;
     // tournament: the standings after this race, and the champion after the last one
     const tourEls = tour
@@ -1625,19 +1881,24 @@ export class UI {
     } catch (err) {
       return this.toast(t('shareFailed'), 'red');
     }
+    return this.shareData(data, 'image/png');
+  }
+
+  // shares (or saves) an image given as a data URL
+  async shareData(data, mime = 'image/png') {
     const text = t('shareText');
     try {
       if (window.desktop && window.desktop.shareImage) {
         await window.desktop.shareImage(data);
         this.toast(t('shareSaved'), 'gold');
       } else if (Capacitor.getPlatform() === 'android') {
-        await Share.shareImage({ data: data.split(',')[1], text });
+        await Share.shareImage({ data: data.split(',')[1], text, mime });
       } else {
         const blob = await (await fetch(data)).blob();
-        const file = new File([blob], 'another-dino.png', { type: 'image/png' });
+        const file = new File([blob], mime === 'image/jpeg' ? 'another-dino.jpg' : 'another-dino.png', { type: mime });
         if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], text });
         else if (navigator.clipboard && window.ClipboardItem) {
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);
           this.toast(t('shareCopied'), 'gold');
         } else this.toast(t('shareFailed'), 'red');
       }

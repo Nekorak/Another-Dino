@@ -512,6 +512,7 @@ export const PETS = {
   chick: { price: 150 },
   turtle: { price: 250 },
   ptera: { price: 300 },
+  frog: { price: 350 },
 };
 
 function petVoxels(id) {
@@ -536,6 +537,19 @@ function petVoxels(id) {
     vs.set(5, 2, -1, '#1b1b1b');
     vs.set(5, 2, 1, '#1b1b1b');
     for (const x of [-2, 2]) for (const z of [-3, 3]) vs.set(x, 0, z, '#8fc46a');
+  } else if (id === 'frog') {
+    // a little green frog, sitting, with big eyes on top
+    box(-2, 2, 1, 3, -2, 2, '#5fbf3a');
+    box(-1, 2, 0, 0, -2, 2, '#4a9a2c');
+    box(0, 2, 1, 1, -1, 1, '#d8f0a0'); // belly
+    box(3, 3, 1, 2, -1, 1, '#5fbf3a');
+    for (const z of [-2, 2]) {
+      box(1, 2, 4, 5, z, z, '#5fbf3a');
+      vs.set(2, 5, z, '#ffffff');
+      vs.set(3, 5, z, '#1b1b1b');
+      box(-3, -2, 0, 1, z, z, '#4a9a2c'); // back legs
+    }
+    vs.set(4, 1, 0, '#e0405a'); // the tongue peeking out
   }
   return vs;
 }

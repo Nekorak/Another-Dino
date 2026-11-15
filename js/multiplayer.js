@@ -7,6 +7,8 @@ export const MAX_PLAYERS = 8;
 export const TOUR_RACES = 5;
 // tournament points for 1st, 2nd, 3rd... place in each race
 const TOUR_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
+// co-op: the whole team shares this many hearts; the host keeps the count
+export const COOP_HEARTS = 3;
 const TIMEOUT = 4500; // players send something at least every second (heartbeat)
 
 export class LanSession {
@@ -22,7 +24,9 @@ export class LanSession {
     this.timers = [];
     this.raceSeed = null;
     this.hostSeen = 0;
-    this.mode = 'race'; // race | sabotage | elimination | tournament
+    this.mode = 'race'; // race | sabotage | elimination | tournament | coop
+    this.hearts = COOP_HEARTS; // co-op: the hearts the team has left
+    this.hitsSeen = new Set(); // host: co-op hits already counted (each one is sent three times)
     this.tour = null; // host: { race, total, pts: Map id -> points }
   }
 
@@ -140,12 +144,25 @@ export class LanSession {
     if (this.mode !== 'tournament') this.tour = null;
     this.state = 'race';
     this.raceSeed = (Math.random() * 2 ** 31) | 0;
+    this.hearts = COOP_HEARTS;
+    this.hitsSeen.clear();
     this.peerStates.clear();
     for (const id of this.players.keys()) this.peerStates.set(id, { id, sc: 0, y: 0, d: 0, a: 1 });
     for (let i = 0; i < 3; i++) setTimeout(() => this.toPeers({ t: 'go', seed: this.raceSeed, mode: this.mode }), i * 150);
     this.on.start(this.raceSeed, this.mode);
     // the seed rides along, so a player who lost every 'go' packet still finds the race
-    this.relay = setInterval(() => this.toPeers({ t: 'all', s: [...this.peerStates.values()], seed: this.raceSeed, mode: this.mode }), 66);
+    this.relay = setInterval(() => this.toPeers({ t: 'all', s: [...this.peerStates.values()], seed: this.raceSeed, mode: this.mode, h: this.hearts }), 66);
+  }
+
+  // co-op: this player was hit. Returns the hearts the team has left after it (0 = the run is over).
+  // A client guesses the count right away; the host's number (in every 'all' message) has the last word.
+  coopHit() {
+    this.hearts = Math.max(0, this.hearts - 1);
+    if (this.role === 'client') {
+      const k = Math.random().toString(36).slice(2, 8);
+      for (let i = 0; i < 3; i++) setTimeout(() => this.toHost({ t: 'hit', k }), i * 80);
+    }
+    return this.hearts;
   }
 
   // called by the game every frame (throttled here)
@@ -254,6 +271,12 @@ export class LanSession {
       } else if (m.t === 's' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
         if (this.state === 'race') this.peerStates.set(m.from, { ...m.s, id: m.from });
+      } else if (m.t === 'hit' && this.players.has(m.from) && this.state === 'race' && this.mode === 'coop') {
+        const key = m.from + ':' + m.k;
+        if (!this.hitsSeen.has(key)) {
+          this.hitsSeen.add(key);
+          this.hearts = Math.max(0, this.hearts - 1);
+        }
       } else if (m.t === 'atk' && this.players.has(m.from) && this.state === 'race') {
         this.relayFrom({ t: 'atk' }, m.from);
         this.on.attack(m.from);
@@ -290,16 +313,19 @@ export class LanSession {
             this.raceSeed = m.seed;
             this.mode = m.mode || 'race';
             this.state = 'race';
+            this.hearts = COOP_HEARTS;
             this.peerStates.clear();
             this.on.start(m.seed, this.mode);
           }
           for (const x of m.s) this.peerStates.set(x.id, x);
+          if (m.seed === this.raceSeed && typeof m.h === 'number') this.hearts = m.h;
           break;
         case 'go':
           if (this.raceSeed !== m.seed) {
             this.raceSeed = m.seed;
             this.mode = m.mode || 'race';
             this.state = 'race';
+            this.hearts = COOP_HEARTS;
             this.peerStates.clear();
             this.on.start(m.seed, this.mode);
           }

@@ -39,8 +39,11 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
 - **A doua șansă**: când mori, continui o dată pentru 50 de oase.
 - **Provocarea zilei**: un traseu nou în fiecare zi, cu țintă și recompensă. Dacă o termini zile la rând, recompensa crește.
 - **Nivel de jucător (XP)**: la nivelurile 5, 10, 15 și 20 se deblochează skin-uri speciale (lavă, gheață, galaxie, curcubeu).
-- **Magazin**: 8 skin-uri, 7 accesorii, **3 animăluțe** (puișor, broscuță țestoasă care aduce oase, pui de pterodactil care prinde oase) și **ou-surpriză**.
-- **Misiuni** cu recompense, **26 de realizări**, **statistici** și un **top 10**.
+- **Magazin**: 8 skin-uri, 7 accesorii, **4 animăluțe** și **ou-surpriză**.
+- **Animăluțe care cresc**: cu fiecare tură în care aleargă cu tine, animăluțul crește (5 niveluri) și puterea lui se mărește: țestoasa aduce tot mai multe oase, puiul de pterodactil prinde oasele tot mai de sus, **broscuța** linge oasele de departe cu limba, iar puișorul face puterile să țină mai mult. La nivelul 5 pornesc toate cu scut.
+- **Misiuni** cu recompense, **misiuni de săptămână** (3 provocări lungi, aceleași pentru toți în săptămâna respectivă, cu premiu mare și bonus pentru toate trei), realizări, **statistici** și un **top 10**.
+- **Album de medalii** (Album → Medalii): bronz, argint și aur pentru fiecare statistică (25, 75 și 200 de oase).
+- **Editor de trasee** (Moduri → Editor de trasee): pui obstacole căsuță cu căsuță (cactuși, păsări jos/sus, zig-zag, bolovani, gropi, platforme, oase, puteri), alegi lumea și viteza, apoi îl încerci și îl trimiți unui prieten printr-un **cod QR**. Traseul are linie de sosire și până la 3 stele; traseele primite de la prieteni dau oase pentru stele noi.
 - **Fantoma recordului**, care aleargă pe culoarul de lângă tine.
 - **Distribuie recordul**: o imagine cu scorul tău.
   - pe Android se deschide meniul de partajare (WhatsApp, Telegram…);
@@ -57,7 +60,7 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
 - **Album de fosile**: 30 de fosile ascunse (câte 3 în fiecare lume). O lume completă dă 100 de oase, iar albumul complet deblochează skin-ul **Fosilă**.
 - **Urme** în spatele dinozaurului: bule, scântei, inimioare, curcubeu, foc.
 - **Evenimente de sezon** după calendar: **Halloween** (dovleci, pălărie-dovleac), **Crăciun** (brazi, cadouri, căciulă de Moș) și **Anul Nou** (artificii). Se pot opri din Setări.
-- **Mod foto**: din pauză, rotești camera în jurul dinozaurului și salvezi poza.
+- **Mod foto**: din pauză, rotești camera în jurul dinozaurului; poza se păstrează în **Album → Poze** (pe dispozitiv, cel mult 40) sau se distribuie.
 - **Replay**: după game over, butonul REPLAY arată ultimele 10 secunde, iar SALVEAZĂ GIF le face GIF animat (pe Android se deschide meniul de partajare, pe PC se salvează în *Imagini*).
 - **Editor de skin**: în Magazin, skin-ul „Al meu” se pictează pixel cu pixel, plus culori pentru corp, burtă, ochi și tălpi.
 - **Dansuri de victorie** (Magazin > Dansuri): la un record nou sau la finalul unui nivel dinozaurul dansează (salt mortal, moonwalk, disco…).
@@ -94,6 +97,7 @@ Gazda alege și **modul**:
 - **Sabotaj**: strângi bombe și trimiți bolovani pe traseul celorlalți (butonul **BOLOVAN**, tasta `E` sau `X` pe controller).
 - **Eliminare**: viteza crește mult mai repede, iar ultimul rămas primește 100 de oase.
 - **Turneu**: 5 curse la rând, cu puncte pentru fiecare loc (10, 8, 6, 5…) și clasament după fiecare cursă; campionul primește 150 de oase.
+- **Echipă (co-op)**: toți pe același traseu, cu o **viață comună** de 3 inimi. Orice lovitură a oricui costă o inimă (dinozaurul lovit clipește și merge mai departe); când nu mai sunt inimi, tura se termină pentru toți. Echipa primește oase după distanța atinsă.
 
 În cursă poți trimite **emoticoane** (butoanele 😂 🔥 👋 😱 sau tastele `1`–`4`). După ce ieși din cursă, camera îi urmărește pe cei rămași.
 
@@ -181,7 +185,12 @@ js/audio.js           efecte sonore sintetizate
 js/ui.js              meniuri, magazin, misiuni, statistici, setări, LAN
 js/save.js            progresul salvat (oase, skin-uri, statistici, fantoma)
 js/progress.js        upgrade-uri, nivel/XP, provocarea zilei, ou-surpriză
-js/missions.js        misiuni și realizări
+js/missions.js        misiuni, misiuni de săptămână și realizări
+js/medals.js          albumul de medalii (bronz, argint, aur pe statistică)
+js/pets.js            animăluțele care cresc și puterile lor
+js/gallery.js         albumul de poze (IndexedDB, pe dispozitiv)
+js/levels.js          traseele din editor: piese, cod QR, stele
+js/leveleditor.js     ecranele editorului de trasee
 js/modes.js           nivelurile din Aventură și robotul adversar
 js/collection.js      fosile (album), urme, evenimente de sezon
 js/transfer.js        transferul de progres: cod QR și LAN cu PIN; codurile de provocare

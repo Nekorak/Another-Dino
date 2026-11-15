@@ -20,13 +20,21 @@ Toate cele 15 idei din planul anterior sunt în joc:
 14. Widget pe Android
 15. Controale pe ecran configurabile
 
+## Gata în v1.4
+
+Toate cele 6 idei noi, tot fără server (offline, prin QR sau LAN):
+
+1. Editor de trasee: îți faci traseul căsuță cu căsuță și îl trimiți prietenilor prin QR
+2. Animăluțe care cresc: 5 niveluri, puteri tot mai mari (plus o broscuță nouă)
+3. Misiuni de săptămână: 3 provocări lungi, cu recompense mari și bonus pentru toate
+4. Mod cooperativ în LAN: același traseu, o viață comună de 3 inimi
+5. Album de medalii: bronz, argint și aur pentru fiecare statistică
+6. Album de poze: pozele din modul foto rămân într-o galerie în joc
+
 ## Idei noi
 
 Tot fără server: totul merge offline, prin QR sau LAN.
 
-- **Editor de niveluri**: îți faci propriul traseu și îl trimiți prietenilor prin QR.
-- **Animăluțe care cresc**: puiul de pterodactil sau broscuța capătă puteri noi pe măsură ce alergi cu ele.
-- **Misiuni de săptămână**: provocări mai lungi, cu recompense mai mari.
-- **Mod cooperativ în LAN**: doi jucători pe același traseu, cu o viață comună.
-- **Album de realizări cu medalii** (bronz, argint, aur) pentru fiecare statistică.
-- **Fotografii în album**: pozele din modul foto rămân într-o galerie în joc.
+- **Trasee ale săptămânii**: un traseu făcut în editor, ales la întâmplare din cele primite, ca provocare.
+- **Animăluțe care evoluează**: la nivelul 5, o înfățișare nouă (pterodactil adult, broască-țestoasă cu armură).
+- **Clasament de echipă în co-op**: recordurile echipelor din LAN, păstrate pe fiecare dispozitiv.

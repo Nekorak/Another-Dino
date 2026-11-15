@@ -24,18 +24,21 @@ import { Sfx } from './audio.js';
 import { Music } from './music.js';
 import { profile, save, loadGhost, saveGhost } from './save.js';
 import { t, setLang } from './i18n.js';
-import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD } from './missions.js';
+import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD, ensureWeekly, checkWeekly } from './missions.js';
+import { checkMedals, MEDAL_NAMES } from './medals.js';
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
 import { levelDef, scoreLevel, saveLevel, BotBrain } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
-import { LanSession } from './multiplayer.js';
+import { LanSession, COOP_HEARTS } from './multiplayer.js';
 import { UI } from './ui.js';
 import { Recorder } from './replay.js';
 import { addPassXp } from './rewards.js';
 import { controlAt } from './controls.js';
 import { encodeChallenge } from './transfer.js';
+import { petPower, growPet } from './pets.js';
+import { SPEEDS, trimmed, levelId, saveLevelStars } from './levels.js';
 
 setCustomSkin(profile.customSkin); // the dino painted in the skin editor
 const recorder = new Recorder(); // the last 10 seconds, for the replay after a game over
@@ -74,7 +77,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, k) => a + (b - a) * k;
 const now = () => performance.now() / 1000;
 const powerTime = () => {
-  const k = powerTimeK();
+  const k = powerTimeK() * petPw.powerK; // the grown-up chick makes power-ups last longer
   const out = {};
   for (const [id, v] of Object.entries(BASE_POWER_TIME)) out[id] = v * k;
   return out;
@@ -82,6 +85,7 @@ const powerTime = () => {
 
 setLang(profile.settings.lang);
 ensureMissions();
+ensureWeekly();
 
 // ------------------------------------------------------------------ renderer
 const canvas = $('game');
@@ -395,10 +399,15 @@ function rebuildDino(p, skin, hat) {
 
 // pet that follows player 1
 let pet = null;
+let petPw = petPower('none');
 function setPet(id) {
   if (pet) scene.remove(pet.root);
   pet = createPet(id);
-  if (pet) scene.add(pet.root);
+  petPw = petPower(id);
+  if (pet) {
+    pet.root.scale.multiplyScalar(petPw.scale); // pets grow as they level up
+    scene.add(pet.root);
+  }
 }
 setPet(profile.pet);
 
@@ -509,8 +518,8 @@ function trackSpeed() {
   return Math.min(MAX_SPEED, Math.sqrt(s0 * s0 + (2 * a * (spawnScore ?? score)) / 0.75));
 }
 
-function groundObstacle(biomeId, forceSmall) {
-  const large = !forceSmall && R() < 0.45;
+function groundObstacle(biomeId, forceSmall, forceLarge) {
+  const large = forceLarge || (!forceSmall && R() < 0.45);
   const maxN = Math.min(3, 1 + Math.floor((trackSpeed() - START_SPEED) / 3.5));
   const n = 1 + Math.floor(R() * maxN);
   const root = new THREE.Group();
@@ -776,9 +785,51 @@ function spawnNext(over = 0) {
   }
 }
 
+// a track from the level editor: the next slot, exactly as it was drawn
+function buildCustom(over, biomeId) {
+  const c = adv.custom;
+  const x0 = SPAWN_X - over;
+  if (c.i >= c.t.length) {
+    if (!adv.finishSpawned) {
+      adv.finishSpawned = true;
+      addObstacle(finishLine(), x0 + 4);
+    }
+    gapLeft = 50;
+    return;
+  }
+  const ch = c.t[c.i++];
+  if (ch === '.') return void (gapLeft = trackSpeed() * 0.55 - over);
+  if (ch === 'o') {
+    coinWave(x0, 8);
+    return void (gapLeft = 9 - over);
+  }
+  if (ch === 'u') {
+    addItem(POWERUPS[Math.floor(IR() * POWERUPS.length)], x0, 1.1);
+    return void (gapLeft = trackSpeed() * 0.55 - over);
+  }
+  const solid = biomeId === 'space' || biomeId === 'ocean'; // no holes in these worlds: a cactus instead
+  const make = {
+    c: () => groundObstacle(biomeId, true),
+    C: () => groundObstacle(biomeId, false, true),
+    l: () => bird(0),
+    m: () => bird(1),
+    z: zigBird,
+    r: () => boulder(biomeId),
+    p: () => (solid ? groundObstacle(biomeId, true) : pit()),
+    f: () => (solid ? groundObstacle(biomeId, true) : platform()),
+  };
+  const o = (make[ch] || make.c)();
+  addObstacle(o, x0);
+  const air = feat.gravity < 1 ? 1.35 : 1;
+  const gap = o.width + trackSpeed() * (0.8 * air + R() * 0.5) + R() * 1.5 + o.extra * 0.6;
+  gapLeft = gap - over;
+  if (o.kind === 'platform') for (let x = o.sx0 + 0.3; x < o.sx1; x += 0.8) addCoin(x0 + x, o.base + o.amp + 1.3);
+}
+
 function buildNext(over) {
   const s = spawnScore;
   const biomeId = BIOMES[adv ? adv.world : biomeAt(s)].id;
+  if (adv && adv.custom) return buildCustom(over, biomeId);
   if (adv) {
     // the finish line, then nothing more
     const toFinish = (adv.finishAt ?? adv.length) - score;
@@ -955,6 +1006,7 @@ const RULES = {
   local: { revive: false, powerups: true, bones: 1, missions: false, record: false },
   lan: { revive: false, powerups: true, bones: 1, missions: true, record: true },
   challenge: { revive: false, powerups: true, bones: 1, missions: true, record: true },
+  custom: { revive: false, powerups: true, bones: 1, missions: true, record: false },
 };
 const rules = () => RULES[mode] || RULES.solo;
 
@@ -1041,6 +1093,7 @@ function resetRun(seed) {
   speedBoost = 1;
   for (const p of players) resetPlayer(p);
   if (upgradeLevel('shieldStart') && rules().powerups) for (const p of players) p.power.shield = powerTime().shield;
+  if (petPw.shield && pet && rules().powerups) player.power.shield = Math.max(player.power.shield, powerTime().shield * 0.5); // a fully grown pet
   run = newRunStats();
   ghostRec = [];
   ghostClock = 0;
@@ -1055,6 +1108,7 @@ function resetRun(seed) {
   ui.setCombo(1, false);
   ui.setPowerups(player.power, powerTime());
   ui.setBombs(mode === 'lan' && lanMode === 'sabotage' ? 0 : null);
+  ui.coopHearts(mode === 'lan' && lanMode === 'coop' ? COOP_HEARTS : null);
   ui.spectate(null);
   ui.advProgress(adv ? 0 : null);
   ui.bossBar(null);
@@ -1093,16 +1147,37 @@ function startMode(m, opts = {}) {
   if (m === 'challenge') challenge = { seed: opts.seed >>> 0, score: opts.score || 0, name: opts.name || '?' };
   else challenge = null;
   challengeable = null;
-  adv = m === 'adventure' ? { ...levelDef(opts.world, opts.level), bonesSpawned: 0, hits: 0, bossDone: false, finishSpawned: false } : null;
+  adv = m === 'adventure' ? { ...levelDef(opts.world, opts.level), bonesSpawned: 0, hits: 0, bossDone: false, finishSpawned: false } : m === 'custom' ? customAdv(opts.level) : null;
   if (m === 'local') localCount = clamp(opts.count || localCount, 2, 4);
   clearRivals();
   setPlayerCount(m === 'local' ? localCount : m === 'bot' ? 2 : 1);
   startRun(daily ? daily.seed : adv ? adv.seed : challenge ? challenge.seed : null);
   if (challenge) ui.toast(t('chBeat', { name: challenge.name, n: challenge.score }), 'gold');
   if (daily) ui.toast(t('dailyGoal', { n: daily.target }), 'gold');
-  if (adv) ui.toast(t('advLevelTitle', { w: t('biome_' + adv.biome), n: adv.level + 1 }), 'biome');
+  if (adv && adv.custom) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
+  else if (adv) ui.toast(t('advLevelTitle', { w: t('biome_' + adv.biome), n: adv.level + 1 }), 'biome');
   if (m === 'zen' || m === 'hardcore') ui.toast(t('mode_' + m), 'gold');
   if (m === 'bot') ui.toast(t('botStart', { lvl: t('bot_' + profile.settings.botLevel) }), 'gold');
+}
+
+// a track from the level editor, played like an adventure level (finish line, stars)
+function customAdv(lv) {
+  const w = Math.max(0, Math.min(BIOMES.length - 1, lv.w | 0));
+  return {
+    world: w,
+    level: 0,
+    boss: false,
+    biome: BIOMES[w].id,
+    seed: parseInt(levelId(lv), 16) >>> 0,
+    length: Infinity,
+    bossAt: Infinity,
+    startSpeed: SPEEDS[lv.s] ?? SPEEDS[1],
+    bonesSpawned: 0,
+    hits: 0,
+    bossDone: false,
+    finishSpawned: false,
+    custom: { lv, t: trimmed(lv), i: 0 },
+  };
 }
 
 const startSolo = () => startMode('solo');
@@ -1111,12 +1186,17 @@ const startLocal2 = (count = 2) => startMode('local', { count });
 
 function restart() {
   if (mode === 'adventure' && adv) startMode('adventure', { world: adv.world, level: adv.level });
+  else if (mode === 'custom' && adv) startMode('custom', { level: adv.custom.lv });
   else if (mode === 'lan') return;
   else startMode(mode, { count: localCount, ...(challenge || {}) });
 }
 
-function killPlayer(p, o) {
+const isCoop = () => mode === 'lan' && lanMode === 'coop' && !!lan;
+
+// final: the team is out of hearts (co-op), so this hit really ends the run
+function killPlayer(p, o, final = false) {
   if (rules().noDeath) return zenBump(p, o);
+  if (isCoop() && p === player && !final && lan.coopHit() > 0) return coopRescue(p, o);
   p.alive = false;
   p.final = score;
   p.finalPts = p.points;
@@ -1138,6 +1218,24 @@ function killPlayer(p, o) {
   state = 'dying';
   deathTimer = 0.9;
   music.stop(0.4);
+}
+
+// co-op: a hit costs the team a heart, and the dino carries on after a short blink
+function coopRescue(p, o) {
+  if (o) breakObstacle(o, p.index);
+  if (p.y < 0 || p.inPit) {
+    p.y = 0;
+    p.vy = JUMP_V * feat.jump;
+    p.inPit = false;
+  }
+  p.invuln = 2;
+  p.revived = true; // blinks while invulnerable
+  p.chain = 0;
+  sfx.shieldBreak();
+  vibrate([40, 30, 40]);
+  shake = 0.25;
+  ui.coopHearts(lan.hearts);
+  ui.toast(t('coopHeartLost', { n: lan.hearts }), 'red');
 }
 
 // zen mode: nothing can stop you; a hit only breaks the obstacle and slows you down
@@ -1220,17 +1318,34 @@ function recordRun(pts) {
   const missionsDone = R2.missions ? checkMissions(run) : [];
   const xp = addXp((s / 10 + run.coins * 2 + missionsDone.length * 20) * (mode === 'zen' ? 0.5 : 1));
   addPassXp(xp.gained); // the same XP fills the season pass
+  // the pet grows with the distance run together (not in local multiplayer, where it isn't yours alone)
+  const petGrew = mode === 'local' ? 0 : growPet(score);
+  if (petGrew) setPet(profile.pet);
+  const weekly = R2.missions ? checkWeekly() : { done: [], bonus: 0 };
   const ach = checkAchievements();
+  const medals = checkMedals();
   save();
   ui.setHi(st.best);
-  return { s, isRecord, missionsDone, xp, ach };
+  return { s, isRecord, missionsDone, xp, ach, petGrew, weekly, medals };
 }
 
-function celebrate({ missionsDone, xp, ach }) {
-  if (missionsDone.length) sfx.reward();
+function celebrate({ missionsDone, xp, ach, petGrew, weekly, medals }) {
+  if (missionsDone.length || (weekly && weekly.done.length)) sfx.reward();
   for (const l of xp.levelUps) ui.toast(t('levelUp', { n: l }), 'gold');
   for (const id of xp.unlocked) ui.toast(t('skinUnlocked', { name: t('skin_' + id) }), 'gold');
   for (const a of ach) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
+  if (petGrew) ui.toast(t('petGrew', { name: t('pet_' + profile.pet), n: petGrew }), 'gold');
+  if (weekly) {
+    for (const m of weekly.done) ui.toast(t('weeklyDone', { n: m.reward }), 'gold');
+    if (weekly.bonus) ui.toast(t('weeklyBonus', { n: weekly.bonus }), 'gold');
+  }
+  if (medals) celebrateMedals(medals);
+}
+
+// a run can earn several medals at once (the first time, a whole history of them): show a few
+function celebrateMedals(list) {
+  for (const m of list.slice(-3)) ui.toast(t('medalGot', { medal: t('medal_' + MEDAL_NAMES[m.tier]), name: t('st_' + m.stat), n: m.reward }), 'gold');
+  if (list.length > 3) ui.toast(t('medalMore', { n: list.length - 3 }), 'gold');
 }
 
 function finishRun() {
@@ -1296,7 +1411,7 @@ function finishRun() {
 function winLevel() {
   state = 'won';
   const s = scoreLevel(adv.bonesTaken || 0, adv.bonesSpawned, adv.hits);
-  const reward = saveLevel(adv.world, adv.level, s);
+  const reward = adv.custom ? saveLevelStars(adv.custom.lv, s) : saveLevel(adv.world, adv.level, s);
   if (adv.boss) profile.stats.bosses++;
   const res = recordRun(player.points);
   sfx.reward();
@@ -1385,6 +1500,7 @@ function toMenu() {
   setTimeout(menuMusic, 300);
   ui.hideRevive();
   ui.photoMode(false);
+  ui.coopHearts(null);
   ui.setPlaying(false);
   ui.showMenu();
 }
@@ -2407,7 +2523,17 @@ function updatePickups(dt, v) {
     c.m.position.set(c.x, c.y, p ? p.lane : 0);
     c.m.rotation.y += dt * (c.gold ? 7 : 4);
     // the baby pterodactyl catches bones a bit above and ahead of the dino
-    const reach = p === player && pet && pet.kind === 'ptera' ? 1.4 : 0;
+    const reach = p === player && pet ? petPw.reach : 0;
+    // the frog licks up bones ahead of the dino with its long tongue
+    if (p === player && pet && petPw.tongue && p.alive && c.x > 0.5 && c.x < petPw.tongue && Math.abs(c.y - (p.y + 1.2)) < 1.8) {
+      const dx = 0.3 - c.x;
+      const dy = p.y + 1.2 - c.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const step = Math.min(d, 30 * dt);
+      c.x += (dx / d) * step;
+      c.y += (dy / d) * step;
+      c.m.position.set(c.x, c.y, p.lane);
+    }
     const top = p ? p.y + (p.ducking ? 1.7 : 2.9) * p.giantK + reach : 0;
     const front = 1.3 * (p ? p.giantK : 1);
     if (p && p.alive && state === 'running' && c.x > -0.8 && c.x < front + reach * 0.4 && c.y > p.y - 0.2 && c.y < top) {
@@ -2614,13 +2740,26 @@ async function openLan() {
         ui.toast(t('tourBonus', { n: 150 }), 'gold');
       }
       st.mpGames++;
-      const won = results.length > 1 && results[0].id === session.me.id;
+      const coop = session.mode === 'coop';
+      const won = !coop && results.length > 1 && results[0].id === session.me.id;
       if (won) st.mpWins++;
+      if (coop) {
+        // the team's distance: everyone shares the bonus
+        const team = Math.max(0, ...results.map((r) => r.sc || 0));
+        st.coopGames = (st.coopGames || 0) + 1;
+        st.coopBest = Math.max(st.coopBest || 0, team);
+        const bonus = Math.floor(team / 100) * 3;
+        if (bonus) {
+          profile.coins += bonus;
+          ui.toast(t('coopBonus', { n: bonus }), 'gold');
+        }
+      }
       if (won && lanMode === 'elimination') {
         profile.coins += 100;
         ui.toast(t('elimBonus', { n: 100 }), 'gold');
       }
       for (const a of checkAchievements()) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
+      celebrateMedals(checkMedals());
       save();
       if (state === 'spectate') state = 'over';
       ui.spectate(null);
@@ -2707,6 +2846,11 @@ function beginCountdown(seed, m) {
 
 function updateRivals(dt) {
   if (!lan || mode !== 'lan') return;
+  if (lanMode === 'coop') {
+    ui.coopHearts(lan.hearts);
+    // a teammate lost the last heart: everybody's run ends together
+    if (lan.hearts <= 0 && player.alive && state === 'running') killPlayer(player, null, true);
+  }
   const states = new Map(lan.others().map((s) => [s.id, s]));
   for (const [id, r] of rivals) {
     const s = states.get(id);
@@ -2822,7 +2966,7 @@ function update(rawDt) {
       if (state === 'running') {
         sfx.point();
         ui.flashScore();
-        if (pet && pet.kind === 'turtle' && player.alive) giveBone(player); // the turtle brings a bone every 100 points
+        if (pet && player.alive) for (let k = 0; k < petPw.bones100; k++) giveBone(player); // the turtle brings bones every 100 points
       }
     }
     const n = Math.floor(score / NIGHT_EVERY);
@@ -2842,7 +2986,7 @@ function update(rawDt) {
       if (adv.boss && !boss && !adv.bossDone && score >= adv.bossAt) startBoss();
       if (adv.bossDone && adv.finishAt == null) adv.finishAt = score + 160;
       const total = adv.boss ? (adv.finishAt ?? adv.length) : adv.length;
-      ui.advProgress(clamp(score / total, 0, 1));
+      ui.advProgress(adv.custom ? clamp(adv.custom.i / Math.max(1, adv.custom.t.length), 0, 1) : clamp(score / total, 0, 1));
     } else if (!boss && !event && !tutorial && mode !== 'lan' && score >= nextBossAt && state === 'running') startBoss();
     updateBoss(dt);
     if (daily && player.alive && player.points >= daily.target && !daily.rewarded) {
@@ -3094,6 +3238,9 @@ const game = {
   },
   get season() {
     return season;
+  },
+  get biomeId() {
+    return BIOMES[env.biome].id;
   },
   setTrail: () => {},
   lanOpen: openLan,
