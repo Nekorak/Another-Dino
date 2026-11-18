@@ -6,7 +6,7 @@ import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dai
 import { BIOMES } from './biomes.js';
 import { ADV_LEVELS, stars as advStars, unlocked as advUnlocked, totalStars } from './modes.js';
 import { TRAILS, FOSSIL_KINDS, FOSSIL_WORLD_REWARD, fossilId, fossilPixels, allFossils } from './collection.js';
-import { encodeProgress, decodeProgress, mergeProgress, qrCanvas, readQrFromImage, CameraScanner, LanSync, isChallenge, decodeChallenge } from './transfer.js';
+import { encodeProgress, decodeProgress, mergeProgress, QR_LIMIT, qrCanvas, readQrFromImage, CameraScanner, LanSync, isChallenge, decodeChallenge } from './transfer.js';
 import { save, resetProgress } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
@@ -1415,7 +1415,17 @@ export class UI {
       });
       const area = el('textarea', { class: 'code', readonly: true, rows: 4 });
       area.value = code;
-      body = el('div', { class: 'xfer' }, el('p', { class: 'small', text: t('xferQrHelp') }), qrCanvas(code, 3), el('p', { class: 'small muted', text: t('xferCodeHelp') }), area, copy);
+      // a long code makes a dense QR that cameras struggle with: the QR then leaves the tracks out
+      let qrCode = code;
+      if (new TextEncoder().encode(code).length > QR_LIMIT) qrCode = encodeProgress({ levels: false });
+      let qr;
+      try {
+        qr = qrCanvas(qrCode, 3);
+      } catch {
+        qr = null; // too big even for the largest QR: the text code and Wi-Fi still work
+      }
+      const note = qrCode !== code || !qr ? el('p', { class: 'small muted', text: t('xferQrNoLevels') }) : null;
+      body = el('div', { class: 'xfer' + (qrCode.length > 600 ? ' qr-big' : '') }, el('p', { class: 'small', text: t('xferQrHelp') }), qr, note, el('p', { class: 'small muted', text: t('xferCodeHelp') }), area, copy);
     } else if (tab === 'scan') {
       const video = el('video', { class: 'scan-video', playsinline: true, muted: true, autoplay: true });
       const camBtn = el('button', { class: 'menu-btn primary', text: t('xferCamera') });
@@ -2009,8 +2019,12 @@ export class UI {
       } else if (Capacitor.getPlatform() === 'android') {
         const handle = await Updater.addListener('progress', (e) => progress(e.percent));
         const url = `https://github.com/${REPO}/releases/download/v${this.latest}/Another-Dino-android.apk`;
-        const r = await Updater.install({ url });
-        handle.remove();
+        let r;
+        try {
+          r = await Updater.install({ url });
+        } finally {
+          handle.remove(); // also after a failed download, so a retry does not count progress twice
+        }
         this.updateStatus(r.status === 'permission' ? t('updatePermission') : t('updateInstalling'));
       }
     } catch (err) {

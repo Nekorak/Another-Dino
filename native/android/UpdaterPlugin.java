@@ -23,6 +23,7 @@ import java.net.URL;
 @CapacitorPlugin(name = "Updater")
 public class UpdaterPlugin extends Plugin {
     private File pending;
+    private volatile boolean busy;
 
     @PluginMethod
     public void install(PluginCall call) {
@@ -30,6 +31,14 @@ public class UpdaterPlugin extends Plugin {
         if (url == null || !url.startsWith("https://github.com/Nekorak/Another-Dino/")) {
             call.reject("bad url");
             return;
+        }
+        // two taps must not write the same file at once
+        synchronized (this) {
+            if (busy) {
+                call.reject("busy");
+                return;
+            }
+            busy = true;
         }
         new Thread(() -> {
             try {
@@ -53,6 +62,8 @@ public class UpdaterPlugin extends Plugin {
                 call.resolve(res);
             } catch (Exception e) {
                 call.reject(String.valueOf(e.getMessage()));
+            } finally {
+                busy = false;
             }
         }, "apk-update").start();
     }
@@ -88,7 +99,10 @@ public class UpdaterPlugin extends Plugin {
         long total = c.getContentLengthLong();
         long done = 0;
         int lastPct = -1;
-        try (InputStream in = c.getInputStream(); OutputStream os = new FileOutputStream(out)) {
+        // download next to the target and swap it in only when complete: a cut connection
+        // must never leave a broken APK that the installer then rejects as "damaged"
+        File part = new File(out.getPath() + ".part");
+        try (InputStream in = c.getInputStream(); OutputStream os = new FileOutputStream(part)) {
             byte[] buf = new byte[65536];
             int n;
             while ((n = in.read(buf)) > 0) {
@@ -105,5 +119,11 @@ public class UpdaterPlugin extends Plugin {
         } finally {
             c.disconnect();
         }
+        if (total > 0 && done != total) {
+            part.delete();
+            throw new Exception("download cut off (" + done + " of " + total + " bytes)");
+        }
+        if (out.exists() && !out.delete()) throw new Exception("cannot replace old download");
+        if (!part.renameTo(out)) throw new Exception("cannot save download");
     }
 }

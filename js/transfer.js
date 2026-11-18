@@ -10,6 +10,8 @@ import { ACHIEVEMENTS } from './missions.js';
 import { DANCES, THEMES, EDITOR_GRID, EDITOR_PALETTE } from './custom.js';
 import { UPGRADES } from './progress.js';
 import { MEDALS } from './medals.js';
+import { levelId, MAX_LEVELS, MAX_SLOTS, PIECES, SPEEDS } from './levels.js';
+import { BIOMES } from './biomes.js';
 import qrcode from 'qrcode';
 
 const HEADER = 'ANOTHERDINO';
@@ -45,7 +47,7 @@ function hexToFossils(hex) {
   const ids = allFossils();
   const out = [];
   let bits = '';
-  for (const ch of hex) bits += parseInt(ch, 16).toString(2).padStart(4, '0');
+  for (const ch of hex) if (/[0-9a-f]/i.test(ch)) bits += parseInt(ch, 16).toString(2).padStart(4, '0');
   ids.forEach((id, i) => bits[i] === '1' && out.push(id));
   return out;
 }
@@ -83,7 +85,28 @@ function textToCustom(t) {
   return out;
 }
 
-export function encodeProgress() {
+// home-made tracks: name~world~speed~pieces~from, joined by |
+const lvText = (s) => String(s || '').replace(/[;=,|~]/g, '').slice(0, 18);
+function levelsToText(list) {
+  return (list || []).map((lv) => [lvText(lv.name), lv.w | 0, lv.s | 0, String(lv.t || '').replace(/[^.a-zA-Z]/g, ''), lvText(lv.from)].join('~')).join('|');
+}
+function textToLevels(t) {
+  const out = [];
+  for (const e of String(t || '').split('|')) {
+    const [name, w, s, track, from] = e.split('~');
+    const pieces = [...String(track || '')].filter((ch) => PIECES[ch]).slice(0, MAX_SLOTS).join('');
+    const clamp = (v, n) => Math.max(0, Math.min(n - 1, Number(v) | 0));
+    if (pieces.replace(/[.ou]/g, '')) out.push({ name: name || '', w: clamp(w, BIOMES.length), s: clamp(s, SPEEDS.length), t: pieces, from: from || '' });
+  }
+  return out.slice(0, MAX_LEVELS);
+}
+
+// The QR code can only hold about 2.9 KB and gets hard to scan long before that,
+// so the QR leaves out the home-made tracks when they would make it too big
+// (the text code and the Wi-Fi transfer always carry everything).
+export const QR_LIMIT = 1800;
+
+export function encodeProgress({ levels = true } = {}) {
   const p = profile;
   const adv = Object.entries(p.adventure)
     .map(([k, v]) => `${k}:${v}`)
@@ -115,7 +138,10 @@ export function encodeProgress() {
     // v1.4: how much each pet has grown, and the medals
     ['petxp', Object.entries(p.petXp).map(([k, v]) => `${k}:${Math.floor(v)}`).join(',')],
     ['medals', Object.entries(p.medals).map(([k, v]) => `${k}:${v}`).join(',')],
+    // v1.5: stars on tracks and the tracks themselves (left out of a QR that would be too big)
+    ['lvstars', Object.entries(p.levelStars || {}).map(([k, v]) => `${k}:${v}`).join(',')],
   ];
+  if (levels && p.levels && p.levels.length) fields.push(['levels', levelsToText(p.levels)]);
   const body = HEADER + ';' + fields.map(([k, v]) => `${k}=${v}`).join(';');
   return body + ';sum=' + fnv(body);
 }
@@ -180,6 +206,13 @@ export function decodeProgress(text) {
         .filter(([k]) => MEDALS[k])
         .map(([k, v]) => [k, Math.min(3, num(v))]),
     ),
+    levelStars: Object.fromEntries(
+      list('lvstars')
+        .map((e) => e.split(':'))
+        .filter(([k]) => /^[0-9a-f]{8}$/.test(k))
+        .map(([k, v]) => [k, Math.min(3, num(v))]),
+    ),
+    levels: textToLevels(vars.levels),
     pass: (() => {
       const [season, xp, claimed] = (vars.pass || '').split(',');
       return season ? { season, xp: num(xp), claimed: (claimed || '').split('.').filter(Boolean).map(Number).filter((n) => n >= 1 && n <= 30) } : null;
@@ -244,6 +277,15 @@ export function mergeProgress(d) {
   } else if (d.pass && d.pass.season > p.pass.season) p.pass = d.pass;
   for (const [k, v] of Object.entries(d.petXp || {})) p.petXp[k] = Math.max(p.petXp[k] || 0, v);
   for (const [k, v] of Object.entries(d.medals || {})) p.medals[k] = Math.max(p.medals[k] || 0, v);
+  for (const [k, v] of Object.entries(d.levelStars || {})) p.levelStars[k] = Math.max(p.levelStars[k] || 0, v);
+  // tracks this device does not have yet are added at the end while there is room
+  // (same track = same id, never doubled; the tracks already here are never pushed out)
+  const have = new Set(p.levels.map(levelId));
+  for (const lv of d.levels || []) {
+    if (p.levels.length >= MAX_LEVELS) break;
+    const id = levelId(lv);
+    if (!have.has(id)) p.levels.push(lv), have.add(id);
+  }
   if (!p.name && d.name) p.name = d.name;
   save();
 }
@@ -364,6 +406,9 @@ export class CameraScanner {
 // types the PIN and sends the same text as the QR code, in pieces.
 export const SYNC_PORT = 47778;
 const CHUNK = 900;
+const MAX_CHUNKS = 16;
+const RESEND_MS = 700;
+const RESEND_TRIES = 12;
 
 export class LanSync {
   constructor(transport, on) {
@@ -379,7 +424,10 @@ export class LanSync {
   }
   async stop() {
     clearInterval(this.timer);
+    clearTimeout(this.resend);
     this.timer = null;
+    this.attempt = null;
+    this.stopped = true;
     await this.t.stop();
   }
   pack(m) {
@@ -404,13 +452,26 @@ export class LanSync {
     }, 1000);
   }
   send(device, pin, text) {
-    this.answered = false; // one toast per attempt, although every packet is sent three times
+    clearTimeout(this.resend);
+    this.answered = false; // one toast per attempt, although every packet is sent several times
     const a = (this.attempt = Math.random().toString(36).slice(2, 8)); // late replies to an older attempt are ignored
     const n = Math.ceil(text.length / CHUNK);
     const msgs = [];
     for (let i = 0; i < n; i++) msgs.push(this.pack({ t: 'data', a, pin, i, n, d: text.slice(i * CHUNK, (i + 1) * CHUNK) }));
-    // UDP can drop packets, so everything is sent three times
-    for (let r = 0; r < 3; r++) setTimeout(() => msgs.forEach((m) => this.t.send(device.addr, device.port, m)), r * 250);
+    // UDP can drop packets: everything is sent again until the other device answers,
+    // and after about 8 seconds of silence the player is told nothing came back
+    let tries = 0;
+    const round = () => {
+      if (this.answered || this.attempt !== a) return;
+      if (tries++ >= RESEND_TRIES) {
+        this.answered = true;
+        this.on.error('xferNoAnswer');
+        return;
+      }
+      msgs.forEach((m) => this.t.send(device.addr, device.port, m));
+      this.resend = setTimeout(round, RESEND_MS);
+    };
+    round();
   }
   receive({ data, address, port }) {
     let m;
@@ -429,18 +490,27 @@ export class LanSync {
       if (m.t === 'ok') this.on.sent();
       else this.on.error('xferBadPin');
     } else if (this.role === 'receive' && m.t === 'data') {
+      const n = Number(m.n);
+      const i = Number(m.i);
+      if (!Number.isInteger(n) || n < 1 || n > MAX_CHUNKS || !Number.isInteger(i) || i < 0 || i >= n || typeof m.d !== 'string') return;
       if (String(m.pin) !== this.pin) {
-        for (let i = 0; i < 3; i++) this.t.send(address, port, this.pack({ t: 'badpin', a: m.a })); // UDP: say it three times
+        this.t.send(address, port, this.pack({ t: 'badpin', a: m.a }));
         return;
       }
       const key = m.from + ':' + m.a; // chunks of different attempts never mix
-      if (!this.parts.has(key)) this.parts.set(key, new Array(m.n));
+      // the sender keeps repeating until it hears "ok": answer again if our answer was lost
+      if (this.finished === key) return this.t.send(address, port, this.pack({ t: 'ok', a: m.a }));
+      if (this.done) return;
+      if (!this.parts.has(key)) this.parts.set(key, new Array(n));
       const arr = this.parts.get(key);
-      arr[m.i] = m.d;
-      if (arr.filter((x) => x != null).length === m.n && !this.done) {
+      if (arr.length !== n) return;
+      arr[i] = m.d;
+      if (arr.filter((x) => x != null).length === n) {
         this.done = true;
-        for (let i = 0; i < 3; i++) this.t.send(address, port, this.pack({ t: 'ok', a: m.a }));
-        this.on.received(arr.join(''));
+        this.finished = key;
+        this.t.send(address, port, this.pack({ t: 'ok', a: m.a }));
+        // keep listening a moment so a repeated packet still gets its "ok" before the socket closes
+        setTimeout(() => !this.stopped && this.on.received(arr.join('')), 600);
       }
     }
   }
