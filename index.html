@@ -95,15 +95,17 @@
     </div>
 
     <div id="over" class="screen hidden">
+      <div class="over-card">
       <h2 id="over-title">GAME OVER</h2>
       <p id="over-score" class="big-score"></p>
       <p id="over-record" class="blink"></p>
       <p id="over-coins"></p>
-      <p id="over-xp" class="small"></p>
+      <div id="over-level" class="hidden"><span id="over-level-n"></span><span class="xpbar"><i></i></span><span id="over-xp" class="small"></span></div>
+      <p id="over-near"></p>
       <div id="over-extra"></div>
       <div id="over-missions"></div>
       <div class="over-buttons">
-        <button id="btn-restart" aria-label="Restart">
+        <button id="btn-restart" aria-label="Restart"><span id="btn-restart-label"></span>
           <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M1 5h1v1h-1zM1 6h1v1h-1zM1 7h1v1h-1zM1 8h1v1h-1zM2 3h1v1h-1zM2 4h1v1h-1zM2 5h1v1h-1zM2 6h1v1h-1zM2 7h1v1h-1zM2 8h1v1h-1zM2 9h1v1h-1zM2 10h1v1h-1zM3 2h1v1h-1zM3 3h1v1h-1zM3 4h1v1h-1zM3 5h1v1h-1zM3 8h1v1h-1zM3 9h1v1h-1zM3 10h1v1h-1zM3 11h1v1h-1zM4 2h1v1h-1zM4 3h1v1h-1zM4 10h1v1h-1zM4 11h1v1h-1zM5 1h1v1h-1zM5 2h1v1h-1zM5 3h1v1h-1zM5 10h1v1h-1zM5 11h1v1h-1zM5 12h1v1h-1zM6 1h1v1h-1zM6 2h1v1h-1zM6 11h1v1h-1zM6 12h1v1h-1zM7 0h1v1h-1zM7 1h1v1h-1zM7 2h1v1h-1zM7 3h1v1h-1zM7 4h1v1h-1zM7 11h1v1h-1zM7 12h1v1h-1zM8 1h1v1h-1zM8 2h1v1h-1zM8 3h1v1h-1zM8 10h1v1h-1zM8 11h1v1h-1zM8 12h1v1h-1zM9 2h1v1h-1zM9 10h1v1h-1zM9 11h1v1h-1zM10 8h1v1h-1zM10 9h1v1h-1zM10 10h1v1h-1zM10 11h1v1h-1zM11 6h1v1h-1zM11 7h1v1h-1zM11 8h1v1h-1zM11 9h1v1h-1zM11 10h1v1h-1zM12 6h1v1h-1zM12 7h1v1h-1zM12 8h1v1h-1z" /></svg>
         </button>
         <button id="btn-over-menu" class="menu-btn" data-t="menu"></button>
@@ -114,6 +116,7 @@
         <button id="btn-challenge" class="menu-btn hidden" data-t="chSend"></button>
       </div>
       <p id="again-msg" class="small"></p>
+      </div>
     </div>
 
     <div id="replay" class="screen hidden">
@@ -146,6 +149,7 @@
     </div>
 
     <div id="win" class="screen hidden">
+      <div class="over-card">
       <h2 id="win-title"></h2>
       <div id="win-stars"></div>
       <div id="win-details"></div>
@@ -153,6 +157,7 @@
         <button id="btn-win-next" class="menu-btn primary"></button>
         <button id="btn-win-retry" class="menu-btn"></button>
         <button id="btn-win-map" class="menu-btn"></button>
+      </div>
       </div>
     </div>
 
@@ -190,6 +195,15 @@
         <h3 data-t="newsTitle"></h3>
         <ul id="news-list"></ul>
         <button id="news-ok" class="menu-btn primary" data-t="newsOk"></button>
+      </div>
+    </div>
+
+    <div id="story" class="hidden">
+      <div class="egg-box story-box">
+        <div id="story-scene" class="story-scene" aria-hidden="true"></div>
+        <h3 id="story-title"></h3>
+        <p id="story-text"></p>
+        <button id="story-ok" class="menu-btn primary"></button>
       </div>
     </div>
 

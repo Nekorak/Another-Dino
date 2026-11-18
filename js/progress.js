@@ -6,10 +6,10 @@ import { SKINS, HATS, PETS } from './models.js';
 // ------------------------------------------------------------------ upgrades
 // cost of each next level; the array length is the max level
 export const UPGRADES = {
-  duration: { cost: [100, 200, 350, 500, 800] }, // power-ups last +15% per level
-  shieldStart: { cost: [400] }, // every run starts with a shield
-  bones: { cost: [150, 300, 500, 750, 1000] }, // +10% chance per level that a bone counts double
-  luck: { cost: [150, 300, 600] }, // power-ups show up more often
+  duration: { cost: [100, 250, 450, 800, 1300] }, // power-ups last +15% per level
+  shieldStart: { cost: [800] }, // every run starts with a shield
+  bones: { cost: [150, 350, 650, 1000, 1600] }, // +10% chance per level that a bone counts double
+  luck: { cost: [200, 450, 900] }, // power-ups show up more often
 };
 
 export const upgradeLevel = (id) => profile.upgrades[id] || 0;
@@ -122,27 +122,43 @@ export function recordDaily(score) {
 }
 
 // ------------------------------------------------------------------ mystery egg
-export const EGG_PRICE = 150;
+export const EGG_PRICE = 300;
+
+// the golden egg only holds the expensive things
+export const GOLD_EGG_PRICE = 1000;
+const GOLD_EGG_MIN = 500;
+function eggPool(gold) {
+  const min = gold ? GOLD_EGG_MIN : 1;
+  const pool = [];
+  for (const [id, it] of Object.entries(SKINS)) if (it.price >= min && !profile.owned.skin.includes(id)) pool.push(['skin', id]);
+  for (const [id, it] of Object.entries(HATS)) if (it.price >= min && !profile.owned.hat.includes(id)) pool.push(['hat', id]);
+  for (const [id, it] of Object.entries(PETS)) if (it.price >= min && !profile.owned.pet.includes(id)) pool.push(['pet', id]);
+  return pool;
+}
 
 // returns { kind: 'skin'|'hat'|'pet', id } or null when everything is owned
-export function openEgg() {
-  const pool = [];
-  for (const [id, it] of Object.entries(SKINS)) if (it.price > 0 && !profile.owned.skin.includes(id)) pool.push(['skin', id]);
-  for (const [id, it] of Object.entries(HATS)) if (it.price > 0 && !profile.owned.hat.includes(id)) pool.push(['hat', id]);
-  for (const [id, it] of Object.entries(PETS)) if (it.price > 0 && !profile.owned.pet.includes(id)) pool.push(['pet', id]);
-  if (!pool.length || profile.coins < EGG_PRICE) return null;
+export function openEgg(gold = false) {
+  const pool = eggPool(gold);
+  const price = gold ? GOLD_EGG_PRICE : EGG_PRICE;
+  if (!pool.length || profile.coins < price) return null;
   const [kind, id] = pool[Math.floor(Math.random() * pool.length)];
-  profile.coins -= EGG_PRICE;
+  profile.coins -= price;
   profile.owned[kind].push(id);
   profile.stats.eggs++;
   save();
   return { kind, id };
 }
 
-export function eggPoolSize() {
+export function eggPoolSize(gold = false) {
+  if (gold) return eggPool(true).length;
   let n = 0;
   for (const [id, it] of Object.entries(SKINS)) if (it.price > 0 && !profile.owned.skin.includes(id)) n++;
   for (const [id, it] of Object.entries(HATS)) if (it.price > 0 && !profile.owned.hat.includes(id)) n++;
   for (const [id, it] of Object.entries(PETS)) if (it.price > 0 && !profile.owned.pet.includes(id)) n++;
   return n;
 }
+
+// ------------------------------------------------------------------ pet food
+// bones for the pet: it grows as if you had run PET_FOOD_XP points together
+export const PET_FOOD_PRICE = 200;
+export const PET_FOOD_XP = 2500;

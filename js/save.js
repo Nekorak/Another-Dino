@@ -88,6 +88,12 @@ function defaults() {
     petXp: {}, // pet id -> distance run together (pets grow with it)
     levels: [], // tracks made in the level editor or received by QR: { name, w, s, t, from }
     levelStars: {}, // level code hash -> best stars
+    // v1.5
+    seen: { init: false, ach: 0, fossils: 0, shop: 0, unlocks: [] }, // red dots and step-by-step unlocks
+    weeklyTrack: { week: '', done: false }, // the track of the week
+    storySeen: [], // adventure: worlds whose story page was shown
+    coopTop: [], // co-op: the best teams on this device { s, names, d }
+    mutator: { date: '', best: 0 }, // rule of the day: best score today
   };
 }
 

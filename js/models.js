@@ -9,10 +9,10 @@ export const SKINS = {
   red: { price: 100, body: '#d9483b', dark: '#a8322a', belly: '#f6c2ae', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#5a1a14', foot: '#86271f' },
   blue: { price: 150, body: '#3f7fd9', dark: '#2c5ea6', belly: '#c4e2ff', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#16305a', foot: '#24508e' },
   pink: { price: 200, body: '#f27db5', dark: '#c45a8d', belly: '#ffe0ef', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6e2148', foot: '#a8457a' },
-  gold: { price: 500, body: '#e8b923', dark: '#b38b12', belly: '#fff1a8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6e520a', foot: '#9a760c', shiny: true },
-  shadow: { price: 600, body: '#2d2740', dark: '#1b1728', belly: '#5d4c85', eye: '#d58bff', pupil: '#ffffff', mouth: '#120f1c', foot: '#16121f' },
-  skeleton: { price: 800, body: '#ebe5d2', dark: '#b9b09a', belly: '#d2c9b1', eye: '#1b1b1b', pupil: '#e04040', mouth: '#3a3a3a', foot: '#a89f88', pattern: 'ribs' },
-  robot: { price: 1000, body: '#a9b4c0', dark: '#6d7884', belly: '#d3dbe3', eye: '#ff3b30', pupil: '#ffd2cf', mouth: '#38404a', foot: '#56606b', pattern: 'panels' },
+  gold: { price: 900, body: '#e8b923', dark: '#b38b12', belly: '#fff1a8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6e520a', foot: '#9a760c', shiny: true },
+  shadow: { price: 1200, body: '#2d2740', dark: '#1b1728', belly: '#5d4c85', eye: '#d58bff', pupil: '#ffffff', mouth: '#120f1c', foot: '#16121f' },
+  skeleton: { price: 1600, body: '#ebe5d2', dark: '#b9b09a', belly: '#d2c9b1', eye: '#1b1b1b', pupil: '#e04040', mouth: '#3a3a3a', foot: '#a89f88', pattern: 'ribs' },
+  robot: { price: 2200, body: '#a9b4c0', dark: '#6d7884', belly: '#d3dbe3', eye: '#ff3b30', pupil: '#ffd2cf', mouth: '#38404a', foot: '#56606b', pattern: 'panels' },
   // unlocked by player level, not bought
   lava: { level: 5, body: '#3a2a2a', dark: '#241818', belly: '#ff8c1a', eye: '#ffcf3a', pupil: '#ff3b00', mouth: '#120a0a', foot: '#241818', pattern: 'lava' },
   ice: { level: 10, body: '#a8e4ff', dark: '#6cc4ec', belly: '#ffffff', eye: '#ffffff', pupil: '#2a6aa8', mouth: '#3a7ab8', foot: '#6cc4ec', pattern: 'ice' },
@@ -61,8 +61,8 @@ export const HATS = {
   cowboy: { price: 150 },
   shades: { price: 200 },
   tophat: { price: 250 },
-  headphones: { price: 300 },
-  crown: { price: 750 },
+  headphones: { price: 400 },
+  crown: { price: 1500 },
   // gifts from seasonal events, not for sale
   pumpkin: { season: 'halloween' },
   santa: { season: 'christmas' },
@@ -398,30 +398,34 @@ const PTERO = [
 ];
 const PC = { P: '#8a5aa0', L: '#c094d6', O: '#f0a63a', W: '#ffe066', F: '#5d3a70' };
 
-let pteroGeo = null;
-function pteroGeometries() {
-  if (pteroGeo) return pteroGeo;
+const pteroGeoCache = new Map();
+// pal: another palette for the same shape (the bosses of some worlds, the grown-up pet)
+function pteroGeometries(pal = PC) {
+  const ck = JSON.stringify(pal);
+  if (pteroGeoCache.has(ck)) return pteroGeoCache.get(ck);
+  const PC_ = pal;
   const vs = new VoxelSet();
   const H = PTERO.length;
-  extrude(vs, PTERO, PC, {
+  extrude(vs, PTERO, PC_, {
     depth: (ch, x, y) => (ch === 'O' || H - 1 - y === 0 || x >= 17 ? [0, 0] : [-1, 1]),
-    color: (ch, x, y, z) => (ch === 'W' ? (Math.abs(z) === 1 ? PC.W : PC.P) : PC[ch]),
+    color: (ch, x, y, z) => (ch === 'W' ? (Math.abs(z) === 1 ? PC_.W : PC_.P) : PC_[ch]),
   });
   const wing = (sign) => {
     const w = new VoxelSet();
     for (let d = 0; d <= 8; d++) {
       const x0 = 8 + Math.floor(d * 0.35);
       const x1 = 15 - Math.floor(d * 0.55);
-      for (let x = x0; x <= x1; x++) w.set(x, 0, sign * d, x === x0 ? PC.P : PC.L);
+      for (let x = x0; x <= x1; x++) w.set(x, 0, sign * d, x === x0 ? PC_.P : PC_.L);
     }
     return buildGeometry(w, [9, 0, sign > 0 ? 0 : 1]);
   };
-  pteroGeo = { body: buildGeometry(vs, [9, 0, 0.5]), right: wing(1), left: wing(-1) };
-  return pteroGeo;
+  const geo = { body: buildGeometry(vs, [9, 0, 0.5]), right: wing(1), left: wing(-1) };
+  pteroGeoCache.set(ck, geo);
+  return geo;
 }
 
-export function createPtero() {
-  const g = pteroGeometries();
+export function createPtero(pal) {
+  const g = pteroGeometries(pal ? { ...PC, ...pal } : PC);
   const root = new THREE.Group();
   const body = new THREE.Mesh(g.body, voxelMaterial);
   body.castShadow = true;
@@ -509,13 +513,16 @@ export function powerupGeometry(type) {
 // ---------------------------------------------------------------- pets
 export const PETS = {
   none: { price: 0 },
-  chick: { price: 150 },
-  turtle: { price: 250 },
-  ptera: { price: 300 },
-  frog: { price: 350 },
+  chick: { price: 300 },
+  turtle: { price: 500 },
+  ptera: { price: 700 },
+  frog: { price: 800 },
 };
 
-function petVoxels(id) {
+// adult: the look of a pet at the top level (it evolves): the chick becomes a hen with a red
+// comb, the turtle grows spiky armour, the frog wears a crown, the pterodactyl grows up
+const ADULT_PTERO = { P: '#5a3a8a', L: '#e8b923', O: '#f07a2a', F: '#3a2260' };
+function petVoxels(id, adult = false) {
   const vs = new VoxelSet();
   const box = (x0, x1, y0, y1, z0, z1, c) => {
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) vs.set(x, y, z, c);
@@ -527,6 +534,14 @@ function petVoxels(id) {
     for (const z of [-1, 1]) vs.set(1, 6, z, '#1b1b1b');
     for (const z of [-1, 1]) box(0, 0, 0, 0, z, z, '#ff9a2a');
     box(-3, -3, 3, 4, 0, 0, '#f2c230');
+    if (adult) {
+      box(-1, 1, 7, 8, 0, 0, '#e0303a'); // comb
+      vs.set(0, 9, 0, '#e0303a');
+      box(2, 2, 4, 4, 0, 0, '#e0303a'); // wattle
+      box(-4, -4, 4, 6, -1, 1, '#ffffff'); // tail feathers
+      box(-2, 2, 2, 4, -3, -3, '#f2c230'); // wings
+      box(-2, 2, 2, 4, 3, 3, '#f2c230');
+    }
   } else if (id === 'turtle') {
     for (let x = -3; x <= 3; x++)
       for (let z = -3; z <= 3; z++) {
@@ -537,6 +552,15 @@ function petVoxels(id) {
     vs.set(5, 2, -1, '#1b1b1b');
     vs.set(5, 2, 1, '#1b1b1b');
     for (const x of [-2, 2]) for (const z of [-3, 3]) vs.set(x, 0, z, '#8fc46a');
+    if (adult) {
+      // armour: a dark shell with spikes on top
+      for (const v of [...vs.map.values()]) if (v.y >= 1 && Math.abs(v.x) <= 3 && Math.abs(v.z) <= 3) v.color = (v.x + v.z) % 2 ? '#4a4f5a' : '#363a44';
+      for (const [x, z] of [[0, 0], [-2, -1], [2, 1], [-1, 2], [1, -2]]) {
+        const top = 2 + Math.max(0, 3 - Math.floor((Math.abs(x) + Math.abs(z)) / 2));
+        vs.set(x, top, z, '#d8dce4');
+        vs.set(x, top + 1, z, '#ffffff');
+      }
+    }
   } else if (id === 'frog') {
     // a little green frog, sitting, with big eyes on top
     box(-2, 2, 1, 3, -2, 2, '#5fbf3a');
@@ -550,39 +574,47 @@ function petVoxels(id) {
       box(-3, -2, 0, 1, z, z, '#4a9a2c'); // back legs
     }
     vs.set(4, 1, 0, '#e0405a'); // the tongue peeking out
+    if (adult) {
+      // the frog king
+      box(-1, 1, 4, 4, -2, 2, '#ffd23f');
+      for (const z of [-2, 0, 2]) vs.set(0, 5, z, '#ffd23f');
+      vs.set(0, 5, 0, '#e0303a');
+    }
   }
   return vs;
 }
 
 const petCache = new Map();
-export function createPet(id) {
+export function createPet(id, adult = false) {
   if (!PETS[id] || id === 'none') return null;
   if (id === 'ptera') {
-    const p = createPtero();
-    p.root.scale.setScalar(0.45);
+    const p = createPtero(adult ? ADULT_PTERO : null);
+    p.root.scale.setScalar(adult ? 0.55 : 0.45);
     p.kind = 'ptera';
     return p;
   }
-  if (!petCache.has(id)) petCache.set(id, buildGeometry(petVoxels(id), [0.5, 0, 0.5], { scale: VOX * 0.8 }));
+  const ck = id + (adult ? ':adult' : '');
+  if (!petCache.has(ck)) petCache.set(ck, buildGeometry(petVoxels(id, adult), [0.5, 0, 0.5], { scale: VOX * 0.8 }));
   const root = new THREE.Group();
-  const m = new THREE.Mesh(petCache.get(id), voxelMaterial);
+  const m = new THREE.Mesh(petCache.get(ck), voxelMaterial);
   m.castShadow = true;
   root.add(m);
   return { root, body: m, kind: id };
 }
 
 // front view of a pet for the shop cards
-export function petPixels(id) {
+export function petPixels(id, adult = false) {
   if (id === 'ptera') {
+    const pal = adult ? { ...PC, ...ADULT_PTERO } : PC;
     const out = [];
     PTERO.forEach((row, r) => {
-      for (let x = 0; x < row.length; x++) if (PC[row[x]]) out.push({ x, y: PTERO.length - 1 - r, z: 0, color: PC[row[x]] });
+      for (let x = 0; x < row.length; x++) if (pal[row[x]]) out.push({ x, y: PTERO.length - 1 - r, z: 0, color: pal[row[x]] });
     });
     return out;
   }
   if (id === 'none') return [];
   const best = new Map();
-  for (const v of petVoxels(id).map.values()) {
+  for (const v of petVoxels(id, adult).map.values()) {
     const k = v.x + ',' + v.y;
     const b = best.get(k);
     if (!b || v.z > b.z) best.set(k, v);
