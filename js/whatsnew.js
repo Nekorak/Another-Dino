@@ -10,6 +10,7 @@ export const NEWS = [
       'Boss de echipă în co-op LAN: rezistaţi împreună şi primiţi câte 50 de oase.',
       'Tura sezonului (Moduri): o tură fără sfârşit în lumea sezonului, cu oase x1.5 şi un capitol nou de poveste.',
       'În Magazin: 3 skin-uri şi 5 pălării noi. Plus 10 realizări noi.',
+      'Fiecare boss învins prima dată dă o pălărie a lumii lui (13 în total). Primeşti şi pentru boşii învinşi deja.',
       'Stelele din lumile de la final dau mai multe oase, iar fiecare boss mic din aceeaşi tură dă mai mult.',
     ],
     ru: [
@@ -18,6 +19,7 @@ export const NEWS = [
       'Босс для команды в LAN-кооперативе: продержитесь вместе и получите по 50 косточек.',
       'Забег сезона (Режимы): бесконечный забег по миру сезона, косточки x1.5 и новая глава истории.',
       'В Магазине: 3 новых скина и 5 шляп. И 10 новых достижений.',
+      'Каждый босс при первой победе дарит шляпу своего мира (всего 13). За уже побеждённых тоже.',
       'Звёзды в последних мирах дают больше косточек, а каждый следующий мини-босс за забег даёт больше.',
     ],
     en: [
@@ -26,6 +28,7 @@ export const NEWS = [
       'Team boss in LAN co-op: survive it together and everyone gets 50 bones.',
       'Season run (Modes): an endless run in the season world, bones x1.5 and a new story chapter.',
       'In the Shop: 3 new skins and 5 new hats. Plus 10 new achievements.',
+      'Every boss gives a hat of its world the first time you beat it (13 in all), also for bosses you already beat.',
       'Stars in the later worlds give more bones, and every next mini-boss in the same run gives more.',
     ],
   },

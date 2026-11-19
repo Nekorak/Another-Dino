@@ -1247,7 +1247,7 @@ export class UI {
       if (item.hidden) continue;
       const have = owned.includes(id);
       const status = item.editor && have ? t('edOpen') : id === p[kind] ? t('equipped') : have ? t('owned') : null;
-      if ((item.season || item.album || item.pass) && !have) continue; // gifts are shown once you have them
+      if ((item.season || item.album || item.pass || item.boss) && !have) continue; // gifts are shown once you have them
       const icon =
         kind === 'skin' ? dinoIcon(id) : kind === 'hat' ? hatIcon(id) : kind === 'pet' ? petIcon(id) : kind === 'dance' ? danceIcon(id, p.skin) : kind === 'theme' ? themeIcon(id) : trailIcon(id);
       const price = item.level

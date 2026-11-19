@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { VOX, voxelMaterial, rng } from './voxel.js';
-import { createDino, DINO_BOXES, createPtero, createPet, boneGeometry, powerupGeometry, POWERUPS, glowMaterial, SKINS, HATS, setCustomSkin } from './models.js';
+import { createDino, DINO_BOXES, createPtero, createPet, boneGeometry, powerupGeometry, POWERUPS, glowMaterial, SKINS, HATS, BOSS_HAT, setCustomSkin } from './models.js';
 import { danceDino, THEMES, applyThemeVars } from './custom.js';
 import {
   BIOMES,
@@ -1514,12 +1514,31 @@ function finishRun() {
   }
 }
 
+// a world's hat, once; returns its id if it was just given
+function giveBossHat(worldId) {
+  const hat = BOSS_HAT[worldId];
+  if (!hat || profile.owned.hat.includes(hat)) return null;
+  profile.owned.hat.push(hat);
+  save();
+  return hat;
+}
+// players who beat bosses before v1.6 get those hats on the first start
+{
+  const given = BIOMES.map((b, w) => ((profile.adventure[`${w}-2`] || 0) > 0 ? giveBossHat(b.id) : null)).filter(Boolean);
+  if (given.length) setTimeout(() => ui.toast(t('bossHatsOld', { n: given.length }), 'gold'), 2500);
+}
+
 // adventure: crossing the finish line
 function winLevel() {
   state = 'won';
   const s = scoreLevel(adv.bonesTaken || 0, adv.bonesSpawned, adv.hits);
   const reward = adv.custom ? saveLevelStars(adv.custom.lv, s) + finishWeeklyTrack(adv.custom.lv) : saveLevel(adv.world, adv.level, s);
   if (adv.boss) profile.stats.bosses++;
+  // the first win against a world's boss gives that world's hat
+  if (adv.boss && !adv.custom) {
+    const hat = giveBossHat(BIOMES[adv.world].id);
+    if (hat) setTimeout(() => ui.toast(t('bossHatGot', { name: t('hat_' + hat) }), 'gold'), 1200);
+  }
   const res = recordRun(player.points);
   if (!profile.settings.music) sfx.reward();
   music.stop(0.3);
