@@ -3097,3 +3097,23 @@ body:has(#toasts .toast:not(.out)) #combo {
   flex-wrap: wrap;
   justify-content: center;
 }
+
+/* jukebox */
+.juke-btns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.juke-btns .val:first-child {
+  min-width: 44px;
+  font-family: sans-serif;
+  font-size: 14px;
+  line-height: 1;
+}
+.juke-btns .val:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.row.juke.on > span {
+  color: var(--accent);
+}

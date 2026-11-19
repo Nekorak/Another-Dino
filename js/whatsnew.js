@@ -3,6 +3,30 @@
 // id не связан с номером сборки (его ставит CI), поэтому окно работает и в браузере, и в приложениях.
 export const NEWS = [
   {
+    id: '2026-11-19-music',
+    ro: [
+      'Muzică nouă: o melodie a meniului și o temă pentru lupta cu boșii (cu sirenă când vine bossul).',
+      'Melodiile lumilor sunt de 3 ori mai lungi: au mai multe părți, o a doua voce și o pauză liniștită.',
+      'Melodii scurte la terminarea unui nivel, la un record nou, la un nivel nou și când fuge bossul.',
+      'Tonomatul (Colecție > Tonomat): asculți toată muzica și alegi ce cântă în meniu.',
+      'Volum separat pentru muzică și pentru efecte, în Setări.',
+    ],
+    ru: [
+      'Новая музыка: мелодия меню и тема для битвы с боссами (с сиреной, когда босс появляется).',
+      'Мелодии миров стали втрое длиннее: несколько частей, второй голос и тихая пауза.',
+      'Короткие мелодии за пройденный уровень, новый рекорд, новый уровень и побег босса.',
+      'Музыкальный автомат (Коллекция > Музыка): вся музыка игры и выбор мелодии для меню.',
+      'Отдельная громкость музыки и звуков в Настройках.',
+    ],
+    en: [
+      'New music: a menu song and a boss fight theme (with a siren when the boss shows up).',
+      'World songs are three times longer: several parts, a second voice and a quiet bridge.',
+      'Short tunes for finishing a level, a new record, a new level and a boss running away.',
+      'Jukebox (Collection > Jukebox): listen to all the music and pick the menu song.',
+      'Separate music and sound volume in Settings.',
+    ],
+  },
+  {
     id: '2026-11-19',
     ro: [
       'Meniu nou, mai simplu: JOACĂ plus Moduri, Colecție, Progres și Setări. Bulinuțele roșii arată unde te așteaptă ceva.',
