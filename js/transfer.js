@@ -23,7 +23,7 @@ const STAT_KEYS = [
   // v1.4
   'coopGames', 'coopBest', 'levelsWon', 'levelsMade', 'photos', 'weeklies',
   // v1.6
-  'teamBosses', 'seasonRuns', 'seasonBest',
+  'teamBosses', 'seasonRuns', 'seasonBest', 'rushes',
 ];
 
 function fnv(str) {
@@ -147,6 +147,9 @@ export function encodeProgress({ levels = true } = {}) {
   fields.push(['story', (p.storySeen || []).map((k) => String(k).replace(/[^a-z0-9]/gi, '')).join(',')]);
   if (p.weeklyTrack && p.weeklyTrack.done) fields.push(['wtrack', p.weeklyTrack.week]);
   // v1.6: best score of the season run (only while it is the same season)
+  // v1.6: Adventure+ crowns and the boss rush record
+  if (p.advCrowns && Object.keys(p.advCrowns).length) fields.push(['crowns', Object.keys(p.advCrowns).join(',')]);
+  if (p.bossRush && p.bossRush.best) fields.push(['rush', `${p.bossRush.best},${p.bossRush.time || 0}`]);
   if (p.seasonRun && p.seasonRun.key && p.seasonRun.best) fields.push(['srun', `${p.seasonRun.key},${Math.floor(p.seasonRun.best)}`]);
   if (p.mutator && p.mutator.date && p.mutator.best) fields.push(['mut', `${p.mutator.date},${Math.floor(p.mutator.best)}`]);
   if (levels && p.levels && p.levels.length) fields.push(['levels', levelsToText(p.levels)]);
@@ -228,6 +231,11 @@ export function decodeProgress(text) {
     mutator: (() => {
       const [date, best] = (vars.mut || '').split(',');
       return /^\d{4}-\d{1,2}-\d{1,2}$/.test(date || '') ? { date, best: num(best) } : null;
+    })(),
+    crowns: list('crowns').filter((k) => /^\d+-\d+$/.test(k)),
+    bossRush: (() => {
+      const [best, time] = (vars.rush || '').split(',');
+      return { best: num(best), time: Number(time) || 0 };
     })(),
     seasonRun: (() => {
       const [key, best] = (vars.srun || '').split(',');
@@ -319,6 +327,11 @@ export function mergeProgress(d) {
   if (d.mutator) {
     if (p.mutator.date === d.mutator.date) p.mutator.best = Math.max(p.mutator.best || 0, d.mutator.best);
     else if (!p.mutator.date || !p.mutator.best) p.mutator = { ...d.mutator };
+  }
+  for (const k of d.crowns || []) p.advCrowns[k] = 1;
+  if (d.bossRush) {
+    p.bossRush.best = Math.max(p.bossRush.best || 0, d.bossRush.best);
+    if (d.bossRush.time && (!p.bossRush.time || d.bossRush.time < p.bossRush.time)) p.bossRush.time = d.bossRush.time;
   }
   // the season run: best score of the same season
   if (d.seasonRun) {

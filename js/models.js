@@ -82,7 +82,23 @@ export const HATS = {
   santa: { season: 'christmas' },
   // season pass, tier 10
   laurel: { pass: true },
+  // v1.6: a gift for the first win against the boss of each adventure world (not for sale)
+  sombrero: { boss: 'desert' },
+  leafcrown: { boss: 'jungle' },
+  strawhat: { boss: 'beach' },
+  icecrown: { boss: 'snow' },
+  minerhelm: { boss: 'cave' },
+  hardhat: { boss: 'city' },
+  flamecrown: { boss: 'volcano' },
+  antenna: { boss: 'space' },
+  shellcrown: { boss: 'ocean' },
+  cupcakehat: { boss: 'candy' },
+  lilypad: { boss: 'swamp' },
+  halo: { boss: 'sky' },
+  lantern: { boss: 'season' },
 };
+// world id -> the hat its boss gives
+export const BOSS_HAT = Object.fromEntries(Object.entries(HATS).filter(([, h]) => h.boss).map(([id, h]) => [h.boss, id]));
 
 // ---------------------------------------------------------------- dino grids
 // Facing +x. 'A' arm (only on the outer layers), 'B' belly, 'W'/'K' eye, 'M' mouth.
@@ -300,6 +316,84 @@ function hatVoxels(id) {
         const r = Math.max(0, 3 - Math.floor(i / 2));
         box(-1 - r - Math.floor(i / 3), -1 + r - Math.floor(i / 3), i, i, -r, r, (x, y, z) => ((x * 3 + y + z * 5) % 7 === 0 ? '#ffd23f' : '#4a3aa8'));
       }
+      break;
+    // ---- boss gifts
+    case 'sombrero':
+      box(-6, 4, 0, 0, -5, 5, (x, y, z) => (Math.hypot(x + 1, z) > 5.6 ? null : (x + z) % 3 ? '#e8c24a' : '#c8a030'));
+      box(-3, 1, 1, 3, -2, 2, '#e8c24a');
+      box(-3, 1, 1, 1, -2, 2, '#e0303a');
+      box(-2, 0, 4, 4, -1, 1, '#e8c24a');
+      break;
+    case 'leafcrown':
+      for (let x = -4; x <= 2; x++) for (const z of [-3, 3]) vs.set(x, 0, z, '#3f8a2a');
+      for (let z = -3; z <= 3; z++) for (const x of [-4, 2]) vs.set(x, 0, z, '#3f8a2a');
+      for (const [x, z] of [[-4, -3], [2, -3], [-4, 3], [2, 3], [-1, -3], [-1, 3], [2, 0]]) box(x, x, 1, 2, z, z, (xx, y) => (y === 2 ? '#7fd34a' : '#5fae3e'));
+      vs.set(3, 1, 0, '#ff4f5a');
+      break;
+    case 'strawhat':
+      box(-6, 4, 0, 0, -5, 5, (x, y, z) => (Math.hypot(x + 1, z) > 5.2 ? null : (x + z) % 2 ? '#f2d58a' : '#e0c070'));
+      box(-3, 1, 1, 2, -2, 2, '#f2d58a');
+      box(-3, 1, 1, 1, -2, 2, '#3f8fff');
+      vs.set(1, 2, -2, '#ff6fa8');
+      break;
+    case 'icecrown':
+      box(-3, 2, 0, 1, -2, 2, '#bfe8ff');
+      for (const [x, z] of [[-3, -2], [2, -2], [-3, 2], [2, 2], [0, -2], [0, 2], [-3, 0], [2, 0]]) box(x, x, 2, 3, z, z, (xx, y) => (y === 3 ? '#ffffff' : '#9fd8ff'));
+      vs.set(3, 1, 0, '#3f8fff');
+      break;
+    case 'minerhelm':
+      box(-4, 2, 0, 2, -3, 3, (x, y) => (y === 0 ? '#c8a020' : '#f2c230'));
+      box(-3, 1, 3, 3, -2, 2, '#f2c230');
+      box(3, 3, 1, 2, -1, 1, '#ffffff'); // the lamp
+      vs.set(4, 1, 0, '#ffe066');
+      break;
+    case 'hardhat':
+      box(-4, 3, 0, 0, -3, 3, '#ff9a1a');
+      box(-3, 1, 1, 3, -2, 2, '#ffb02a');
+      box(-1, -1, 1, 3, -3, 3, '#ffd23f'); // the ridge
+      break;
+    case 'flamecrown':
+      box(-3, 2, 0, 0, -2, 2, '#4a2a22');
+      for (const [x, z, h] of [[-3, -2, 2], [2, -2, 3], [-3, 2, 3], [2, 2, 2], [0, 0, 4], [-1, -2, 2], [0, 2, 2]])
+        box(x, x, 1, h, z, z, (xx, y) => (y === h ? '#ffe066' : y > 1 ? '#ff8a1a' : '#e0301a'));
+      break;
+    case 'antenna':
+      box(-3, 1, 0, 0, -3, 3, '#5fd35a');
+      for (const z of [-2, 2]) {
+        box(-1, -1, 1, 4, z, z, '#4ab84a');
+        vs.set(-1, 5, z, '#ff6fd8');
+      }
+      break;
+    case 'shellcrown':
+      box(-3, 2, 0, 0, -2, 2, '#ffd6e0');
+      for (const [x, z] of [[-3, -2], [2, -2], [-3, 2], [2, 2], [2, 0], [-3, 0]]) vs.set(x, 1, z, '#ffffff');
+      box(0, 1, 1, 2, -1, 1, '#ffb27a'); // a big shell in front
+      vs.set(2, 2, 0, '#ffd6e0');
+      vs.set(-1, 1, 0, '#4fc3ff');
+      break;
+    case 'cupcakehat':
+      box(-3, 1, 0, 1, -2, 2, (x) => (x % 2 ? '#e8a0c0' : '#d888b0'));
+      box(-4, 2, 2, 3, -3, 3, '#fff4fa');
+      box(-3, 1, 4, 4, -2, 2, '#fff4fa');
+      for (const [x, z] of [[-3, -2], [1, 1], [-1, 2], [2, -1]]) vs.set(x, 4, z, '#4fc3ff');
+      vs.set(-1, 5, 0, '#e0303a');
+      break;
+    case 'lilypad':
+      box(-5, 3, 0, 0, -4, 4, (x, y, z) => (Math.hypot(x + 1, z) > 4.4 || (z === 0 && x > 0) ? null : '#5fae3e'));
+      box(-2, 0, 1, 2, -1, 1, '#3f8a2a'); // a little frog
+      vs.set(0, 3, -1, '#ffffff');
+      vs.set(0, 3, 1, '#ffffff');
+      vs.set(1, 1, 0, '#ff6fa8');
+      break;
+    case 'halo':
+      for (let x = -4; x <= 2; x++) for (let z = -3; z <= 3; z++) {
+        const r = Math.hypot(x + 1, z);
+        if (r >= 2.4 && r <= 3.6) vs.set(x, 3, z, '#ffe066');
+      }
+      break;
+    case 'lantern':
+      box(-2, 0, 0, 3, -1, 1, (x, y, z) => (y === 0 || y === 3 ? '#3a3a42' : Math.abs(x + 1) === 1 && Math.abs(z) === 1 ? '#3a3a42' : '#ffcf3a'));
+      box(-1, -1, 4, 5, 0, 0, '#3a3a42');
       break;
     case 'santa':
       box(-4, 2, 0, 0, -3, 3, '#ffffff');

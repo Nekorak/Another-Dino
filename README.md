@@ -87,6 +87,13 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
 - **Boss de echipă** în co-op LAN: la fiecare 2000 de puncte vine un boss pentru toată echipa; dacă rezistați 18 secunde cu inimile rămase, fiecare primește 50 de oase.
 - **Tura sezonului** (Moduri): o tură fără sfârșit în lumea sezonului, cu oase x1.5, record propriu în fiecare sezon și un al doilea capitol de poveste pentru fiecare anotimp.
 - **Lucruri noi în Magazin**: 3 skin-uri (Mentă, Coral, Tigru) și 5 pălării (fundiță, căciuliță, floare, coif viking, pălărie de vrăjitor), plus 10 realizări noi.
+- **Pălăria lumii**: fiecare boss din Aventură, învins prima dată, dă o pălărie unică a lumii lui (sombrero, cască de miner, coroană de foc, aureolă și altele, 13 în total).
+- **Boss Rush** (Moduri): toți cei 13 boși la rând, cu record de boși și cel mai bun timp.
+- **Aventură+**: după finalul poveștii, nivelurile se pot juca din nou, mai repede; cu 3 stele câștigi **coroana** nivelului. Fiecare nivel ține și **cel mai bun timp**.
+- **Co-op pe același ecran**: 2–4 jucători cu 3 inimi comune și boss de echipă. În LAN apar modurile **Echipe** (A contra B, contează suma punctelor) și **Boși în echipă** (un boss la fiecare 700 de puncte).
+- **Lumile Aventurii în turele normale**: după 8000 de puncte vin Sub apă, Lumea dulce, Mlaștina și Insulele din nori, apoi toate 12 în cerc.
+- **Bestiar** (Colecție), **ofertele zilei** în Magazin (3 lucruri cu -30%) și **Cartea de jucător** (Progres): o imagine cu dino-ul și realizările tale.
+- **Setări pe secțiuni** (Joc, Sunet, Control, Grafică, Accesibilitate, Date): mod pentru daltoniști, mai puține efecte, un singur buton, contor FPS, tremurarea ecranului, pauză la ieșirea din fereastră, ecran complet și revenire la setările implicite.
 - Interfață în **română, rusă și engleză**.
 
 ## 2–4 jucători pe același ecran

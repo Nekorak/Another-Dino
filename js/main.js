@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { VOX, voxelMaterial, rng } from './voxel.js';
-import { createDino, DINO_BOXES, createPtero, createPet, boneGeometry, powerupGeometry, POWERUPS, glowMaterial, SKINS, HATS, setCustomSkin } from './models.js';
+import { createDino, DINO_BOXES, createPtero, createPet, boneGeometry, powerupGeometry, POWERUPS, glowMaterial, SKINS, HATS, BOSS_HAT, setCustomSkin } from './models.js';
 import { danceDino, THEMES, applyThemeVars } from './custom.js';
 import {
   BIOMES,
@@ -28,7 +28,7 @@ import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD, e
 import { checkMedals, MEDAL_NAMES } from './medals.js';
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
-import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked, SEASON_W, seasonRunKey } from './modes.js';
+import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked, SEASON_W, seasonRunKey, ADV_ORDER, levelKey, advHardOn } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession, COOP_HEARTS } from './multiplayer.js';
@@ -64,6 +64,7 @@ const MINI_BOSS_EVERY = 2000; // endless modes: a short boss fight every 2000 po
 const MINI_BOSS_TIME = 14;
 const TEAM_BOSS_TIME = 18; // LAN co-op: a boss for the whole team, a bit longer
 const TEAM_BOSS_BONES = 50;
+const RUSH_BOSS_TIME = 12; // boss rush: each boss is a bit shorter
 const PIXEL_LEVELS = [110, 160, 240]; // render pixels along the short screen side
 const BASE_POWER_TIME = { shield: 15, magnet: 10, slow: 6, double: 12, rocket: 5, giant: 6, rain: 6 };
 const GHOST_STEP = 0.05;
@@ -612,7 +613,7 @@ function meteor() {
   rock.castShadow = true;
   const warn = new THREE.Mesh(
     new THREE.RingGeometry(0.45, 0.8, 12),
-    new THREE.MeshBasicMaterial({ color: '#ff3b30', transparent: true, opacity: 0.6, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: profile.settings.colorblind ? '#2f7bff' : '#ff3b30', transparent: true, opacity: 0.6, depthWrite: false }),
   );
   warn.rotation.x = -Math.PI / 2;
   warn.position.y = 0.03;
@@ -1072,7 +1073,14 @@ const RULES = {
   mutator: { revive: true, powerups: true, bones: 1, missions: true, record: false },
   // an endless run that stays in the world of the season (its own best score each season)
   season: { revive: true, powerups: true, bones: 1.5, missions: true, record: false },
+  // v1.6: every adventure boss, one after another
+  bossrush: { revive: false, powerups: true, bones: 1, missions: true, record: false },
 };
+// LAN modes where the team shares the hearts
+const isCoopLan = (m) => m === 'coop' || m === 'bosses';
+let rush = null; // boss rush: { i, world, done }
+let localCoop = false; // 2-4 players on one screen, sharing the hearts
+let localHearts = 0;
 let mut = null; // the rule of the day, while playing it
 const rules = () => (mode === 'mutator' && mut ? { ...RULES.mutator, bones: mut.bones } : RULES[mode] || RULES.solo);
 const startSpeed = () => (adv ? adv.startSpeed : START_SPEED * (mode === 'mutator' && mut && mut.speed ? mut.speed : 1));
@@ -1156,7 +1164,7 @@ function resetRun(seed) {
   nextBombAt = 200 + IR() * 100;
   nextEventAt = 900 + R() * 600;
   nextFossilAt = 350 + IR() * 500;
-  nextBossAt = MINI_BOSS_EVERY;
+  nextBossAt = rush ? 120 : mode === 'lan' && lanMode === 'bosses' ? 300 : MINI_BOSS_EVERY;
   slowK = 1;
   speedBoost = 1;
   for (const p of players) resetPlayer(p);
@@ -1166,7 +1174,7 @@ function resetRun(seed) {
   run = newRunStats();
   ghostRec = [];
   ghostClock = 0;
-  const startBiome = adv ? adv.world : mode === 'season' ? SEASON_W : 0;
+  const startBiome = adv ? adv.world : mode === 'season' ? SEASON_W : rush ? rush.world : 0;
   if (env.biome !== startBiome) setBiome(startBiome, true);
   tutorial = mode === 'solo' && !profile.tutorial ? { plan: ['cactus', 'bird'], freeze: null, done: false } : null;
   run.hadTutorial = !!tutorial;
@@ -1177,7 +1185,7 @@ function resetRun(seed) {
   ui.setCombo(1, false);
   ui.setPowerups(player.power, powerTime());
   ui.setBombs(mode === 'lan' && lanMode === 'sabotage' ? 0 : null);
-  ui.coopHearts(mode === 'lan' && lanMode === 'coop' ? COOP_HEARTS : null);
+  ui.coopHearts(mode === 'lan' && isCoopLan(lanMode) ? COOP_HEARTS : null);
   ui.spectate(null);
   ui.advProgress(adv ? 0 : null);
   ui.bossBar(null);
@@ -1220,9 +1228,17 @@ function startMode(m, opts = {}) {
   challengeable = null;
   adv = m === 'adventure' ? { ...levelDef(opts.world, opts.level), bonesSpawned: 0, hits: 0, bossDone: false, finishSpawned: false } : m === 'custom' ? customAdv(opts.level) : null;
   if (m === 'local') localCount = clamp(opts.count || localCount, 2, 4);
+  localCoop = m === 'local' && !!opts.coop;
+  rush = m === 'bossrush' ? { i: 0, world: ADV_ORDER[0], done: false } : null;
   clearRivals();
   setPlayerCount(m === 'local' ? localCount : m === 'bot' ? 2 : 1);
   startRun(daily ? daily.seed : adv ? adv.seed : challenge ? challenge.seed : null);
+  if (localCoop) {
+    localHearts = COOP_HEARTS;
+    ui.coopHearts(localHearts);
+    ui.toast(t('localCoopStart'), 'gold');
+  }
+  if (rush) ui.toast(t('mode_bossrush'), 'gold');
   if (challenge) ui.toast(t('chBeat', { name: challenge.name, n: challenge.score }), 'gold');
   if (daily) ui.toast(t('dailyGoal', { n: daily.target }), 'gold');
   if (adv && adv.custom) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
@@ -1260,15 +1276,23 @@ function restart() {
   if (mode === 'adventure' && adv) startMode('adventure', { world: adv.world, level: adv.level });
   else if (mode === 'custom' && adv) startMode('custom', { level: adv.custom.lv });
   else if (mode === 'lan') return;
-  else startMode(mode, { count: localCount, ...(challenge || {}) });
+  else startMode(mode, { count: localCount, coop: localCoop, ...(challenge || {}) });
 }
 
-const isCoop = () => mode === 'lan' && lanMode === 'coop' && !!lan;
+const isCoop = () => mode === 'lan' && isCoopLan(lanMode) && !!lan;
+// a team that shares hearts: LAN co-op or co-op on one screen
+const teamPlay = () => isCoop() || (isLocal() && localCoop);
 
 // final: the team is out of hearts (co-op), so this hit really ends the run
 function killPlayer(p, o, final = false) {
   if (rules().noDeath) return zenBump(p, o);
-  if (isCoop() && p === player && !final && lan.coopHit() > 0) return coopRescue(p, o);
+  if (isCoop() && p === player && !final && lan.coopHit() > 0) return coopRescue(p, o, lan.hearts);
+  if (isLocal() && localCoop && !final && !p.brain) {
+    localHearts = Math.max(0, localHearts - 1);
+    if (localHearts > 0) return coopRescue(p, o, localHearts);
+    // the last heart: the whole team stops here
+    for (const q of players) if (q !== p && q.alive) killPlayer(q, null, true);
+  }
   p.alive = false;
   p.final = score;
   p.finalPts = p.points;
@@ -1293,7 +1317,7 @@ function killPlayer(p, o, final = false) {
 }
 
 // co-op: a hit costs the team a heart, and the dino carries on after a short blink
-function coopRescue(p, o) {
+function coopRescue(p, o, hearts) {
   if (o) breakObstacle(o, p.index);
   if (p.y < 0 || p.inPit) {
     p.y = 0;
@@ -1306,8 +1330,8 @@ function coopRescue(p, o) {
   sfx.shieldBreak();
   vibrate([40, 30, 40]);
   shake = 0.25;
-  ui.coopHearts(lan.hearts);
-  ui.toast(t('coopHeartLost', { n: lan.hearts }), 'red');
+  ui.coopHearts(hearts);
+  ui.toast(t('coopHeartLost', { n: hearts }), 'red');
 }
 
 // zen mode: nothing can stop you; a hit only breaks the obstacle and slows you down
@@ -1435,6 +1459,21 @@ function finishRun() {
     save();
     mutResult = { id: mut.id, best: profile.mutator.best, isBest: res.s > before && res.s > 0 };
   }
+  // boss rush: how many bosses, and the best time for all of them
+  let rushResult = null;
+  if (mode === 'bossrush' && rush) {
+    const br = profile.bossRush;
+    const n = rush.i;
+    const isBest = n > br.best || (rush.done && (!br.time || runTime < br.time));
+    br.best = Math.max(br.best, n);
+    if (rush.done && (!br.time || runTime < br.time)) br.time = Math.round(runTime * 10) / 10;
+    if (rush.done) {
+      profile.coins += 150;
+      profile.stats.rushes = (profile.stats.rushes || 0) + 1;
+    }
+    save();
+    rushResult = { n, max: ADV_ORDER.length, done: rush.done, time: Math.round(runTime * 10) / 10, best: br.best, bestTime: br.time, isBest };
+  }
   // the season run: its own best score, kept until the season changes
   let seasonResult = null;
   if (mode === 'season') {
@@ -1498,6 +1537,8 @@ function finishRun() {
     near,
     mutator: mutResult,
     season: seasonResult,
+    rush: rushResult,
+    team: isLocal() && localCoop,
   });
   celebrate(res);
   // a new record: the dino pulls itself together and dances
@@ -1514,18 +1555,63 @@ function finishRun() {
   }
 }
 
+// a world's hat, once; returns its id if it was just given
+function giveBossHat(worldId) {
+  const hat = BOSS_HAT[worldId];
+  if (!hat || profile.owned.hat.includes(hat)) return null;
+  profile.owned.hat.push(hat);
+  save();
+  return hat;
+}
+// players who beat bosses before v1.6 get those hats on the first start
+{
+  const given = BIOMES.map((b, w) => ((profile.adventure[`${w}-2`] || 0) > 0 ? giveBossHat(b.id) : null)).filter(Boolean);
+  if (given.length) setTimeout(() => ui.toast(t('bossHatsOld', { n: given.length }), 'gold'), 2500);
+}
+
+// LAN teams: players alternate between team A and B in lobby order; a team scores the
+// sum of its runners
+function teamTotals(results, lobby) {
+  const of = new Map(lobby.map((p, i) => [p.id, i % 2]));
+  const sum = [0, 0];
+  for (const r of results) if (of.has(r.id)) sum[of.get(r.id)] += r.sc || 0;
+  return { of, sum, winner: sum[0] === sum[1] ? null : sum[0] > sum[1] ? 0 : 1 };
+}
+
 // adventure: crossing the finish line
 function winLevel() {
   state = 'won';
   const s = scoreLevel(adv.bonesTaken || 0, adv.bonesSpawned, adv.hits);
   const reward = adv.custom ? saveLevelStars(adv.custom.lv, s) + finishWeeklyTrack(adv.custom.lv) : saveLevel(adv.world, adv.level, s);
   if (adv.boss) profile.stats.bosses++;
+  // time trial: the best time on every level (hard mode keeps its own times)
+  const hard = !adv.custom && advHardOn();
+  let timing = null;
+  if (!adv.custom) {
+    const key = levelKey(adv.world, adv.level) + (hard ? 'h' : '');
+    const time = Math.round(runTime * 10) / 10;
+    const before = profile.advTimes[key] || 0;
+    if (!before || time < before) profile.advTimes[key] = time;
+    timing = { time, best: profile.advTimes[key], isBest: !before || time < before, hard, crown: false };
+    // hard mode, three stars: the crown of the level (and 40 bones the first time)
+    if (hard && s === 3 && !profile.advCrowns[levelKey(adv.world, adv.level)]) {
+      profile.advCrowns[levelKey(adv.world, adv.level)] = 1;
+      profile.coins += 40;
+      timing.crown = true;
+    }
+    save();
+  }
+  // the first win against a world's boss gives that world's hat
+  if (adv.boss && !adv.custom) {
+    const hat = giveBossHat(BIOMES[adv.world].id);
+    if (hat) setTimeout(() => ui.toast(t('bossHatGot', { name: t('hat_' + hat) }), 'gold'), 1200);
+  }
   const res = recordRun(player.points);
   if (!profile.settings.music) sfx.reward();
   music.stop(0.3);
   music.jingle('victory', 0.15);
   startDance();
-  ui.showWin({ stars: s, reward, adv, coins: adv.bonesTaken || 0, spawned: adv.bonesSpawned, hits: adv.hits, xp: Math.floor(res.xp.gained) });
+  ui.showWin({ stars: s, reward, adv, coins: adv.bonesTaken || 0, spawned: adv.bonesSpawned, hits: adv.hits, xp: Math.floor(res.xp.gained), timing });
   celebrate(res);
 }
 
@@ -1654,15 +1740,15 @@ function endEvent(silent) {
 // ------------------------------------------------------------------ adventure boss
 // every world has its own boss (see bosses.js): flyers circle above the track and drop
 // burning rocks, walkers run beside it and send boulders, the octopus sends fish
-function startBoss(dur = adv ? adv.bossTime : isCoop() ? TEAM_BOSS_TIME : MINI_BOSS_TIME) {
+function startBoss(dur = adv ? adv.bossTime : rush ? RUSH_BOSS_TIME : teamPlay() ? TEAM_BOSS_TIME : MINI_BOSS_TIME) {
   const b = createBoss(BIOMES[env.biome].id);
-  const team = !adv && isCoop();
+  const team = !adv && !rush && teamPlay();
   b.root.position.set(30, b.ground ? 0 : 4.6, b.ground ? -7 : -5);
   b.root.rotation.y = 0;
   scene.add(b.root);
   boss = { ...b, t: dur, dur, drop: 1.5, phase: 0, mini: !adv, team };
   music.boss = true;
-  ui.toast(t(adv ? 'bossArrives' : team ? 'teamBossArrives' : 'miniBossArrives', { n: dur }), 'red');
+  ui.toast(rush ? t('rushBoss', { n: rush.i + 1, max: ADV_ORDER.length, name: t('boss_' + b.kind) }) : t(adv ? 'bossArrives' : team ? 'teamBossArrives' : 'miniBossArrives', { n: dur }), 'red');
   ui.bossBar(1, b.kind);
   sfx.boom();
   sfx.alarm();
@@ -1723,14 +1809,30 @@ function updateBoss(dt) {
   if (boss.t <= 0) {
     const mini = boss.mini;
     const team = boss.team;
+    profile.bossKills[boss.kind] = (profile.bossKills[boss.kind] || 0) + 1; // the bestiary
     if (adv) adv.bossDone = true;
     endBoss(false);
     ui.bossBar(null);
     sfx.reward();
     music.jingle('bossDown');
-    if (team) {
+    if (rush) {
+      // boss rush: the next world and its boss, or the end of the rush
+      rush.i++;
+      giveBone(player, 10);
+      if (rush.i >= ADV_ORDER.length) {
+        rush.done = true;
+        player.final = score;
+        player.finalPts = player.points;
+        player.alive = false;
+        finishRun();
+      } else {
+        rush.world = ADV_ORDER[rush.i];
+        nextBossAt = score + 120;
+        ui.toast(t('rushNext', { n: rush.i, max: ADV_ORDER.length }), 'gold');
+      }
+    } else if (team) {
       // co-op: the team still had hearts when the boss gave up
-      nextBossAt = score + MINI_BOSS_EVERY;
+      nextBossAt = score + (mode === 'lan' && lanMode === 'bosses' ? 700 : MINI_BOSS_EVERY);
       if (player.alive) giveBone(player, TEAM_BOSS_BONES);
       profile.stats.teamBosses = (profile.stats.teamBosses || 0) + 1;
       ui.toast(t('teamBossDone', { n: TEAM_BOSS_BONES }), 'gold');
@@ -1748,7 +1850,7 @@ function updateBoss(dt) {
 
 function updateEvent(dt) {
   if (!event) {
-    if (!tutorial && !adv && !boss && score > nextEventAt && (mode !== 'lan' || lanMode !== 'elimination')) startEvent();
+    if (!tutorial && !adv && !rush && !boss && score > nextEventAt && (mode !== 'lan' || lanMode !== 'elimination')) startEvent();
   } else {
 
     if (event.type === 'trex') speedBoost = 1.15;
@@ -2005,9 +2107,9 @@ addEventListener('keyup', (e) => {
   else duckUp(tgt[0]);
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) setPaused(true);
+  if (document.hidden) setPaused(true); // the app in the background always pauses
 });
-addEventListener('blur', () => setPaused(true));
+addEventListener('blur', () => profile.settings.autoPause && setPaused(true));
 
 // gamepads: A / up = jump, B / down = duck, X = send a boulder (LAN), Start = pause.
 // In local multiplayer pad 1 is player 1, pad 2 is player 2, and so on.
@@ -2096,7 +2198,7 @@ function placeCamera(cam, aspect, p, focus, dt) {
   camLook.y += py * 0.25;
   camPos.y += py * 0.12;
   cam.fov = fov + ((speed - START_SPEED) / (MAX_SPEED - START_SPEED)) * 5;
-  if (shake > 0) {
+  if (shake > 0 && !profile.settings.reduceFx && profile.settings.shake) {
     const s = shake * 0.6;
     camPos.x += (Math.random() - 0.5) * s;
     camPos.y += (Math.random() - 0.5) * s;
@@ -2580,6 +2682,8 @@ function updateObstacles(dt, v) {
       if (player.alive && o.kind !== 'finish') {
         run.obstacles++;
         profile.stats.obstacles++;
+        const wid = BIOMES[env.biome].id;
+        profile.obsBiome[wid] = (profile.obsBiome[wid] || 0) + 1;
         if (o.kind === 'bird' && o.mid && player.ducking) run.ducks++;
         if (o.kind === 'meteor') {
           run.meteors++;
@@ -2886,7 +2990,7 @@ async function openLan() {
         ui.toast(t('tourBonus', { n: 150 }), 'gold');
       }
       st.mpGames++;
-      const coop = session.mode === 'coop';
+      const coop = session.mode === 'coop' || session.mode === 'bosses';
       const won = !coop && results.length > 1 && results[0].id === session.me.id;
       if (won) st.mpWins++;
       if (coop) {
@@ -2908,6 +3012,14 @@ async function openLan() {
         if (bonus) {
           profile.coins += bonus;
           ui.toast(t('coopBonus', { n: bonus }), 'gold');
+        }
+      }
+      if (session.mode === 'teams') {
+        const team = teamTotals(results, session.lobby);
+        const mine = team.of.get(session.me.id);
+        if (team.winner != null && mine === team.winner) {
+          profile.coins += 40;
+          ui.toast(t('teamsBonus', { n: 40 }), 'gold');
         }
       }
       if (won && lanMode === 'elimination') {
@@ -3002,7 +3114,7 @@ function beginCountdown(seed, m) {
 
 function updateRivals(dt) {
   if (!lan || mode !== 'lan') return;
-  if (lanMode === 'coop') {
+  if (isCoopLan(lanMode)) {
     ui.coopHearts(lan.hearts);
     // a teammate lost the last heart: everybody's run ends together
     if (lan.hearts <= 0 && player.alive && state === 'running') killPlayer(player, null, true);
@@ -3039,6 +3151,29 @@ function updateRivals(dt) {
 // 2 = high, 1 = medium, 0 = low. "Auto" starts high and steps down when the frame rate drops.
 let quality = 2;
 const fps = { frames: 0, t: 0 };
+// the frame counter in the corner (Settings > Show FPS)
+const fpsMeter = document.createElement('div');
+fpsMeter.id = 'fps-meter';
+fpsMeter.className = 'hidden';
+document.body.append(fpsMeter);
+const fpsShow = { frames: 0, t: 0 };
+function showFps(dt) {
+  if (!profile.settings.showFps) return;
+  fpsShow.frames++;
+  fpsShow.t += dt;
+  if (fpsShow.t >= 0.5) {
+    fpsMeter.textContent = Math.round(fpsShow.frames / fpsShow.t) + ' FPS';
+    fpsShow.frames = 0;
+    fpsShow.t = 0;
+  }
+}
+// one-button mode: the dino ducks by itself under a pterodactyl it cannot jump over
+function autoDuck(p) {
+  if (!profile.settings.oneButton || p.brain || !p.alive || isLocal()) return;
+  const low = obstacles.some((o) => o.kind === 'bird' && o.y > 1.5 && o.x > -1 && o.x < 2.6 + speed * 0.08);
+  if (low && p.onGround && !p.input.duck) (p.autoDucked = true), duckDown(p);
+  else if (!low && p.autoDucked) (p.autoDucked = false), duckUp(p);
+}
 function applyQuality() {
   const q = profile.settings.quality === 'auto' ? quality : { high: 2, medium: 1, low: 0 }[profile.settings.quality] ?? 2;
   sun.castShadow = q > 0;
@@ -3084,7 +3219,7 @@ function driveBot(p) {
 // (only when playing alone: in multiplayer everybody must keep the same pace)
 let hitStop = 0;
 function freeze(t, sh = 0) {
-  if (mode === 'lan' || isLocal()) return;
+  if (mode === 'lan' || isLocal() || profile.settings.reduceFx) return;
   hitStop = Math.max(hitStop, t);
   shake = Math.max(shake, sh);
 }
@@ -3093,6 +3228,7 @@ function update(rawDt) {
   time += rawDt;
   pollGamepads();
   trackFps(rawDt);
+  showFps(rawDt);
   let dt = rawDt;
   if (hitStop > 0 && state === 'running') {
     hitStop -= rawDt;
@@ -3144,7 +3280,7 @@ function update(rawDt) {
       nightTimer = NIGHT_LEN;
     }
     // adventure levels stay in their world; the endless modes move on every 1000 points
-    const b = adv ? adv.world : mode === 'season' ? SEASON_W : biomeAt(score);
+    const b = adv ? adv.world : mode === 'season' ? SEASON_W : rush ? rush.world : biomeAt(score);
     if (b !== env.biome) {
       setBiome(b, false);
       run.biome = Math.max(run.biome, Math.floor(score / BIOME_LENGTH) + 1);
@@ -3156,7 +3292,7 @@ function update(rawDt) {
       if (adv.bossDone && adv.finishAt == null) adv.finishAt = score + 160;
       const total = adv.boss ? (adv.finishAt ?? adv.length) : adv.length;
       ui.advProgress(adv.custom ? clamp(adv.custom.i / Math.max(1, adv.custom.t.length), 0, 1) : clamp(score / total, 0, 1));
-    } else if (!boss && !event && !tutorial && (mode !== 'lan' || isCoop()) && score >= nextBossAt && state === 'running') startBoss();
+    } else if (!boss && !event && !tutorial && (mode !== 'lan' || isCoop()) && (!isLocal() || localCoop) && score >= nextBossAt && state === 'running') startBoss();
     updateBoss(dt);
     if (daily && player.alive && player.points >= daily.target && !daily.rewarded) {
       daily.rewarded = true;
@@ -3169,6 +3305,7 @@ function update(rawDt) {
     music.rate = 1 + ((speed - START_SPEED) / (MAX_SPEED - START_SPEED)) * 0.15;
     updateEvent(dt);
     for (const p of players) driveBot(p);
+    autoDuck(player);
     for (const p of players) updatePlayer(p, dt);
     updateObstacles(dt, v);
     updatePickups(dt, v);
@@ -3333,6 +3470,55 @@ async function recordImage(scoreValue) {
   return c.toDataURL('image/png');
 }
 
+// the player card: a picture with the dino, the record, stars, medals and more (to save or send)
+async function playerCard() {
+  const W = 1200;
+  const H = 630;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const b = BIOMES[env.biome];
+  g.fillStyle = b.sky;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = b.ground;
+  g.fillRect(0, H * 0.62, W, H * 0.38);
+  g.fillStyle = 'rgba(20, 16, 10, 0.6)';
+  g.fillRect(560, 40, 600, 550);
+  // the dino, drawn from the side view of its skin
+  const icon = ui.dinoCanvas(profile.skin);
+  g.drawImage(icon, 60, 150, icon.width * (420 / icon.width), icon.height * (420 / icon.width));
+  g.fillStyle = '#ffffff';
+  g.textBaseline = 'middle';
+  g.font = '30px "Press Start 2P", monospace';
+  g.fillText((profile.name || 'DINO').slice(0, 12), 600, 100);
+  g.font = '18px "Press Start 2P", monospace';
+  const st = profile.stats;
+  const lines = [
+    [t('levelShort', { n: levelOf() }), ''],
+    [t('st_best'), String(Math.floor(st.best))],
+    [t('cardStars'), `${Object.values(profile.adventure).reduce((a, v) => a + v, 0)}`],
+    [t('cardCrowns'), String(Object.keys(profile.advCrowns).length)],
+    [t('cardMedals'), String(Object.values(profile.medals).filter(Boolean).length)],
+    [t('achievementsTitle'), String(Object.keys(profile.achievements).length)],
+    [t('st_bosses'), String(Object.values(profile.bossKills).reduce((a, v) => a + v, 0))],
+    [t('st_games'), String(st.games)],
+  ];
+  lines.forEach(([k, v], i) => {
+    g.fillStyle = i === 0 ? '#ffd23f' : '#ffffff';
+    g.textAlign = 'left';
+    g.fillText(k, 600, 170 + i * 50);
+    g.textAlign = 'right';
+    g.fillText(v, 1120, 170 + i * 50);
+  });
+  g.textAlign = 'left';
+  g.fillStyle = '#ffffff';
+  g.font = '22px "Press Start 2P", monospace';
+  g.fillText('ANOTHER DINO', 60, 60);
+  return c.toDataURL('image/png');
+}
+
 // ------------------------------------------------------------------ settings & UI
 function applySettings() {
   const s = profile.settings;
@@ -3344,6 +3530,9 @@ function applySettings() {
   if (s.music && state === 'running') music.start();
   post.setMode(s.style);
   document.body.classList.toggle('big-text', !!s.bigText);
+  document.body.classList.toggle('cb', !!s.colorblind);
+  document.body.classList.toggle('reduce-fx', !!s.reduceFx);
+  fpsMeter.classList.toggle('hidden', !s.showFps);
   if (s.quality !== 'auto') quality = 2;
   applyQuality();
   if (!s.ghost && ghostDino) {
@@ -3388,6 +3577,8 @@ const game = {
     }
   },
   setCustomSkin: (def) => setCustomSkin(def),
+  teamTotals,
+  playerCard: () => playerCard(),
   menuMusic: (restart) => {
     if (state !== 'menu') return;
     if (restart) music.stop(0.15);
@@ -3430,6 +3621,9 @@ const game = {
   startMode,
   get adv() {
     return adv;
+  },
+  get rush() {
+    return rush;
   },
   get transport() {
     return transport;
@@ -3544,5 +3738,9 @@ window.__dino = {
   },
   set nextBossAt(v) {
     nextBossAt = v;
+  },
+  // automated tests: run the game n frames forward without waiting for the screen
+  step: (n = 60) => {
+    for (let i = 0; i < n; i++) update(1 / 60);
   },
 };

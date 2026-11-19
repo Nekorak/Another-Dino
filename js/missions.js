@@ -193,6 +193,8 @@ export const ACHIEVEMENTS = [
   { id: 'seasonRun', test: (s) => (s.seasonBest || 0) >= 1500 },
   { id: 'fashion', test: () => profile.owned.hat.length >= 7 },
   { id: 'goldBones25', test: (s) => (s.goldBones || 0) >= 25 },
+  { id: 'rushAll', test: (s) => (s.rushes || 0) >= 1 },
+  { id: 'crowns10', test: () => Object.keys(profile.advCrowns || {}).length >= 10 },
 ];
 // the boss level of a world, as saved in profile.adventure ("11-2")
 const advBoss = (id) => `${BIOMES.findIndex((b) => b.id === id)}-2`;
