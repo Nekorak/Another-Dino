@@ -34,6 +34,9 @@ export const MEDALS = {
   levelsWon: [1, 10, 40],
   photos: [1, 10, 30],
   weeklies: [3, 15, 60],
+  // v1.6
+  teamBosses: [1, 10, 30],
+  seasonRuns: [5, 25, 100],
 };
 export const MEDAL_REWARD = [0, 25, 75, 200]; // bones for bronze, silver, gold
 export const MEDAL_NAMES = ['', 'bronze', 'silver', 'gold'];

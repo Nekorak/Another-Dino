@@ -44,10 +44,17 @@ Toată lista din notes/todo-design-gameplay.md (design și gameplay), plus cele 
 7. Regula zilei, traseul săptămânii, lumea sezonului (se schimbă în fiecare trimestru)
 8. Animăluțele de nivel 5 evoluează; clasament de echipă în co-op
 
+## Gata în v1.6
+
+1. Boss de echipă în co-op LAN
+2. Tura sezonului în modul normal, cu record propriu în fiecare sezon
+3. Al doilea capitol de poveste pentru fiecare anotimp
+4. Două lumi noi în Aventură: Mlaștina (crocodil) și Insulele din nori (pasărea furtunii), cu muzică
+5. 3 skin-uri, 5 pălării și 10 realizări noi
+6. Echilibrare: stelele și primul boss dau mai mult în lumile de la final, boșii mici dintr-o tură dau tot mai mult
+
 ## Idei noi
 
-Tot fără server: totul merge offline, prin QR sau LAN.
-
-- **Boss în co-op**: în modul echipă, un boss comun pe care îl înving toți împreună.
-- **Lumea sezonului în modul normal**: o tură specială cu decorul sezonului, în afara Aventurii.
-- **Mai multe capitole de poveste** pentru lumea sezonului, câte unul nou în fiecare anotimp.
+- Salvare în cloud, clasament online și publicare pe Google Play (amânate deocamdată, au nevoie de server sau de cont de dezvoltator).
+- Un cadou unic pentru fiecare boss învins prima dată (o pălărie a lumii).
+- Lumile din Aventură și în turele normale, după 8000 de puncte.

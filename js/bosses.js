@@ -13,9 +13,10 @@ const FLYERS = {
   cave: { pal: { P: '#3a2f4a', L: '#6b5a85', O: '#c8c0d8', W: '#ff3b30', F: '#231c2e' }, attack: 'drop' }, // a giant bat
   volcano: { pal: { P: '#b8281f', L: '#ff8a3a', O: '#ffd23f', W: '#ffe066', F: '#6e140f' }, attack: 'drop' }, // a fire dragon
   candy: { pal: { P: '#ff6fa8', L: '#fff0f7', O: '#7fd3ff', W: '#ffffff', F: '#c4457a' }, attack: 'drop' }, // a gummy pterodactyl
+  sky: { pal: { P: '#4a5a8a', L: '#ffe066', O: '#ffd23f', W: '#ffffff', F: '#2a3460' }, attack: 'drop' }, // a storm bird with lightning wings
   season: { pal: { P: '#e8ecf4', L: '#ffffff', O: '#9fe3ff', W: '#3a2a5a', F: '#b8c0d0' }, attack: 'drop' }, // a ghost pterodactyl
 };
-export const BOSS_KIND = { desert: 'ptero', jungle: 'parrot', beach: 'crab', snow: 'mammoth', cave: 'bat', city: 'robot', volcano: 'dragon', space: 'ufo', ocean: 'octopus', candy: 'gummy', season: 'ghost' };
+export const BOSS_KIND = { desert: 'ptero', jungle: 'parrot', beach: 'crab', snow: 'mammoth', cave: 'bat', city: 'robot', volcano: 'dragon', space: 'ufo', ocean: 'octopus', candy: 'gummy', season: 'ghost', swamp: 'croc', sky: 'storm' };
 
 function box(vs, x0, x1, y0, y1, z0, z1, c) {
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) vs.set(x, y, z, typeof c === 'function' ? c(x, y, z) : c);
@@ -115,6 +116,25 @@ function octopus() {
   return buildGeometry(vs, [0, 0, 0.5]);
 }
 
+function croc() {
+  const vs = new VoxelSet();
+  const G = '#4f7a3a';
+  const D = '#36562a';
+  box(vs, -12, 6, 2, 6, -4, 4, (x, y, z) => (y === 6 && (x + z) % 2 === 0 ? D : G)); // body with bumps on the back
+  box(vs, -20, -13, 3, 5, -2, 2, (x) => (x % 2 ? G : D)); // tail
+  box(vs, -24, -21, 3, 4, -1, 1, D);
+  box(vs, 7, 16, 2, 4, -3, 3, G); // lower jaw
+  box(vs, 7, 17, 5, 7, -3, 3, G); // upper jaw
+  for (let x = 8; x <= 16; x += 2) for (const z of [-3, 3]) vs.set(x, 4, z, '#ffffff'); // teeth
+  box(vs, 6, 6, 2, 7, -3, 3, '#e8d8a8'); // belly seam
+  for (const z of [-2, 2]) {
+    box(vs, 8, 9, 8, 9, z, z, '#ffd23f'); // eyes on top of the head
+    vs.set(9, 9, z, '#1b1b1b');
+  }
+  for (const x of [-9, 3]) for (const z of [-5, 5]) box(vs, x, x + 2, 0, 2, z, z, D); // legs
+  return buildGeometry(vs, [0, 0, 0.5]);
+}
+
 // returns { root, wings, rotor, kind, attack, ground, scale }
 export function createBoss(biomeId) {
   const kind = BOSS_KIND[biomeId] || 'ptero';
@@ -148,6 +168,11 @@ export function createBoss(biomeId) {
     rotor.position.y = 12 * 0.12;
     root.scale.setScalar(2.6);
     return { root, wings: null, rotor, kind, attack: 'drop', ground: false };
+  }
+  if (kind === 'croc') {
+    add(geo('croc', croc));
+    root.scale.setScalar(2.2);
+    return { root, wings: null, kind, attack: 'roll', ground: true };
   }
   if (kind === 'ufo') {
     add(geo('ufo', ufo));

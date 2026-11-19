@@ -3,12 +3,21 @@ import { BIOMES } from './biomes.js';
 import { profile, save } from './save.js';
 
 // ------------------------------------------------------------------ adventure
-// 8 worlds x 3 levels. Level 3 of every world ends with a boss fight.
+// 13 worlds x 3 levels. Level 3 of every world ends with a boss fight.
 export const ADV_LEVELS = 3;
 export const levelKey = (w, l) => `${w}-${l}`;
 
+// The order of the worlds on the map and in the story. Saves use the index in BIOMES, so
+// worlds added later go at the end of BIOMES; here the season world moves to the very end.
+export const ADV_ORDER = [...BIOMES.keys()].filter((w) => !BIOMES[w].seasonal).concat([...BIOMES.keys()].filter((w) => BIOMES[w].seasonal));
+export const advPos = (w) => ADV_ORDER.indexOf(w);
+export const SEASON_W = BIOMES.findIndex((b) => b.seasonal);
+export const LAST_STORY_W = ADV_ORDER.filter((w) => !BIOMES[w].seasonal).at(-1); // after its boss: the end of the story
+const CANDY_W = BIOMES.findIndex((b) => b.id === 'candy'); // the season world opens after this one, as before v1.6
+
 export function levelDef(w, l) {
   const boss = l === ADV_LEVELS - 1;
+  const pos = BIOMES[w].seasonal ? CANDY_W + 1 : advPos(w); // the season world keeps its old speed
   return {
     world: w,
     level: l,
@@ -18,7 +27,7 @@ export function levelDef(w, l) {
     length: boss ? 750 : 450 + l * 250, // in points of distance
     bossAt: 260,
     bossTime: 24,
-    startSpeed: 13 + w * 1.1 + l * 0.6,
+    startSpeed: 13 + pos * 1.1 + l * 0.6,
   };
 }
 
@@ -27,11 +36,19 @@ export const stars = (w, l) => profile.adventure[levelKey(w, l)] || 0;
 // the world of the season opens after the last boss, or early at tier 5 of the season pass
 export const SEASON_PASS_TIER = 5;
 export function unlocked(w, l) {
-  if (w === 0 && l === 0) return true;
+  if (w === ADV_ORDER[0] && l === 0) return true;
   if (l > 0) return stars(w, l - 1) > 0;
-  if (BIOMES[w] && BIOMES[w].seasonal && passTier() >= SEASON_PASS_TIER) return true;
-  return stars(w - 1, ADV_LEVELS - 1) > 0;
+  if (!BIOMES[w]) return false;
+  if (BIOMES[w].seasonal) return passTier() >= SEASON_PASS_TIER || stars(CANDY_W, ADV_LEVELS - 1) > 0;
+  const prev = ADV_ORDER[advPos(w) - 1];
+  return prev != null && stars(prev, ADV_LEVELS - 1) > 0;
 }
+// the season run (endless, in the world of the season): its best score resets every season
+export const seasonRunKey = (d = new Date()) => `${d.getFullYear()}-${Math.floor(d.getMonth() / 3)}`;
+export function seasonRunBest() {
+  return profile.seasonRun.key === seasonRunKey() ? profile.seasonRun.best : 0;
+}
+
 // the pass tier without importing rewards.js (that would be a loop): same formula as passState
 const passTier = () => Math.floor((profile.pass.xp || 0) / 250);
 
@@ -53,8 +70,10 @@ export function saveLevel(w, l, s) {
   const before = profile.adventure[key] || 0;
   const gained = Math.max(0, s - before);
   if (s > before) profile.adventure[key] = s;
-  let reward = gained * 15;
-  if (before === 0 && l === ADV_LEVELS - 1) reward += 60; // first boss defeat
+  // later worlds are faster, so their stars are worth a bit more (v1.6)
+  const pos = Math.max(0, advPos(w));
+  let reward = gained * (15 + pos);
+  if (before === 0 && l === ADV_LEVELS - 1) reward += 60 + pos * 5; // first boss defeat
   profile.coins += reward;
   save();
   return reward;

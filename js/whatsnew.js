@@ -3,6 +3,33 @@
 // id не связан с номером сборки (его ставит CI), поэтому окно работает и в браузере, и в приложениях.
 export const NEWS = [
   {
+    id: '2026-11-19-v16',
+    ro: [
+      'Două lumi noi în Aventură: Mlaştina (cu un crocodil) şi Insulele din nori (cu pasărea furtunii), cu muzică nouă.',
+      'Povestea are acum 12 capitole, iar finalul e deasupra norilor.',
+      'Boss de echipă în co-op LAN: rezistaţi împreună şi primiţi câte 50 de oase.',
+      'Tura sezonului (Moduri): o tură fără sfârşit în lumea sezonului, cu oase x1.5 şi un capitol nou de poveste.',
+      'În Magazin: 3 skin-uri şi 5 pălării noi. Plus 10 realizări noi.',
+      'Stelele din lumile de la final dau mai multe oase, iar fiecare boss mic din aceeaşi tură dă mai mult.',
+    ],
+    ru: [
+      'Два новых мира в Приключении: Болото (с крокодилом) и Острова в облаках (с грозовой птицей), с новой музыкой.',
+      'В истории теперь 12 глав, а финал над облаками.',
+      'Босс для команды в LAN-кооперативе: продержитесь вместе и получите по 50 косточек.',
+      'Забег сезона (Режимы): бесконечный забег по миру сезона, косточки x1.5 и новая глава истории.',
+      'В Магазине: 3 новых скина и 5 шляп. И 10 новых достижений.',
+      'Звёзды в последних мирах дают больше косточек, а каждый следующий мини-босс за забег даёт больше.',
+    ],
+    en: [
+      'Two new Adventure worlds: the Swamp (with a crocodile) and the Sky Islands (with the storm bird), with new music.',
+      'The story now has 12 chapters, and the ending is above the clouds.',
+      'Team boss in LAN co-op: survive it together and everyone gets 50 bones.',
+      'Season run (Modes): an endless run in the season world, bones x1.5 and a new story chapter.',
+      'In the Shop: 3 new skins and 5 new hats. Plus 10 new achievements.',
+      'Stars in the later worlds give more bones, and every next mini-boss in the same run gives more.',
+    ],
+  },
+  {
     id: '2026-11-19-music',
     ro: [
       'Muzică nouă: o melodie a meniului și o temă pentru lupta cu boșii (cu sirenă când vine bossul).',

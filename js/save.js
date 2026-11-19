@@ -78,6 +78,9 @@ function defaults() {
       challengesWon: 0,
       coopGames: 0,
       coopBest: 0,
+      teamBosses: 0, // v1.6: bosses beaten together in LAN co-op
+      seasonRuns: 0, // v1.6: runs in the world of the season (normal mode)
+      seasonBest: 0,
       levelsWon: 0,
       levelsMade: 0,
       photos: 0,
@@ -97,6 +100,8 @@ function defaults() {
     storySeen: [], // adventure: worlds whose story page was shown
     coopTop: [], // co-op: the best teams on this device { s, names, d }
     mutator: { date: '', best: 0 }, // rule of the day: best score today
+    // v1.6
+    seasonRun: { key: '', best: 0, runs: 0 }, // the season run: best score of this season (key: year + season)
   };
 }
 

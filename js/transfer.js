@@ -22,6 +22,8 @@ const STAT_KEYS = [
   'goldBones', 'miniBosses', 'chests', 'tournaments', 'challengesWon',
   // v1.4
   'coopGames', 'coopBest', 'levelsWon', 'levelsMade', 'photos', 'weeklies',
+  // v1.6
+  'teamBosses', 'seasonRuns', 'seasonBest',
 ];
 
 function fnv(str) {
@@ -144,6 +146,8 @@ export function encodeProgress({ levels = true } = {}) {
   // v1.5: story pages already seen, the track of the week, the rule of the day
   fields.push(['story', (p.storySeen || []).map((k) => String(k).replace(/[^a-z0-9]/gi, '')).join(',')]);
   if (p.weeklyTrack && p.weeklyTrack.done) fields.push(['wtrack', p.weeklyTrack.week]);
+  // v1.6: best score of the season run (only while it is the same season)
+  if (p.seasonRun && p.seasonRun.key && p.seasonRun.best) fields.push(['srun', `${p.seasonRun.key},${Math.floor(p.seasonRun.best)}`]);
   if (p.mutator && p.mutator.date && p.mutator.best) fields.push(['mut', `${p.mutator.date},${Math.floor(p.mutator.best)}`]);
   if (levels && p.levels && p.levels.length) fields.push(['levels', levelsToText(p.levels)]);
   // the co-op leaderboard (best 5 teams) travels with the tracks: both stay out of a too-big QR
@@ -224,6 +228,10 @@ export function decodeProgress(text) {
     mutator: (() => {
       const [date, best] = (vars.mut || '').split(',');
       return /^\d{4}-\d{1,2}-\d{1,2}$/.test(date || '') ? { date, best: num(best) } : null;
+    })(),
+    seasonRun: (() => {
+      const [key, best] = (vars.srun || '').split(',');
+      return /^\d{4}-[0-3]$/.test(key || '') ? { key, best: num(best) } : null;
     })(),
     coopTop: String(vars.coop || '')
       .split('|')
@@ -311,6 +319,11 @@ export function mergeProgress(d) {
   if (d.mutator) {
     if (p.mutator.date === d.mutator.date) p.mutator.best = Math.max(p.mutator.best || 0, d.mutator.best);
     else if (!p.mutator.date || !p.mutator.best) p.mutator = { ...d.mutator };
+  }
+  // the season run: best score of the same season
+  if (d.seasonRun) {
+    if (p.seasonRun.key === d.seasonRun.key) p.seasonRun.best = Math.max(p.seasonRun.best || 0, d.seasonRun.best);
+    else if (!p.seasonRun.key || d.seasonRun.key > p.seasonRun.key) p.seasonRun = { key: d.seasonRun.key, best: d.seasonRun.best, runs: 0 };
   }
   // co-op teams: the same team is one row with its best distance, best 10 kept
   for (const e of d.coopTop || []) {
