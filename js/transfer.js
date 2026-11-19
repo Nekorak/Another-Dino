@@ -141,7 +141,13 @@ export function encodeProgress({ levels = true } = {}) {
     // v1.5: stars on tracks and the tracks themselves (left out of a QR that would be too big)
     ['lvstars', Object.entries(p.levelStars || {}).map(([k, v]) => `${k}:${v}`).join(',')],
   ];
+  // v1.5: story pages already seen, the track of the week, the rule of the day
+  fields.push(['story', (p.storySeen || []).map((k) => String(k).replace(/[^a-z0-9]/gi, '')).join(',')]);
+  if (p.weeklyTrack && p.weeklyTrack.done) fields.push(['wtrack', p.weeklyTrack.week]);
+  if (p.mutator && p.mutator.date && p.mutator.best) fields.push(['mut', `${p.mutator.date},${Math.floor(p.mutator.best)}`]);
   if (levels && p.levels && p.levels.length) fields.push(['levels', levelsToText(p.levels)]);
+  // the co-op leaderboard (best 5 teams) travels with the tracks: both stay out of a too-big QR
+  if (levels && p.coopTop && p.coopTop.length) fields.push(['coop', p.coopTop.slice(0, 5).map((e) => `${Math.floor(e.s) || 0}~${String(e.names || '').replace(/[;=,|~]/g, '').slice(0, 60)}`).join('|')]);
   const body = HEADER + ';' + fields.map(([k, v]) => `${k}=${v}`).join(';');
   return body + ';sum=' + fnv(body);
 }
@@ -213,6 +219,18 @@ export function decodeProgress(text) {
         .map(([k, v]) => [k, Math.min(3, num(v))]),
     ),
     levels: textToLevels(vars.levels),
+    storySeen: list('story').filter((k) => /^[a-z0-9]{1,8}$/i.test(k)).map((k) => (/^\d+$/.test(k) ? Number(k) : k)),
+    weeklyTrack: /^[\w-]{1,16}$/.test(vars.wtrack || '') ? vars.wtrack : '',
+    mutator: (() => {
+      const [date, best] = (vars.mut || '').split(',');
+      return /^\d{4}-\d{1,2}-\d{1,2}$/.test(date || '') ? { date, best: num(best) } : null;
+    })(),
+    coopTop: String(vars.coop || '')
+      .split('|')
+      .map((e) => e.split('~'))
+      .filter(([sc, names]) => names && num(sc) > 0)
+      .map(([sc, names]) => ({ s: num(sc), names, d: 0 }))
+      .slice(0, 10),
     pass: (() => {
       const [season, xp, claimed] = (vars.pass || '').split(',');
       return season ? { season, xp: num(xp), claimed: (claimed || '').split('.').filter(Boolean).map(Number).filter((n) => n >= 1 && n <= 30) } : null;
@@ -286,6 +304,22 @@ export function mergeProgress(d) {
     const id = levelId(lv);
     if (!have.has(id)) p.levels.push(lv), have.add(id);
   }
+  for (const k of d.storySeen || []) if (!p.storySeen.includes(k)) p.storySeen.push(k);
+  // the track of the week: done on either device counts (week ids like 2026-W47 sort as text)
+  if (d.weeklyTrack && d.weeklyTrack >= (p.weeklyTrack.week || '')) p.weeklyTrack = { week: d.weeklyTrack, done: true };
+  // the rule of the day: best score of the same day
+  if (d.mutator) {
+    if (p.mutator.date === d.mutator.date) p.mutator.best = Math.max(p.mutator.best || 0, d.mutator.best);
+    else if (!p.mutator.date || !p.mutator.best) p.mutator = { ...d.mutator };
+  }
+  // co-op teams: the same team is one row with its best distance, best 10 kept
+  for (const e of d.coopTop || []) {
+    const old = p.coopTop.find((x) => x.names === e.names);
+    if (old) old.s = Math.max(old.s, e.s);
+    else p.coopTop.push({ ...e, d: e.d || Date.now() });
+  }
+  p.coopTop.sort((a, b) => b.s - a.s);
+  p.coopTop.length = Math.min(p.coopTop.length, 10);
   if (!p.name && d.name) p.name = d.name;
   save();
 }
