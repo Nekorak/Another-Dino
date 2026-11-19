@@ -3,6 +3,7 @@ import { profile, save } from './save.js';
 import { levelOf } from './progress.js';
 import { SKINS, HATS } from './models.js';
 import { allFossils } from './collection.js';
+import { BIOMES } from './biomes.js';
 
 // skins and hats that were bought (gifts from levels, seasons and the album do not count)
 const bought = () => profile.owned.skin.filter((id) => SKINS[id]?.price > 0).length + profile.owned.hat.filter((id) => HATS[id]?.price > 0).length;
@@ -181,7 +182,20 @@ export const ACHIEVEMENTS = [
   { id: 'combo5', test: (s) => s.bestCombo >= 5 },
   { id: 'bot', test: (s) => s.botWins >= 1 },
   { id: 'album', test: () => allFossils().every((f) => profile.fossils.includes(f)) },
+  // v1.6
+  { id: 'score10k', test: (s) => s.best >= 10000 },
+  { id: 'games200', test: (s) => s.games >= 200 },
+  { id: 'swampBoss', test: () => (profile.adventure[advBoss('swamp')] || 0) > 0 },
+  { id: 'skyBoss', test: () => (profile.adventure[advBoss('sky')] || 0) > 0 },
+  { id: 'storyEnd', test: () => profile.storySeen.includes('end') },
+  { id: 'stars60', test: () => Object.values(profile.adventure).reduce((a, b) => a + b, 0) >= 60 },
+  { id: 'teamBoss', test: (s) => (s.teamBosses || 0) >= 1 },
+  { id: 'seasonRun', test: (s) => (s.seasonBest || 0) >= 1500 },
+  { id: 'fashion', test: () => profile.owned.hat.length >= 7 },
+  { id: 'goldBones25', test: (s) => (s.goldBones || 0) >= 25 },
 ];
+// the boss level of a world, as saved in profile.adventure ("11-2")
+const advBoss = (id) => `${BIOMES.findIndex((b) => b.id === id)}-2`;
 export const ACHIEVEMENT_REWARD = 25;
 
 export function checkAchievements() {

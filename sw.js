@@ -1,5 +1,5 @@
 // Offline support: serve from cache, refresh the cache in the background.
-const CACHE = 'another-dino-v10';
+const CACHE = 'another-dino-v11';
 const ASSETS = [
   './',
   './index.html',

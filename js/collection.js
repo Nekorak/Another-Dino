@@ -18,6 +18,8 @@ export const FOSSIL_TINT = {
   space: '#d0d4e0',
   ocean: '#cfe8e0',
   candy: '#ffe0f0',
+  swamp: '#d8e0b8',
+  sky: '#e8f4ff',
 };
 export const FOSSIL_WORLD_REWARD = 100;
 

@@ -12,6 +12,10 @@ export const SKINS = {
   gold: { price: 900, body: '#e8b923', dark: '#b38b12', belly: '#fff1a8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6e520a', foot: '#9a760c', shiny: true },
   shadow: { price: 1200, body: '#2d2740', dark: '#1b1728', belly: '#5d4c85', eye: '#d58bff', pupil: '#ffffff', mouth: '#120f1c', foot: '#16121f' },
   skeleton: { price: 1600, body: '#ebe5d2', dark: '#b9b09a', belly: '#d2c9b1', eye: '#1b1b1b', pupil: '#e04040', mouth: '#3a3a3a', foot: '#a89f88', pattern: 'ribs' },
+  // v1.6
+  mint: { price: 250, body: '#7fd8b8', dark: '#4fae8e', belly: '#e8fff4', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#1f5a46', foot: '#3f8e72' },
+  coral: { price: 500, body: '#ff8a6a', dark: '#d8604a', belly: '#ffe0c8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6a2414', foot: '#b84a34', pattern: 'spots' },
+  tiger: { price: 700, body: '#f29a2a', dark: '#2a1c10', belly: '#fff0d8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#3a1a08', foot: '#c8741a', pattern: 'stripes' },
   robot: { price: 2200, body: '#a9b4c0', dark: '#6d7884', belly: '#d3dbe3', eye: '#ff3b30', pupil: '#ffd2cf', mouth: '#38404a', foot: '#56606b', pattern: 'panels' },
   // unlocked by player level, not bought
   lava: { level: 5, body: '#3a2a2a', dark: '#241818', belly: '#ff8c1a', eye: '#ffcf3a', pupil: '#ff3b00', mouth: '#120a0a', foot: '#241818', pattern: 'lava' },
@@ -48,6 +52,10 @@ function patternColor(s, c, x, y, z) {
       const h = ((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) >>> 0;
       return h % 23 === 0 ? '#ffffff' : h % 31 === 0 ? '#ff6fd8' : h % 17 === 0 ? '#4a2a8a' : c;
     }
+    case 'stripes':
+      return (x + Math.floor(y / 2)) % 4 === 0 ? s.dark : c;
+    case 'spots':
+      return ((x * 5 + y * 7 + z * 3) % 13 === 0 || (x * 3 + y * 11) % 17 === 0) ? '#fff0e0' : c;
     case 'rainbow':
       return hsl(((x * 14 + y * 9) % 360 + 360) % 360, 0.75, 0.6);
     default:
@@ -63,6 +71,12 @@ export const HATS = {
   tophat: { price: 250 },
   headphones: { price: 400 },
   crown: { price: 1500 },
+  // v1.6
+  bow: { price: 120 },
+  beanie: { price: 180 },
+  flower: { price: 220 },
+  viking: { price: 500 },
+  wizard: { price: 650 },
   // gifts from seasonal events, not for sale
   pumpkin: { season: 'halloween' },
   santa: { season: 'christmas' },
@@ -251,6 +265,41 @@ function hatVoxels(id) {
         vs.set(1, 1, z, z % 2 ? '#5fae3e' : '#4f9a32');
       }
       vs.set(2, 1, 0, '#ffd23f');
+      break;
+    case 'bow':
+      // a red bow on top of the head, a bit to the back
+      box(-3, -1, 0, 1, -1, 1, '#e0303a');
+      box(-3, -1, 0, 2, -3, -2, '#ff4f5a');
+      box(-3, -1, 0, 2, 2, 3, '#ff4f5a');
+      vs.set(-2, 1, 0, '#a8202a');
+      break;
+    case 'beanie':
+      box(-4, 2, 0, 1, -3, 3, (x, y) => (y === 0 ? '#2a5ab8' : '#3f7fd9'));
+      box(-3, 1, 2, 2, -2, 2, '#3f7fd9');
+      box(-2, 0, 3, 3, -1, 1, '#ffffff');
+      vs.set(-1, 4, 0, '#ffffff');
+      break;
+    case 'flower':
+      vs.set(-1, 0, 2, '#3f8a2a');
+      for (const [x, z] of [[-2, 2], [0, 2], [-1, 1], [-1, 3]]) vs.set(x, 1, z, '#ff6fa8');
+      vs.set(-1, 1, 2, '#ffd23f');
+      break;
+    case 'viking':
+      box(-4, 2, 0, 1, -3, 3, (x, y, z) => (y === 0 ? '#8a6a3a' : '#a8acb4'));
+      box(-3, 1, 2, 2, -2, 2, '#a8acb4');
+      for (const z of [-1, 1]) {
+        const dz = z * 4;
+        box(-2, -1, 1, 3, dz, dz, '#f4ecd8'); // horns, high enough to show from the side
+        vs.set(-1, 4, dz - z, '#f4ecd8');
+        vs.set(-1, 5, dz - z, '#e8dcc0');
+      }
+      break;
+    case 'wizard':
+      box(-5, 3, 0, 0, -4, 4, '#3a2a8a');
+      for (let i = 1; i <= 7; i++) {
+        const r = Math.max(0, 3 - Math.floor(i / 2));
+        box(-1 - r - Math.floor(i / 3), -1 + r - Math.floor(i / 3), i, i, -r, r, (x, y, z) => ((x * 3 + y + z * 5) % 7 === 0 ? '#ffd23f' : '#4a3aa8'));
+      }
       break;
     case 'santa':
       box(-4, 2, 0, 0, -3, 3, '#ffffff');

@@ -2,7 +2,7 @@
 
 Un endless runner **3D cu grafică pixelată (voxel)**, inspirat de dinozaurul din Chrome, gândit în primul rând pentru **telefoane**.
 
-Aleargă prin **opt lumi** (plus trei doar în Aventură), sari peste cactuși, gropi, bolovani și meteoriți, ghemuiește-te sub pterodactili, strânge oase, cumpără skin-uri și animăluțe. Poți juca **în doi pe același ecran** sau **cu prietenii în LAN**, pe același Wi-Fi sau pe hotspot-ul unui telefon.
+Aleargă prin **opt lumi** (plus cinci doar în Aventură), sari peste cactuși, gropi, bolovani și meteoriți, ghemuiește-te sub pterodactili, strânge oase, cumpără skin-uri și animăluțe. Poți juca **în doi pe același ecran** sau **cu prietenii în LAN**, pe același Wi-Fi sau pe hotspot-ul unui telefon.
 
 ## Cum se joacă
 
@@ -53,7 +53,7 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
 - **Stiluri grafice**: Normal, Contur, Game Boy, Ecran CRT.
 - **Confort și accesibilitate**: calitate grafică automată (scade singură pe telefoanele slabe), obstacole evidențiate, text mare.
 - **Moduri de joc** (meniul MODURI):
-  - **Aventură**: 10 lumi × 3 niveluri (cele 8 de mai sus, plus **Sub apă**, unde dinozaurul înoată: fiecare atingere e o tură de înot în sus, și **Lumea dulce**, cu acadele și bastonașe de zahăr), cu linie de sosire și până la 3 stele pe nivel; al treilea nivel din fiecare lume are un **boss** (pterodactil uriaș care aruncă bolovani);
+  - **Aventură**: 13 lumi × 3 niveluri (cele 8 de mai sus, plus **Sub apă**, unde dinozaurul înoată: fiecare atingere e o tură de înot în sus, **Lumea dulce**, cu acadele și bastonașe de zahăr, **Mlaștina**, **Insulele din nori** și **Lumea sezonului**), cu linie de sosire și până la 3 stele pe nivel; al treilea nivel din fiecare lume are un **boss** (pterodactil uriaș care aruncă bolovani);
   - **Zen**: fără moarte, doar alergare și muzică;
   - **Hardcore**: fără puteri speciale și fără a doua șansă, dar oase duble;
   - **Contra robotului**: un dinozaur-robot aleargă pe culoarul de lângă tine (3 niveluri de dificultate);
@@ -75,14 +75,18 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
 - **Controale pe ecran configurabile** (Setări): muți granița dintre zona de ghemuit și cea de săritură sau treci pe **butoane** pe care le așezi și le mărești cum vrei.
 - **Widget pe Android**: pe ecranul principal arată recordul și câte ore mai ai pentru provocarea zilei.
 - **Meniul principal** are JOACĂ și patru grupuri: **Moduri** (cu Multiplayer înăuntru), **Colecție** (Magazin, Album, Pass), **Progres** (Misiuni, Medalii, Statistici) și **Setări**. Bulinuțele roșii arată unde te așteaptă ceva (o treaptă din Pass, provocarea zilei, un traseu primit). Un jucător nou începe cu JOACĂ și Colecția; Modurile se deschid după 3 ture, Multiplayer după 5, Editorul după primul nivel din Aventură.
-- **Un boss diferit în fiecare lume** din Aventură: pterozaur, papagal, crab, mamut, liliac, robot, dragon, farfurie zburătoare, caracatiță, pterozaur de jeleu și fantoma. Unii aruncă bolovani din cer, alții îi rostogolesc pe traseu, caracatița trimite pești.
+- **Un boss diferit în fiecare lume** din Aventură: pterozaur, papagal, crab, mamut, liliac, robot, dragon, farfurie zburătoare, caracatiță, pterozaur de jeleu, crocodil, pasărea furtunii și fantoma. Unii aruncă bolovani din cer, alții îi rostogolesc pe traseu, caracatița trimite pești.
 - **Harta Aventurii** e un drum prin lumi, cu o **poveste scurtă** înaintea fiecărei lumi (📖 o reia).
-- **Lumea sezonului**: a 11-a lume din Aventură, care se schimbă în fiecare trimestru (palat de gheață, grădină cu flori, bâlci, cimitir bântuit). Se deschide după ultimul boss sau la treapta 5 din Pass.
+- **Lumea sezonului**: ultima lume de pe harta Aventurii, care se schimbă în fiecare trimestru (palat de gheață, grădină cu flori, bâlci, cimitir bântuit). Se deschide după bossul din Lumea dulce sau la treapta 5 din Pass.
 - **Regula zilei** (Moduri): o regulă în plus pentru toată ziua (gravitație de Lună, noapte fără sfârșit, turbo, pterodactili peste tot, ziua giganților), cu oase care valorează mai mult.
 - **Traseul săptămânii** (Moduri > Trasee): un traseu ales din cele primite de la prieteni (sau unul de-al nostru); prima terminare din săptămână dă 100 de oase.
 - **Tipare de obstacole**: pe lângă obstacolele la întâmplare vin și secvențe gândite de mână (trei sărituri la rând, ghemuit-sari-ghemuit, trei gropi…), tot mai des cu viteza.
 - **Cheltuieli noi**: **oul de aur** (doar lucruri scumpe), **hrană pentru animăluț** și **altă misiune** pentru 25 de oase. La nivelul 5 animăluțele **evoluează** (găina cu creastă, țestoasa cu armură, regele broaștelor, pterozaurul adult).
 - **Clasament de echipă** în co-op: cele mai bune echipe care au jucat pe dispozitiv.
+- **Două lumi noi în Aventură** (v1.6): **Mlaștina**, cu un crocodil care rostogolește bușteni, și **Insulele din nori**, cu pasărea furtunii. Fiecare are melodia ei, decor propriu și un capitol de poveste.
+- **Boss de echipă** în co-op LAN: la fiecare 2000 de puncte vine un boss pentru toată echipa; dacă rezistați 18 secunde cu inimile rămase, fiecare primește 50 de oase.
+- **Tura sezonului** (Moduri): o tură fără sfârșit în lumea sezonului, cu oase x1.5, record propriu în fiecare sezon și un al doilea capitol de poveste pentru fiecare anotimp.
+- **Lucruri noi în Magazin**: 3 skin-uri (Mentă, Coral, Tigru) și 5 pălării (fundiță, căciuliță, floare, coif viking, pălărie de vrăjitor), plus 10 realizări noi.
 - Interfață în **română, rusă și engleză**.
 
 ## 2–4 jucători pe același ecran

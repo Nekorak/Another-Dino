@@ -34,10 +34,17 @@ const SONGS = [
   { id: 'menu', root: 55, scale: [0, 2, 4, 7, 9], chords: [0, 3, 4, 2], chordsB: [3, 4, 1, 0], bpm: 96, lead: 0.5, style: 'soft' },
   // boss: D harmonic minor, fast and tense
   { id: 'boss', root: 50, scale: [0, 2, 3, 5, 7, 8, 11], chords: [0, 0, 5, 4], chordsB: [3, 1, 5, 4], bpm: 172, lead: 0.25, style: 'boss' },
+  // v1.6 worlds (after menu and boss, so older track numbers stay the same)
+  // swamp: D minor blues, slow and croaky
+  { id: 'swamp', root: 50, scale: [0, 3, 5, 6, 7, 10], chords: [0, 3, 0, 4], chordsB: [3, 4, 1, 0], bpm: 108, lead: 0.25 },
+  // sky islands: A major, light and soaring
+  { id: 'sky', root: 57, scale: [0, 2, 4, 7, 9, 11], chords: [0, 4, 5, 3], chordsB: [3, 5, 4, 0], bpm: 138, lead: 0.125 },
 ];
 export const MENU_TRACK = 11;
 export const BOSS_TRACK = 12;
 export const TRACK_IDS = SONGS.map((s) => s.id);
+// the song of a world (by its id); the track number is not always the world's index
+export const songOf = (id) => Math.max(0, TRACK_IDS.indexOf(id));
 
 // short tunes: [midi, start in beats, length in beats], played at their own tempo
 const JINGLES = {

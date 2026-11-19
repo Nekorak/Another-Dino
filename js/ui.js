@@ -5,7 +5,7 @@ import { SKINS, HATS, PETS, POWERUP_COLOR, hatPixels, petPixels } from './models
 import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dailyInfo, EGG_PRICE, GOLD_EGG_PRICE, openEgg, eggPoolSize, PET_FOOD_PRICE, PET_FOOD_XP } from './progress.js';
 import { BIOMES, SEASON_WORLD } from './biomes.js';
 import { BOSS_KIND } from './bosses.js';
-import { ADV_LEVELS, stars as advStars, unlocked as advUnlocked, totalStars, todayMutator, SEASON_PASS_TIER } from './modes.js';
+import { ADV_LEVELS, ADV_ORDER, advPos, LAST_STORY_W, SEASON_W, seasonRunBest, stars as advStars, unlocked as advUnlocked, totalStars, todayMutator, SEASON_PASS_TIER } from './modes.js';
 import { TRAILS, FOSSIL_KINDS, FOSSIL_WORLD_REWARD, fossilId, fossilPixels, allFossils } from './collection.js';
 import { encodeProgress, decodeProgress, mergeProgress, QR_LIMIT, qrCanvas, readQrFromImage, CameraScanner, LanSync, isChallenge, decodeChallenge } from './transfer.js';
 import { save, resetProgress, profile } from './save.js';
@@ -66,7 +66,7 @@ function shopAffordable(p = profile) {
   return n;
 }
 
-const BOSS_EMOJI = { ptero: '🦅', parrot: '🦜', crab: '🦀', mammoth: '🦣', bat: '🦇', robot: '🤖', dragon: '🐉', ufo: '🛸', octopus: '🐙', gummy: '🍬', ghost: '👻' };
+const BOSS_EMOJI = { ptero: '🦅', parrot: '🦜', crab: '🦀', mammoth: '🦣', bat: '🦇', robot: '🤖', dragon: '🐉', ufo: '🛸', octopus: '🐙', gummy: '🍬', ghost: '👻', croc: '🐊', storm: '🌩️' };
 const PU_ICON = { shield: '🛡️', magnet: '🧲', slow: '⏳', double: '⏫', rocket: '🚀', giant: '🦖', rain: '🦴' };
 const BONE_SVG =
   '<svg class="bone" viewBox="0 0 11 5" aria-hidden="true"><path d="M0 0h2v1h1v1h5V1h1V0h2v2h-1v1h1v2H9V4H8V3H3v1H2v1H0V3h1V2H0z"/></svg>';
@@ -514,7 +514,7 @@ export class UI {
     $('win-details').replaceChildren(...lines.filter(Boolean));
     const hasNext = this.nextLevelOf(adv) != null;
     // the last page of the story, once, after the boss of the last world (before the seasonal one)
-    if (!adv.custom && adv.boss && adv.world === 9 && !this.p.storySeen.includes('end')) setTimeout(() => this.g.state === 'won' && this.showStory('end'), 2600);
+    if (!adv.custom && adv.boss && adv.world === LAST_STORY_W && !this.p.storySeen.includes('end')) setTimeout(() => this.g.state === 'won' && this.showStory('end'), 2600);
     $('btn-win-next').classList.toggle('hidden', !hasNext);
     $('win').classList.remove('hidden');
     document.body.classList.add('over');
@@ -522,7 +522,8 @@ export class UI {
   nextLevelOf(adv) {
     if (!adv || adv.custom) return null;
     if (adv.level < ADV_LEVELS - 1) return { world: adv.world, level: adv.level + 1 };
-    if (adv.world < BIOMES.length - 1) return { world: adv.world + 1, level: 0 };
+    const next = ADV_ORDER[advPos(adv.world) + 1];
+    if (next != null) return { world: next, level: 0 };
     return null;
   }
   nextLevel() {
@@ -806,7 +807,7 @@ export class UI {
     document.body.classList.toggle('paused', !!on);
     $('btn-zen-end').classList.toggle('hidden', mode !== 'zen');
   }
-  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge, near, mutator }) {
+  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge, near, mutator, season }) {
     $('btn-replay').classList.toggle('hidden', !!lan || this.g.replay.length < 5);
     $('btn-challenge').classList.toggle('hidden', !canChallenge || score <= 0);
     this.overShownAt = performance.now() / 1000;
@@ -844,6 +845,7 @@ export class UI {
         el('p', { class: challenge.won ? 'winner' : '', text: challenge.won ? t('chWon', { name: challenge.name, n: challenge.reward }) : t('chLost', { name: challenge.name, n: challenge.target }) }),
       );
     if (mutator) extra.append(el('p', { class: mutator.isBest ? 'winner' : '', text: t('mutBest', { name: t('mut_' + mutator.id), n: mutator.best }) }));
+    if (season) extra.append(el('p', { class: season.isBest ? 'winner' : '', text: t('seasonBest', { name: t('biome_season'), n: season.best }) }));
     if (bot) extra.append(el('p', { class: bot.won ? 'winner' : '', text: bot.won ? t('botBeaten', { n: bot.reward }) : t('botWon') }));
     if (daily) extra.append(el('p', { class: daily.done ? 'mission-done' : '', text: daily.done ? t('dailyDoneShort', { n: daily.streak }) : t('dailyBest', { n: daily.best, target: daily.target }) }));
     $('btn-share').classList.toggle('hidden', !!lan || score <= 0);
@@ -1441,6 +1443,9 @@ export class UI {
       withBadge(card('daily', d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }), () => g.startMode('daily')), st.daily),
       card('mode_mutator', t('mut_' + mu.id) + ' · ' + t('mutDesc', { k: mu.bones, n: mu.best }), () => g.startMode('mutator')),
       un.lan ? card('multiplayer', t('modeDesc_lan'), () => this.openPanel('lan', 'modes')) : locked('multiplayer', t('unlockAfter', { n: 5 })),
+      advUnlocked(SEASON_W, 0)
+        ? card('mode_season', t('modeDesc_season', { name: t('biome_season'), n: seasonRunBest() }), () => this.playSeasonRun())
+        : locked('mode_season', t('seasonWorldHow', { n: SEASON_PASS_TIER })),
       card('mode_zen', t('modeDesc_zen'), () => g.startMode('zen')),
       card('mode_hardcore', t('modeDesc_hardcore'), () => g.startMode('hardcore')),
       card('mode_bot', t('modeDesc_bot'), () => g.startMode('bot'), botBtn),
@@ -1459,10 +1464,9 @@ export class UI {
   // with its three levels as stops on the road and the dino standing at the next one
   adventureView() {
     let here = null; // the first open level without stars: where the dino stands
-    BIOMES.forEach((b, w) => {
-      for (let l = 0; l < ADV_LEVELS; l++) if (!here && advUnlocked(w, l) && !advStars(w, l)) here = [w, l];
-    });
-    const worlds = BIOMES.map((b, w) => {
+    for (const w of ADV_ORDER) for (let l = 0; l < ADV_LEVELS; l++) if (!here && advUnlocked(w, l) && !advStars(w, l)) here = [w, l];
+    const worlds = ADV_ORDER.map((w, pos) => {
+      const b = BIOMES[w];
       const open0 = advUnlocked(w, 0);
       const stops = Array.from({ length: ADV_LEVELS }, (_, l) => {
         const open = advUnlocked(w, l);
@@ -1472,7 +1476,7 @@ export class UI {
           'button',
           { class: 'stop' + (open ? '' : ' locked') + (l === ADV_LEVELS - 1 ? ' boss' : '') + (st ? ' done' : '') + (isHere ? ' here' : ''), disabled: !open },
           isHere ? dinoIcon(this.p.skin) : null,
-          el('span', { class: 'stop-n', text: l === ADV_LEVELS - 1 ? t('bossShort') : String(w * ADV_LEVELS + l + 1) }),
+          el('span', { class: 'stop-n', text: l === ADV_LEVELS - 1 ? t('bossShort') : String(pos * ADV_LEVELS + l + 1) }),
           el('span', { class: 'mini-stars' }, [0, 1, 2].map((i) => el('i', { class: i < st ? 'on' : '' }))),
         );
         btn.addEventListener('click', () => this.playLevel(w, l));
@@ -1481,7 +1485,7 @@ export class UI {
       const story = el('button', { class: 'val story-btn', text: '📖', 'aria-label': t('storyRead'), title: t('storyRead'), disabled: !open0, onclick: () => this.showStory(w) });
       return el(
         'div',
-        { class: 'map-world' + (w % 2 ? ' rev' : '') + (open0 ? '' : ' locked'), style: `--sky:${b.sky};--ground:${b.ground};--path:${b.path}` },
+        { class: 'map-world' + (pos % 2 ? ' rev' : '') + (open0 ? '' : ' locked'), style: `--sky:${b.sky};--ground:${b.ground};--path:${b.path}` },
         el('div', { class: 'map-head' }, el('b', { text: t('biome_' + b.id) }), story),
         el('div', { class: 'map-road' }, stops),
         b.seasonal && !open0 ? el('p', { class: 'small', text: t('seasonWorldHow', { n: SEASON_PASS_TIER }) }) : null,
@@ -1495,10 +1499,18 @@ export class UI {
     if (l === 0 && !this.p.storySeen.includes(w)) return this.showStory(w, start);
     start();
   }
-  // w: a world index, or 'end' for the last page (after the last boss)
+  // the season run has a story page of its own, a new one every season (shown once)
+  playSeasonRun() {
+    const start = () => this.g.startMode('season');
+    if (!this.p.storySeen.includes('s2' + SEASON_WORLD)) return this.showStory('s2', start);
+    start();
+  }
+  // w: a world index, 'end' for the last page (after the last boss) or 's2' for the
+  // second chapter of the season world (the season run)
   showStory(w, then) {
+    if (w === 's2') return this.showSeasonStory(then);
     const end = w === 'end';
-    const b = end ? BIOMES[9] : BIOMES[w];
+    const b = end ? BIOMES[LAST_STORY_W] : BIOMES[w];
     const scene = $('story-scene');
     scene.style.cssText = `--sky:${b.sky};--ground:${b.ground}`;
     const kind = end ? null : BOSS_KIND[b.id];
@@ -1507,12 +1519,27 @@ export class UI {
       el('span', { class: 'story-boss', text: kind ? BOSS_EMOJI[kind] || '' : '🥳' }),
       dinoIcon(this.p.skin),
     );
-    $('story-title').textContent = end ? t('storyEndTitle') : t('storyChapter', { n: w + 1, name: t('biome_' + b.id) });
+    $('story-title').textContent = end ? t('storyEndTitle') : t('storyChapter', { n: advPos(w) + 1, name: t('biome_' + b.id) });
     $('story-text').textContent = t(end ? 'story_end' : b.seasonal ? 'story_season_' + SEASON_WORLD : 'story_' + b.id);
     $('story-ok').textContent = then ? t('storyGo') : t('newsOk');
     this.storyThen = then || null;
     $('story').classList.remove('hidden');
     const key = end ? 'end' : w;
+    if (!this.p.storySeen.includes(key)) {
+      this.p.storySeen.push(key);
+      save();
+    }
+  }
+  showSeasonStory(then) {
+    const b = BIOMES[SEASON_W];
+    $('story-scene').style.cssText = `--sky:${b.sky};--ground:${b.ground}`;
+    $('story-scene').replaceChildren(el('span', { class: 'story-sky', text: '🌙' }), el('span', { class: 'story-boss', text: BOSS_EMOJI.ghost }), dinoIcon(this.p.skin));
+    $('story-title').textContent = t('storyChapter', { n: 2, name: t('biome_season') });
+    $('story-text').textContent = t('story2_season_' + SEASON_WORLD);
+    $('story-ok').textContent = then ? t('storyGo') : t('newsOk');
+    this.storyThen = then || null;
+    $('story').classList.remove('hidden');
+    const key = 's2' + SEASON_WORLD;
     if (!this.p.storySeen.includes(key)) {
       this.p.storySeen.push(key);
       save();

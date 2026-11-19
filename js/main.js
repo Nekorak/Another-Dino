@@ -21,14 +21,14 @@ import {
 } from './biomes.js';
 import { Dust, Shatter, Weather, PostFX } from './effects.js';
 import { Sfx } from './audio.js';
-import { Music, MENU_TRACK, BOSS_TRACK } from './music.js';
+import { Music, MENU_TRACK, BOSS_TRACK, songOf } from './music.js';
 import { profile, save, loadGhost, saveGhost } from './save.js';
 import { t, setLang } from './i18n.js';
 import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD, ensureWeekly, checkWeekly } from './missions.js';
 import { checkMedals, MEDAL_NAMES } from './medals.js';
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
-import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked } from './modes.js';
+import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked, SEASON_W, seasonRunKey } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession, COOP_HEARTS } from './multiplayer.js';
@@ -62,6 +62,8 @@ const NIGHT_EVERY = 700;
 const NIGHT_LEN = 20;
 const MINI_BOSS_EVERY = 2000; // endless modes: a short boss fight every 2000 points
 const MINI_BOSS_TIME = 14;
+const TEAM_BOSS_TIME = 18; // LAN co-op: a boss for the whole team, a bit longer
+const TEAM_BOSS_BONES = 50;
 const PIXEL_LEVELS = [110, 160, 240]; // render pixels along the short screen side
 const BASE_POWER_TIME = { shield: 15, magnet: 10, slow: 6, double: 12, rocket: 5, giant: 6, rain: 6 };
 const GHOST_STEP = 0.05;
@@ -1068,6 +1070,8 @@ const RULES = {
   challenge: { revive: false, powerups: true, bones: 1, missions: true, record: true },
   custom: { revive: false, powerups: true, bones: 1, missions: true, record: false },
   mutator: { revive: true, powerups: true, bones: 1, missions: true, record: false },
+  // an endless run that stays in the world of the season (its own best score each season)
+  season: { revive: true, powerups: true, bones: 1.5, missions: true, record: false },
 };
 let mut = null; // the rule of the day, while playing it
 const rules = () => (mode === 'mutator' && mut ? { ...RULES.mutator, bones: mut.bones } : RULES[mode] || RULES.solo);
@@ -1162,7 +1166,7 @@ function resetRun(seed) {
   run = newRunStats();
   ghostRec = [];
   ghostClock = 0;
-  const startBiome = adv ? adv.world : 0;
+  const startBiome = adv ? adv.world : mode === 'season' ? SEASON_W : 0;
   if (env.biome !== startBiome) setBiome(startBiome, true);
   tutorial = mode === 'solo' && !profile.tutorial ? { plan: ['cactus', 'bird'], freeze: null, done: false } : null;
   run.hadTutorial = !!tutorial;
@@ -1199,7 +1203,7 @@ function startRun(seed) {
   state = 'running';
   ui.hideScreens();
   ui.setPlaying(true, mode);
-  music.biome = env.biome;
+  music.biome = songOf(BIOMES[env.biome].id);
   music.start();
 }
 
@@ -1223,7 +1227,7 @@ function startMode(m, opts = {}) {
   if (daily) ui.toast(t('dailyGoal', { n: daily.target }), 'gold');
   if (adv && adv.custom) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
   else if (adv) ui.toast(t('advLevelTitle', { w: t('biome_' + adv.biome), n: adv.level + 1 }), 'biome');
-  if (m === 'zen' || m === 'hardcore') ui.toast(t('mode_' + m), 'gold');
+  if (m === 'zen' || m === 'hardcore' || m === 'season') ui.toast(t('mode_' + m), 'gold');
   if (mut) ui.toast(t('mut_' + mut.id), 'gold');
   if (m === 'bot') ui.toast(t('botStart', { lvl: t('bot_' + profile.settings.botLevel) }), 'gold');
 }
@@ -1431,6 +1435,19 @@ function finishRun() {
     save();
     mutResult = { id: mut.id, best: profile.mutator.best, isBest: res.s > before && res.s > 0 };
   }
+  // the season run: its own best score, kept until the season changes
+  let seasonResult = null;
+  if (mode === 'season') {
+    const key = seasonRunKey();
+    if (profile.seasonRun.key !== key) profile.seasonRun = { key, best: 0, runs: 0 };
+    const before = profile.seasonRun.best;
+    profile.seasonRun.runs++;
+    if (res.s > before) profile.seasonRun.best = res.s;
+    profile.stats.seasonRuns = (profile.stats.seasonRuns || 0) + 1;
+    profile.stats.seasonBest = Math.max(profile.stats.seasonBest || 0, res.s);
+    save();
+    seasonResult = { best: profile.seasonRun.best, isBest: res.s > before && res.s > 0 };
+  }
   // "so close!": a few points short of the record, or of the finish line in a level
   let near = null;
   if (adv && !rules().noDeath) {
@@ -1480,6 +1497,7 @@ function finishRun() {
     mode,
     near,
     mutator: mutResult,
+    season: seasonResult,
   });
   celebrate(res);
   // a new record: the dino pulls itself together and dances
@@ -1636,14 +1654,15 @@ function endEvent(silent) {
 // ------------------------------------------------------------------ adventure boss
 // every world has its own boss (see bosses.js): flyers circle above the track and drop
 // burning rocks, walkers run beside it and send boulders, the octopus sends fish
-function startBoss(dur = adv ? adv.bossTime : MINI_BOSS_TIME) {
+function startBoss(dur = adv ? adv.bossTime : isCoop() ? TEAM_BOSS_TIME : MINI_BOSS_TIME) {
   const b = createBoss(BIOMES[env.biome].id);
+  const team = !adv && isCoop();
   b.root.position.set(30, b.ground ? 0 : 4.6, b.ground ? -7 : -5);
   b.root.rotation.y = 0;
   scene.add(b.root);
-  boss = { ...b, t: dur, dur, drop: 1.5, phase: 0, mini: !adv };
+  boss = { ...b, t: dur, dur, drop: 1.5, phase: 0, mini: !adv, team };
   music.boss = true;
-  ui.toast(t(adv ? 'bossArrives' : 'miniBossArrives'), 'red');
+  ui.toast(t(adv ? 'bossArrives' : team ? 'teamBossArrives' : 'miniBossArrives', { n: dur }), 'red');
   ui.bossBar(1, b.kind);
   sfx.boom();
   sfx.alarm();
@@ -1703,17 +1722,26 @@ function updateBoss(dt) {
   }
   if (boss.t <= 0) {
     const mini = boss.mini;
+    const team = boss.team;
     if (adv) adv.bossDone = true;
     endBoss(false);
     ui.bossBar(null);
     sfx.reward();
     music.jingle('bossDown');
-    if (mini) {
-      // survived the mini-boss: a handful of bones
+    if (team) {
+      // co-op: the team still had hearts when the boss gave up
       nextBossAt = score + MINI_BOSS_EVERY;
-      giveBone(player, 25);
+      if (player.alive) giveBone(player, TEAM_BOSS_BONES);
+      profile.stats.teamBosses = (profile.stats.teamBosses || 0) + 1;
+      ui.toast(t('teamBossDone', { n: TEAM_BOSS_BONES }), 'gold');
+    } else if (mini) {
+      // survived the mini-boss: a handful of bones
+      // every next one in the same run is worth a bit more (25, 35, 45... up to 75)
+      nextBossAt = score + MINI_BOSS_EVERY;
+      const n = Math.min(75, 25 + 10 * (run.miniBosses || 0));
+      giveBone(player, n);
       run.miniBosses = (run.miniBosses || 0) + 1;
-      ui.toast(t('miniBossDone', { n: 25 }), 'gold');
+      ui.toast(t('miniBossDone', { n }), 'gold');
     } else ui.toast(t('bossDefeated'), 'gold');
   }
 }
@@ -3116,11 +3144,11 @@ function update(rawDt) {
       nightTimer = NIGHT_LEN;
     }
     // adventure levels stay in their world; the endless modes move on every 1000 points
-    const b = adv ? adv.world : biomeAt(score);
+    const b = adv ? adv.world : mode === 'season' ? SEASON_W : biomeAt(score);
     if (b !== env.biome) {
       setBiome(b, false);
       run.biome = Math.max(run.biome, Math.floor(score / BIOME_LENGTH) + 1);
-      music.biome = b;
+      music.biome = songOf(BIOMES[b].id);
       ui.toast(t('biome_' + BIOMES[b].id), 'biome');
     }
     if (adv) {
@@ -3128,7 +3156,7 @@ function update(rawDt) {
       if (adv.bossDone && adv.finishAt == null) adv.finishAt = score + 160;
       const total = adv.boss ? (adv.finishAt ?? adv.length) : adv.length;
       ui.advProgress(adv.custom ? clamp(adv.custom.i / Math.max(1, adv.custom.t.length), 0, 1) : clamp(score / total, 0, 1));
-    } else if (!boss && !event && !tutorial && mode !== 'lan' && score >= nextBossAt && state === 'running') startBoss();
+    } else if (!boss && !event && !tutorial && (mode !== 'lan' || isCoop()) && score >= nextBossAt && state === 'running') startBoss();
     updateBoss(dt);
     if (daily && player.alive && player.points >= daily.target && !daily.rewarded) {
       daily.rewarded = true;
@@ -3176,7 +3204,7 @@ function update(rawDt) {
     if (left <= 0) {
       ui.countdown(null);
       state = 'running';
-      music.biome = env.biome;
+      music.biome = songOf(BIOMES[env.biome].id);
       music.start();
       sfx.beep(true);
     } else if (String(Math.ceil(left)) !== ui.countdownText()) {
@@ -3372,7 +3400,7 @@ const game = {
     const out = [{ i: MENU_TRACK, key: 'trk_menu', open: true }];
     BIOMES.forEach((b, i) => {
       const open = i === 0 || advUnlocked(i, 0) || (!b.advOnly && st.best >= i * BIOME_LENGTH);
-      out.push({ i, key: 'biome_' + b.id, open });
+      out.push({ i: songOf(b.id), key: 'biome_' + b.id, open });
     });
     out.push({ i: BOSS_TRACK, key: 'trk_boss', open: st.bosses > 0 || (st.miniBosses || 0) > 0 });
     return out;
