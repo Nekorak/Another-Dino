@@ -13,6 +13,135 @@ Un dinozaur care aleargă printr-o lume din voxeli (cuburi mici, ca pixelii, dar
 
 Multiplayerul LAN merge doar în aplicații (Android și PC), pentru că browserul nu are acces la rețeaua locală.
 
+## Pas cu pas, în imagini
+
+Numerele din chenarele roșii corespund listei de sub fiecare imagine.
+
+### Meniul principal
+
+![Meniul principal](img/01-meniu.png)
+
+1. **JOACĂ:** pornește o tură normală.
+2. **MODURI:** Aventura, Boss Rush, multiplayerul și celelalte moduri.
+3. **COLECȚIE:** Magazinul, Albumul, Bestiarul, Pass-ul și Tonomatul.
+4. **PROGRES:** misiunile, medaliile, statisticile și Cartea de jucător.
+5. **SETĂRI:** limba, sunetul, controalele, grafica, accesibilitatea și transferul de progres.
+
+Bulina roșie sau eticheta NOU arată că acolo te așteaptă ceva.
+
+### În timpul jocului, pe PC
+
+![Jocul pe PC](img/02-joc-pc.png)
+
+1. **Pauză** (sau tasta Esc / P).
+2. **Sunet** pornit sau oprit.
+3. **Ecran complet.**
+4. **Recordul (HI) și scorul** turei de acum. Sub ele sunt oasele strânse.
+
+Sari cu **Space** sau **↑** și te ghemuiești cu **↓**.
+
+### Pe telefon
+
+![Zonele de atingere pe telefon](img/15-telefon-zone.png)
+
+1. **Ghemuire:** ține degetul pe partea stângă a ecranului. Dacă apeși în aer, dino lovește pământul.
+2. **Săritură:** atinge partea dreaptă. Dacă ții degetul, sare mai sus.
+3. **Pauză.**
+
+Granița dintre zone se poate muta, sau poți pune două butoane vizibile, din **Setări > Control > Comenzi pe ecran**.
+
+### Pauza
+
+![Pauza](img/03-pauza.png)
+
+1. **CONTINUĂ** tura.
+2. **FOTO:** modul foto, ca să faci o poză scenei (ajunge în Album).
+3. **MENIU:** ieși din tură.
+
+### Game Over
+
+![Game Over](img/04-game-over.png)
+
+1. **DIN NOU:** o tură nouă (sau Space).
+2. **MENIU.**
+3. **DISTRIBUIE:** o imagine cu scorul tău, de trimis.
+4. **PROVOACĂ:** un cod QR cu traseul tău. Prietenul îl scanează și încearcă să te bată pe același traseu.
+5. **REPLAY:** ultimele 10 secunde, care se pot salva ca GIF.
+
+### Modurile
+
+![Modurile](img/05-moduri.png)
+
+1. **Aventura:** harta cu lumi, niveluri și boși.
+2. **Boss Rush:** toți boșii la rând.
+3. **Multiplayer:** jocul în rețeaua locală (vezi mai jos).
+4. **Tura sezonului:** tura fără sfârșit în lumea sezonului.
+
+![Joc pe același ecran](img/06-ecran-comun.png)
+
+**Pe același ecran:**
+1. Butonul comută între **UNUL CONTRA ALTUL** și **ÎN ECHIPĂ** (3 inimi comune și boss de echipă).
+2. Apoi alegi câți jucători sunteți: **2**, **3** sau **4**.
+
+### Aventura
+
+![Harta Aventurii](img/07-aventura.png)
+
+1. Fiecare bandă e o lume.
+2. Dino stă la **nivelul următor**. Apasă pe el ca să joci. Ultimul nivel din fiecare lume e **BOSS**.
+3. **📖** recitește povestea lumii.
+
+![Aventură+](img/08-aventura-plus.png)
+
+1. După finalul poveștii apare comutatorul **Aventură+ (greu)**. Când e pornit, nivelurile sunt mai rapide, iar cu 3 stele câștigi coroana nivelului.
+
+### Colecția și Magazinul
+
+![Colecția](img/14-colectie.png)
+
+1. **Magazin.**
+2. **Album:** fosile, medalii și poze.
+3. **Bestiar:** boșii și lumile întâlnite.
+4. **Pass:** treptele pass-ului de sezon.
+
+![Magazinul](img/09-magazin.png)
+
+1. **Categoriile:** skin-uri, accesorii, animăluțe, urme, dansuri, teme și upgrade-uri.
+2. **Ofertele zilei:** 3 lucruri cu -30%, aceleași toată ziua.
+3. **Ouăle-surpriză:** un lucru la întâmplare. Oul de aur conține doar lucruri scumpe.
+4. **Oasele** pe care le ai.
+
+Prima atingere pe un lucru îl arată pe dino. A doua îl cumpără sau îl îmbracă.
+
+### Multiplayer în rețea (LAN)
+
+![Multiplayer LAN](img/10-lan.png)
+
+1. **Numele tău**, cum îl văd ceilalți.
+2. **CREEAZĂ CAMERĂ:** tu ești gazda.
+3. **Camerele găsite** în rețea. Apasă INTRĂ la camera prietenului.
+4. Dacă nu apare nicio cameră, scrie **IP-ul gazdei** și apasă CONECTEAZĂ.
+
+![Lobby-ul LAN](img/11-lan-lobby.png)
+
+1. **Modul de joc** (doar gazda îl schimbă): cursă, sabotaj, eliminare, turneu, echipă, echipe sau boși în echipă.
+2. **START** pornește cursa pentru toți (e nevoie de cel puțin 2 jucători).
+3. **Jucătorii** din cameră.
+
+### Setări și transferul de progres
+
+![Setări](img/12-setari.png)
+
+1. Setările sunt pe secțiuni: **Joc**, Sunet, Control, Grafică, Accesibilitate și Date.
+2. Apasă butonul din dreapta unui rând ca să schimbi valoarea (de exemplu limba).
+3. **Sunet:** muzica, efectele și volumul lor.
+4. **Control:** tastele și comenzile pe ecran.
+
+![Transferul de progres](img/13-transfer.png)
+
+1. Alegi cum muți progresul: **TRIMITE (QR)**, **PRIMEȘTE** (scanezi cu camera sau lipești textul) sau **PRIN LAN** (Wi-Fi, cu PIN).
+2. **Codul QR** cu tot progresul tău. Îl scanezi cu celălalt dispozitiv.
+
 ## Controale
 
 | Acțiune | Tastatură | Telefon (zone) | Gamepad |
