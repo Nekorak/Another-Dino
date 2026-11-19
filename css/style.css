@@ -2234,6 +2234,13 @@ body.photo .ctl-btn {
     padding-top: 44px;
     gap: 6px;
   }
+  /* small landscape phones: the four menu buttons stay on one line without breaking words */
+  #menu .menu-btn:not(.primary) {
+    padding: 10px 4px;
+    font-size: 8px;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
   .screen h1 {
     font-size: clamp(18px, 5.5vh, 28px);
   }
@@ -3221,4 +3228,16 @@ body.reduce-fx *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
+}
+
+/* big monitors (Full HD and more): the menus and the game-over card grow with the screen */
+@media (min-width: 1600px) and (min-height: 880px) {
+  .screen {
+    zoom: 1.35;
+  }
+}
+@media (min-width: 2400px) and (min-height: 1300px) {
+  .screen {
+    zoom: 1.8;
+  }
 }
