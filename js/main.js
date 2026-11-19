@@ -21,14 +21,14 @@ import {
 } from './biomes.js';
 import { Dust, Shatter, Weather, PostFX } from './effects.js';
 import { Sfx } from './audio.js';
-import { Music } from './music.js';
+import { Music, MENU_TRACK, BOSS_TRACK } from './music.js';
 import { profile, save, loadGhost, saveGhost } from './save.js';
 import { t, setLang } from './i18n.js';
 import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD, ensureWeekly, checkWeekly } from './missions.js';
 import { checkMedals, MEDAL_NAMES } from './medals.js';
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
-import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator } from './modes.js';
+import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession, COOP_HEARTS } from './multiplayer.js';
@@ -1400,6 +1400,7 @@ function recordRun(pts) {
 function celebrate({ missionsDone, xp, ach, petGrew, weekly, medals }) {
   if (missionsDone.length || (weekly && weekly.done.length)) sfx.reward();
   for (const l of xp.levelUps) ui.toast(t('levelUp', { n: l }), 'gold');
+  if (xp.levelUps.length) music.jingle('levelUp', 1.6);
   for (const id of xp.unlocked) ui.toast(t('skinUnlocked', { name: t('skin_' + id) }), 'gold');
   for (const a of ach) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
   if (petGrew) ui.toast(t(petGrew >= PET_MAX ? 'petEvolved' : 'petGrew', { name: t('pet_' + profile.pet), n: petGrew }), 'gold');
@@ -1460,7 +1461,10 @@ function finishRun() {
     }
   }
   challengeable = ((mode === 'solo' && !run.hadTutorial) || mode === 'challenge') && !player.revived ? { seed: runSeed, score: Math.floor(pts) } : null;
-  music.sting();
+  if (res.isRecord && res.s > 0 && mode !== 'lan' && !isLocal()) {
+    music.stop(0.2);
+    music.jingle('record', 0.2);
+  } else music.sting();
   ui.showOver({
     challenge: chResult,
     canChallenge: !!challengeable,
@@ -1499,8 +1503,9 @@ function winLevel() {
   const reward = adv.custom ? saveLevelStars(adv.custom.lv, s) + finishWeeklyTrack(adv.custom.lv) : saveLevel(adv.world, adv.level, s);
   if (adv.boss) profile.stats.bosses++;
   const res = recordRun(player.points);
-  sfx.reward();
-  music.stop(0.6);
+  if (!profile.settings.music) sfx.reward();
+  music.stop(0.3);
+  music.jingle('victory', 0.15);
   startDance();
   ui.showWin({ stars: s, reward, adv, coins: adv.bonesTaken || 0, spawned: adv.bonesSpawned, hits: adv.hits, xp: Math.floor(res.xp.gained) });
   celebrate(res);
@@ -1531,14 +1536,23 @@ function endZen() {
   finishRun();
 }
 
-// the menu plays the theme's song once the audio is unlocked (after the first tap)
+// the menu plays the song picked in the jukebox, or the theme's song, once the audio is
+// unlocked (after the first tap)
+function menuTrack() {
+  const pick = profile.settings.menuSong;
+  if (pick != null && pick >= 0) return pick;
+  const th = THEMES[profile.theme] || THEMES.classic;
+  return th.song ?? MENU_TRACK;
+}
 function menuMusic() {
   if (state !== 'menu' || !profile.settings.menuMusic || !profile.settings.music) return;
-  music.biome = (THEMES[profile.theme] || THEMES.classic).song;
-  music.rate = 0.92;
+  music.biome = menuTrack();
+  music.rate = 1;
   music.start();
 }
 addEventListener('pointerdown', () => state === 'menu' && !music.playing && (sfx.unlock(), menuMusic()), { capture: true });
+// a soft tick on every button
+addEventListener('click', (e) => e.target instanceof Element && e.target.closest('button') && sfx.click(), { capture: true });
 
 // ------------------------------------------------------------------ victory dance
 let dance = null; // { id, t, until }
@@ -1628,13 +1642,16 @@ function startBoss(dur = adv ? adv.bossTime : MINI_BOSS_TIME) {
   b.root.rotation.y = 0;
   scene.add(b.root);
   boss = { ...b, t: dur, dur, drop: 1.5, phase: 0, mini: !adv };
+  music.boss = true;
   ui.toast(t(adv ? 'bossArrives' : 'miniBossArrives'), 'red');
   ui.bossBar(1, b.kind);
   sfx.boom();
+  sfx.alarm();
   shake = 0.4;
 }
 
 function endBoss(silent) {
+  music.boss = false;
   if (!boss) return;
   if (silent) {
     scene.remove(boss.root);
@@ -1690,6 +1707,7 @@ function updateBoss(dt) {
     endBoss(false);
     ui.bossBar(null);
     sfx.reward();
+    music.jingle('bossDown');
     if (mini) {
       // survived the mini-boss: a handful of bones
       nextBossAt = score + MINI_BOSS_EVERY;
@@ -3158,7 +3176,7 @@ function update(rawDt) {
     if (left <= 0) {
       ui.countdown(null);
       state = 'running';
-      music.biome = 0;
+      music.biome = env.biome;
       music.start();
       sfx.beep(true);
     } else if (String(Math.ceil(left)) !== ui.countdownText()) {
@@ -3293,6 +3311,8 @@ function applySettings() {
   setLang(s.lang);
   sfx.muted = !s.sfx;
   music.setEnabled(s.music);
+  music.setVolume((s.musicVol ?? 100) / 100);
+  sfx.volume = (s.sfxVol ?? 100) / 100;
   if (s.music && state === 'running') music.start();
   post.setMode(s.style);
   document.body.classList.toggle('big-text', !!s.bigText);
@@ -3336,11 +3356,38 @@ const game = {
     const th = THEMES[id] || THEMES.classic;
     if (state === 'menu') {
       if (env.biome !== th.biome) setBiome(th.biome, false);
-      music.biome = th.song;
+      music.biome = menuTrack();
     }
   },
   setCustomSkin: (def) => setCustomSkin(def),
-  menuMusic: () => (profile.settings.menuMusic ? menuMusic() : state === 'menu' && music.stop(0.2)),
+  menuMusic: (restart) => {
+    if (state !== 'menu') return;
+    if (restart) music.stop(0.15);
+    if (profile.settings.menuMusic) setTimeout(menuMusic, restart ? 200 : 0);
+    else music.stop(0.2);
+  },
+  // the jukebox: every track, which ones the player has reached, and playing one
+  tracks: () => {
+    const st = profile.stats;
+    const out = [{ i: MENU_TRACK, key: 'trk_menu', open: true }];
+    BIOMES.forEach((b, i) => {
+      const open = i === 0 || advUnlocked(i, 0) || (!b.advOnly && st.best >= i * BIOME_LENGTH);
+      out.push({ i, key: 'biome_' + b.id, open });
+    });
+    out.push({ i: BOSS_TRACK, key: 'trk_boss', open: st.bosses > 0 || (st.miniBosses || 0) > 0 });
+    return out;
+  },
+  playTrack: (i) => {
+    if (state !== 'menu') return;
+    sfx.unlock();
+    music.stop(0.1);
+    if (i == null) return;
+    setTimeout(() => {
+      music.biome = i;
+      music.rate = 1;
+      music.start();
+    }, 150);
+  },
   previewDino: (skin, hat, petId) => {
     rebuildDino(player, skin, hat);
     if (petId !== undefined && petId !== null) setPet(petId);
@@ -3459,6 +3506,7 @@ window.__dino = {
   profile,
   game,
   ui,
+  music,
   RIG,
   night: (on) => (nightTimer = on ? 999 : 0),
   die: () => killPlayer(player, null),

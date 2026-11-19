@@ -68,7 +68,7 @@ export function danceDino(d, id, t) {
 // ------------------------------------------------------------------ menu themes
 // colours of the menus, the world shown behind them and the menu music
 export const THEMES = {
-  classic: { price: 0, biome: 0, song: 0, vars: {} },
+  classic: { price: 0, biome: 0, song: null, vars: {} }, // null: the menu's own song
   jungle: {
     price: 200,
     biome: 1,

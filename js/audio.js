@@ -3,6 +3,7 @@ export class Sfx {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.volume = 1;
   }
 
   // Must be called from a user gesture (mobile browsers block audio otherwise).
@@ -23,7 +24,7 @@ export class Sfx {
     o.type = type;
     o.frequency.setValueAtTime(freq, t);
     o.frequency.exponentialRampToValueAtTime(to, t + dur);
-    g.gain.setValueAtTime(vol, t);
+    g.gain.setValueAtTime(Math.max(0.0002, vol * this.volume), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(this.ctx.destination);
     o.start(t);
@@ -71,5 +72,18 @@ export class Sfx {
 
   reward() {
     [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.1, { vol: 0.06, delay: i * 0.08, type: 'triangle' }));
+  }
+
+  // a boss is coming: two-tone siren
+  alarm() {
+    for (let i = 0; i < 3; i++) {
+      this.tone(660, 0.14, { type: 'square', vol: 0.05, delay: 0.25 + i * 0.3 });
+      this.tone(880, 0.14, { type: 'square', vol: 0.05, delay: 0.4 + i * 0.3 });
+    }
+  }
+
+  // a soft tick for menu buttons
+  click() {
+    this.tone(1200, 0.035, { type: 'triangle', to: 900, vol: 0.035 });
   }
 }

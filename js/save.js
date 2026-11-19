@@ -43,6 +43,9 @@ function defaults() {
       seasons: true,
       botLevel: 1,
       menuMusic: true,
+      musicVol: 100, // percent
+      sfxVol: 100,
+      menuSong: -1, // jukebox pick for the menu, -1: the theme's song
       // on-screen controls: 'zones' (left/right halves) or movable 'buttons'
       controls: { mode: 'zones', split: 0.4, jump: { x: 0.86, y: 0.78, s: 1 }, duck: { x: 0.14, y: 0.78, s: 1 } },
     },

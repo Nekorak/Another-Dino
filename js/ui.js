@@ -736,6 +736,7 @@ export class UI {
       ['shop', t('hubShop'), () => this.openPanel('shop', 'collection'), 'shop'],
       ['album', t('hubAlbum', { n: this.p.fossils.length, max: 30 }), () => this.openPanel('album', 'collection'), 'album'],
       ['pass', t('hubPass'), () => this.openPanel('pass', 'collection'), 'pass'],
+      ['jukebox', t('hubJukebox'), () => this.openPanel('jukebox', 'collection')],
     ]);
   }
   progressView() {
@@ -910,6 +911,58 @@ export class UI {
     }
     b.disabled = false;
     b.textContent = t('replayGif');
+  }
+
+  // ------------------------------------------------------------ jukebox
+  // every song of the game: listen to it, or pick it for the menu
+  jukeboxView() {
+    const s = this.p.settings;
+    const tracks = this.g.tracks();
+    const list = tracks.map((tr) => {
+      const name = tr.open ? t(tr.key) : '???';
+      const playing = this.jukeTrack === tr.i;
+      const isMenu = s.menuSong === tr.i;
+      return el(
+        'div',
+        { class: 'row juke' + (playing ? ' on' : '') },
+        el('span', { text: (isMenu ? '★ ' : '') + name }),
+        el(
+          'div',
+          { class: 'juke-btns' },
+          el('button', {
+            class: 'val',
+            text: playing ? '■' : '▶',
+            disabled: !tr.open,
+            onclick: () => {
+              this.jukeTrack = playing ? null : tr.i;
+              this.g.playTrack(this.jukeTrack);
+              this.renderPanel();
+            },
+          }),
+          el('button', {
+            class: 'val',
+            text: isMenu ? t('jukeMenuOn') : t('jukeMenu'),
+            disabled: !tr.open,
+            onclick: () => {
+              s.menuSong = isMenu ? -1 : tr.i;
+              save();
+              this.renderPanel();
+            },
+          }),
+        ),
+      );
+    });
+    return el(
+      'div',
+      { class: 'settings' },
+      el('p', { class: 'small muted', text: s.music ? t('jukeHelp') : t('jukeMusicOff') }),
+      this.row(t('jukeAuto'), s.menuSong >= 0 ? t('off') : t('on'), () => {
+        s.menuSong = -1;
+        save();
+        this.renderPanel();
+      }),
+      list,
+    );
   }
 
   // ------------------------------------------------------------ QR challenge
@@ -1123,6 +1176,7 @@ export class UI {
     if (!silent) this.menuInfo();
     if (was === 'lan' && !silent) this.g.lanLeave();
     if (was === 'transfer') this.stopTransfer();
+    if (was === 'jukebox') this.g.menuMusic(true);
     const parent = this.parentOf && this.parentOf[was];
     if (!silent && parent && this.g.state === 'menu') return this.openPanel(parent);
     if (!silent && this.g.state === 'menu') {
@@ -1131,7 +1185,7 @@ export class UI {
     }
   }
   renderPanel() {
-    const titles = { collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle' };
+    const titles = { collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle', jukebox: 'jukebox' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
@@ -1149,6 +1203,7 @@ export class UI {
       transfer: () => this.transferView(),
       challenge: () => this.challengeView(),
       pass: () => this.passView(),
+      jukebox: () => this.jukeboxView(),
       levels: () => levelsView(this),
       leveledit: () => levelEditView(this),
       editor: () =>
@@ -1934,7 +1989,9 @@ export class UI {
       { class: 'settings' },
       cycle('lang', LANGS, (v) => (v === 'auto' ? t('lang_auto') : v.toUpperCase())),
       toggle('music'),
+      cycle('musicVol', [25, 50, 75, 100], (v) => v + '%'),
       toggle('sfx'),
+      cycle('sfxVol', [25, 50, 75, 100], (v) => v + '%'),
       toggle('vibration'),
       toggle('lefty'),
       cycle('style', ['normal', 'outline', 'gameboy', 'crt'], (v) => t('style_' + v)),

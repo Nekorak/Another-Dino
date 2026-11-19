@@ -49,6 +49,7 @@ Tastele de săritură și ghemuit se pot schimba din Setări, iar zonele de atin
   - pe Android se deschide meniul de partajare (WhatsApp, Telegram…);
   - pe PC se salvează în *Imagini* și se copiază, gata de lipit.
 - **Efecte**: dinozaurul se sparge în cubulețe cu slow-motion, plus muzică chiptune diferită în fiecare lume.
+- **Muzică**: o melodie pentru fiecare lume (cu mai multe părți), una pentru meniu și una pentru lupta cu boșii, plus melodii scurte la victorie, record și nivel nou. **Tonomatul** (Colecție > Tonomat) le cântă pe toate și alege melodia meniului; volumul muzicii și al efectelor se reglează separat în Setări.
 - **Stiluri grafice**: Normal, Contur, Game Boy, Ecran CRT.
 - **Confort și accesibilitate**: calitate grafică automată (scade singură pe telefoanele slabe), obstacole evidențiate, text mare.
 - **Moduri de joc** (meniul MODURI):
