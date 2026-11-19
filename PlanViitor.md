@@ -31,10 +31,23 @@ Toate cele 6 idei noi, tot fără server (offline, prin QR sau LAN):
 5. Album de medalii: bronz, argint și aur pentru fiecare statistică
 6. Album de poze: pozele din modul foto rămân într-o galerie în joc
 
+## Gata în v1.5
+
+Toată lista din notes/todo-design-gameplay.md (design și gameplay), plus cele 3 idei de mai sus:
+
+1. Game over pe un card clar, cu bara de nivel și „Aproape!” când ești la un pas de record
+2. Puterile active ca iconițe cu cronometru, text mai mare pe telefon, stelele apar pe rând
+3. Meniu în 4 grupuri, bulinuțe roșii și deblocare treptată pentru jucătorii noi
+4. Prețuri reechilibrate, ou de aur, hrană pentru animăluțe, misiuni care se pot schimba
+5. Tipare de obstacole gândite de mână, impact (o clipă de oprire) la PERFECT și la spargeri
+6. Un boss diferit în fiecare lume, hartă nouă a Aventurii, poveste în 11 capitole
+7. Regula zilei, traseul săptămânii, lumea sezonului (se schimbă în fiecare trimestru)
+8. Animăluțele de nivel 5 evoluează; clasament de echipă în co-op
+
 ## Idei noi
 
 Tot fără server: totul merge offline, prin QR sau LAN.
 
-- **Trasee ale săptămânii**: un traseu făcut în editor, ales la întâmplare din cele primite, ca provocare.
-- **Animăluțe care evoluează**: la nivelul 5, o înfățișare nouă (pterodactil adult, broască-țestoasă cu armură).
-- **Clasament de echipă în co-op**: recordurile echipelor din LAN, păstrate pe fiecare dispozitiv.
+- **Boss în co-op**: în modul echipă, un boss comun pe care îl înving toți împreună.
+- **Lumea sezonului în modul normal**: o tură specială cu decorul sezonului, în afara Aventurii.
+- **Mai multe capitole de poveste** pentru lumea sezonului, câte unul nou în fiecare anotimp.

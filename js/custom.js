@@ -8,8 +8,8 @@ export const DANCES = {
   spin: { price: 150 },
   wiggle: { price: 200 },
   flip: { price: 250 },
-  moonwalk: { price: 300 },
-  disco: { price: 400 },
+  moonwalk: { price: 450 },
+  disco: { price: 700 },
 };
 
 // d: a dino from createDino; t: seconds since the dance started

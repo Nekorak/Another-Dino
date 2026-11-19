@@ -3,6 +3,33 @@
 // id не связан с номером сборки (его ставит CI), поэтому окно работает и в браузере, и в приложениях.
 export const NEWS = [
   {
+    id: '2026-11-19',
+    ro: [
+      'Meniu nou, mai simplu: JOACĂ plus Moduri, Colecție, Progres și Setări. Bulinuțele roșii arată unde te așteaptă ceva.',
+      'Un boss diferit în fiecare lume din Aventură, o hartă nouă și o poveste scurtă înainte de fiecare lume.',
+      'Lumea sezonului: o lume nouă care se schimbă în fiecare anotimp (se deschide și din Pass, la treapta 5).',
+      'Regula zilei, traseul săptămânii și tipare noi de obstacole.',
+      'Oul de aur, hrană pentru animăluțe, misiuni pe care le poți schimba. Animăluțele de nivel 5 evoluează.',
+      'Game over mai clar, puteri cu cronometru, text mai mare pe telefon. Prețurile din magazin au fost reechilibrate.',
+    ],
+    ru: [
+      'Новое, более простое меню: ИГРАТЬ, Режимы, Коллекция, Прогресс и Настройки. Красные точки показывают, где тебя что-то ждёт.',
+      'Свой босс в каждом мире Приключения, новая карта и короткая история перед каждым миром.',
+      'Мир сезона: новый мир, который меняется каждый сезон (открывается и на 5 ступени пропуска).',
+      'Правило дня, трасса недели и новые связки препятствий.',
+      'Золотое яйцо, корм для питомцев, задания можно заменить. Питомцы 5 уровня эволюционируют.',
+      'Понятнее экран проигрыша, бонусы с таймером, крупнее текст на телефоне. Цены в магазине пересмотрены.',
+    ],
+    en: [
+      'A new, simpler menu: PLAY plus Modes, Collection, Progress and Settings. Red dots show where something is waiting for you.',
+      'A different boss in every Adventure world, a new map and a short story before each world.',
+      'Season world: a new world that changes every season (also opens at tier 5 of the pass).',
+      'Rule of the day, track of the week and new obstacle patterns.',
+      'Golden egg, pet food, missions you can swap. Pets at level 5 evolve.',
+      'A clearer game over, power-ups with timers, larger text on phones. Shop prices were rebalanced.',
+    ],
+  },
+  {
     id: '2026-11-15',
     ro: [
       'Editor de trasee: desenează un traseu, încearcă-l şi trimite-l prietenilor ca cod QR (Moduri > Editor de trasee).',

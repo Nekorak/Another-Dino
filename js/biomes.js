@@ -21,6 +21,19 @@ export const BIOMES = [
   { id: 'candy', sky: '#ffd0ea', ground: '#fff0f7', path: '#f6b3d4', hemiGround: '#ffc2df', sun: '#fff6fb', cloud: '#ffffff', dust: '#ffb3d9', weather: 'sprinkles', weatherAlways: false, advOnly: true },
 ];
 
+// The world of the season: one more adventure world that changes every quarter (with the
+// season pass): an ice palace in winter, a flower garden in spring, a fair in summer and a
+// haunted graveyard in autumn. It is built when the game starts, for today's date.
+export const SEASON_WORLDS = {
+  frost: { sky: '#1d2a5a', ground: '#e8f2ff', path: '#b8cce8', hemiGround: '#9fb8e8', sun: '#cfe0ff', cloud: '#2a3a70', dust: '#ffffff', weather: 'snow', weatherAlways: true, stars: true },
+  bloom: { sky: '#bfeaff', ground: '#8fd16a', path: '#d8b98a', hemiGround: '#7ac25a', sun: '#fffbe0', cloud: '#ffffff', dust: '#ffd6ec', weather: 'none', weatherAlways: false },
+  fair: { sky: '#ffcf8a', ground: '#e8c27a', path: '#c99a5a', hemiGround: '#e0a85a', sun: '#fff0c8', cloud: '#fff6e6', dust: '#f0d090', weather: 'none', weatherAlways: false },
+  spooky: { sky: '#3a2450', ground: '#4a4a3a', path: '#3a3328', hemiGround: '#5a3a6a', sun: '#c8a8ff', cloud: '#4a3a5a', dust: '#6a5a4a', weather: 'embers', weatherAlways: true },
+};
+export const seasonKey = (date = new Date()) => ['frost', 'bloom', 'fair', 'spooky'][Math.floor(date.getMonth() / 3)];
+export const SEASON_WORLD = seasonKey();
+BIOMES.push({ id: 'season', ...SEASON_WORLDS[SEASON_WORLD], advOnly: true, seasonal: true });
+
 export const ENDLESS_BIOMES = BIOMES.filter((b) => !b.advOnly).length;
 export const biomeAt = (score) => Math.floor(score / BIOME_LENGTH) % ENDLESS_BIOMES;
 
@@ -350,7 +363,93 @@ function candyCane(r) {
   return { vs, armTop: 0, trunk: 1, burst: '#e0303a' };
 }
 
+// ------------------------------------------------------------------ world of the season
+function giftBox(r) {
+  const vs = new VoxelSet();
+  const C = pick(r, ['#e0303a', '#3f8fff', '#5fd35a', '#ffd23f']);
+  const n = 1 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const s = 3 - i;
+    const y0 = i * 6;
+    boxFill(vs, -s, s, y0, y0 + 5, -s, s, (x, y, z) => (x === 0 || z === 0 ? '#ffffff' : C));
+  }
+  vs.set(0, n * 6, 0, '#ffffff');
+  return { vs, armTop: 0, trunk: 3, burst: C };
+}
+function icePillar(r) {
+  const vs = new VoxelSet();
+  const H = 14 + Math.floor(r() * 6);
+  for (let y = 0; y < H; y++) boxFill(vs, -1, 1, y, y, -1, 1, (x, yy, z) => ((x + yy + z) % 3 ? '#bfe8ff' : '#e8f8ff'));
+  boxFill(vs, -2, 2, H, H + 1, -2, 2, '#ffffff');
+  return { vs, armTop: 0, trunk: 2, burst: '#bfe8ff', glow: true };
+}
+function tulip(r) {
+  const vs = new VoxelSet();
+  const H = 8 + Math.floor(r() * 5);
+  const C = pick(r, ['#ff4f7a', '#ffd23f', '#b06aff', '#ff8a2a']);
+  boxFill(vs, 0, 0, 0, H, 0, 0, '#3f8a2a');
+  boxFill(vs, -2, 2, H + 1, H + 4, -2, 2, (x, y, z) => (y === H + 4 && (x + z) % 2 ? null : C));
+  vs.set(-1, 3, 0, '#5aa53a');
+  vs.set(1, 5, 0, '#5aa53a');
+  return { vs, armTop: 0, trunk: 2, burst: C };
+}
+function mushroom(r) {
+  const vs = new VoxelSet();
+  const H = 5 + Math.floor(r() * 4);
+  boxFill(vs, -1, 1, 0, H, -1, 1, '#f4ecd8');
+  blob(vs, 0, H + 1, 0, 4, 2.5, 4, (x, y, z) => (y >= H + 1 && (x * 3 + z * 5 + y) % 5 === 0 ? '#ffffff' : '#e0303a'));
+  for (const v of [...vs.map.values()]) if (v.y < H) vs.set(v.x, v.y, v.z, Math.abs(v.x) <= 1 && Math.abs(v.z) <= 1 ? '#f4ecd8' : null);
+  return { vs, armTop: 0, trunk: 2, burst: '#e0303a' };
+}
+function tent(r) {
+  const vs = new VoxelSet();
+  const H = 9 + Math.floor(r() * 4);
+  for (let y = 0; y < H; y++) {
+    const w = Math.max(0, Math.round(3 - (y / H) * 3));
+    boxFill(vs, -w, w, y, y, -w, w, (x, yy, z) => ((x + z + 10) % 2 ? '#e0303a' : '#ffffff'));
+  }
+  vs.set(0, H, 0, '#ffd23f');
+  vs.set(0, H + 1, 0, '#ffd23f');
+  return { vs, armTop: 0, trunk: 3, burst: '#e0303a' };
+}
+function balloons(r) {
+  const vs = new VoxelSet();
+  boxFill(vs, -1, 1, 0, 2, -1, 1, '#8a6a4a');
+  for (let i = 0; i < 3; i++) {
+    const x = i - 1;
+    const H = 9 + Math.floor(r() * 5);
+    boxFill(vs, x, x, 3, H, 0, 0, '#f4ecd8');
+    blob(vs, x * 2, H + 2, 0, 1.6, 2, 1.6, pick(r, ['#ff4f7a', '#3f8fff', '#ffd23f', '#5fd35a']));
+  }
+  return { vs, armTop: 0, trunk: 2, burst: '#ff4f7a' };
+}
+function tombstone(r) {
+  const vs = new VoxelSet();
+  const H = 7 + Math.floor(r() * 4);
+  boxFill(vs, -3, 3, 0, H, -1, 1, (x, y) => ((x + y) % 4 ? '#8e8e96' : '#74747c'));
+  boxFill(vs, -2, 2, H + 1, H + 1, -1, 1, '#8e8e96');
+  boxFill(vs, 0, 0, H - 4, H - 1, 2, 2, '#5a5a62');
+  boxFill(vs, -1, 1, H - 3, H - 3, 2, 2, '#5a5a62');
+  return { vs, armTop: 0, trunk: 3, burst: '#8e8e96' };
+}
+function pumpkin(r) {
+  const vs = new VoxelSet();
+  const n = 1 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const y0 = i * 6;
+    blob(vs, 0, y0 + 3, 0, 4 - i, 3, 4 - i, (x, y, z) => ((x + 10) % 3 ? '#ff8a1a' : '#e06a10'));
+    vs.set(3 - i, y0 + 4, -1, '#ffe066');
+    vs.set(3 - i, y0 + 4, 1, '#ffe066');
+    boxFill(vs, 3 - i, 3 - i, y0 + 2, y0 + 2, -1, 1, '#ffe066');
+  }
+  for (const v of [...vs.map.values()]) if (v.y < 0) vs.set(v.x, v.y, v.z, null);
+  boxFill(vs, 0, 0, n * 6, n * 6 + 1, 0, 0, '#3f6a22');
+  return { vs, armTop: 0, trunk: 3, burst: '#ff8a1a', glow: true };
+}
+const SEASON_OBSTACLES = { frost: [giftBox, icePillar], bloom: [tulip, mushroom], fair: [balloons, tent], spooky: [pumpkin, tombstone] };
+
 const OBSTACLE_GEN = {
+  season: SEASON_OBSTACLES[SEASON_WORLD],
   ocean: [coral, seaweed],
   candy: [lollipop, candyCane],
   desert: [(r) => cactus(r, false), (r) => cactus(r, true)],
@@ -705,6 +804,14 @@ const NEAR_GEN = {
   space: [crater, moonFlag, (r) => rock(r, ['#8e9097', '#a4a6ad', '#7a7c83'])],
 };
 
+const SEASON_NEAR = {
+  frost: [pine, snowPile, (r) => giftBox(r).vs],
+  bloom: [fern, (r) => bush(r, ['#ff6fa8', '#ffd23f', '#5aa53a', '#ffffff']), (r) => tulip(r).vs],
+  fair: [umbrella, beachBall, (r) => balloons(r).vs],
+  spooky: [deadTree, (r) => tombstone(r).vs, (r) => ({ vs: pumpkin(r).vs, glow: true })],
+};
+NEAR_GEN.season = SEASON_NEAR[SEASON_WORLD];
+
 const nearCache = new Map();
 // returns { geo, glow } — glow props (lava) are drawn unlit so they shine at night
 export function nearPropGeometry(biomeId, kind, seed) {
@@ -845,7 +952,7 @@ function candyHill(r) {
   return vs;
 }
 
-const FAR_GEN = { ocean: reef, candy: candyHill, desert: mesa, jungle: hill, beach: island, snow: peak, cave: caveColumn, city: tower, volcano: volcanoCone, space: moonRidge };
+const FAR_GEN = { ocean: reef, candy: candyHill, desert: mesa, jungle: hill, beach: island, snow: peak, cave: caveColumn, city: tower, volcano: volcanoCone, space: moonRidge, season: { frost: peak, bloom: hill, fair: island, spooky: caveColumn }[SEASON_WORLD] };
 const farCache = new Map();
 export function farGeometry(biomeId, seed) {
   const key = `${biomeId}:${seed}`;

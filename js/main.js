@@ -28,7 +28,7 @@ import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD, e
 import { checkMedals, MEDAL_NAMES } from './medals.js';
 import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
-import { levelDef, scoreLevel, saveLevel, BotBrain } from './modes.js';
+import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
 import { LanSession, COOP_HEARTS } from './multiplayer.js';
@@ -37,8 +37,9 @@ import { Recorder } from './replay.js';
 import { addPassXp } from './rewards.js';
 import { controlAt } from './controls.js';
 import { encodeChallenge } from './transfer.js';
-import { petPower, growPet } from './pets.js';
-import { SPEEDS, trimmed, levelId, saveLevelStars } from './levels.js';
+import { petPower, growPet, petLevel, PET_MAX } from './pets.js';
+import { SPEEDS, trimmed, levelId, saveLevelStars, finishWeeklyTrack } from './levels.js';
+import { createBoss } from './bosses.js';
 
 setCustomSkin(profile.customSkin); // the dino painted in the skin editor
 const recorder = new Recorder(); // the last 10 seconds, for the replay after a game over
@@ -248,7 +249,8 @@ const moon = new THREE.Mesh(moonGeometry(), new THREE.MeshBasicMaterial({ vertex
 moon.position.set(34, 11, -80);
 scene.add(moon);
 const earth = new THREE.Mesh(earthGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, transparent: true, opacity: 0 }));
-earth.position.set(20, 16, -90);
+earth.position.set(26, 22, -95);
+earth.scale.setScalar(0.62); // smaller and higher: it used to cover a big piece of the track
 scene.add(earth);
 
 const stars = (() => {
@@ -303,8 +305,12 @@ const cur = {
 const feat = { dark: 0, sea: 0, stars: 0, noClouds: 0, gravity: 1, jump: 1, swim: 0, water: 0 };
 const env = { biome: 0, weatherOn: false, weatherTimer: 8 };
 
+const runFlags = { moon: false }; // set by the rule of the day (declared early: setBiome runs at load)
 function featTarget(b) {
-  return { dark: b.dark ? 1 : 0, sea: b.sea ? 1 : 0, stars: b.stars ? 1 : 0, noClouds: b.noClouds ? 1 : 0, gravity: b.gravity || 1, jump: b.jump || 1, swim: b.swim ? 1 : 0, water: b.water ? 1 : 0 };
+  const f = { dark: b.dark ? 1 : 0, sea: b.sea ? 1 : 0, stars: b.stars ? 1 : 0, noClouds: b.noClouds ? 1 : 0, gravity: b.gravity || 1, jump: b.jump || 1, swim: b.swim ? 1 : 0, water: b.water ? 1 : 0 };
+  // rule of the day "moon": low gravity in every world
+  if (runFlags.moon && !b.swim) Object.assign(f, { gravity: Math.min(f.gravity, 0.55), jump: Math.min(f.jump, 0.75) });
+  return f;
 }
 
 function setBiome(i, instant) {
@@ -402,7 +408,7 @@ let pet = null;
 let petPw = petPower('none');
 function setPet(id) {
   if (pet) scene.remove(pet.root);
-  pet = createPet(id);
+  pet = createPet(id, petLevel(id) >= PET_MAX); // at the top level the pet evolves
   petPw = petPower(id);
   if (pet) {
     pet.root.scale.multiplyScalar(petPw.scale); // pets grow as they level up
@@ -488,6 +494,7 @@ let event = null; // { type, t }
 let trex = null;
 let boss = null; // adventure boss: { mesh, t, drop }
 let tutorial = null;
+let pattern = []; // obstacles of a hand-made pattern still to come: [kind, gap factor]
 let nextFossilAt = 600;
 let nextBossAt = MINI_BOSS_EVERY;
 let forceKind = null; // testing: always spawn this kind of obstacle
@@ -513,7 +520,7 @@ function createFish() {
 // (not the score of the frame that noticed it), so the frame rate cannot change the track.
 let spawnScore = null;
 function trackSpeed() {
-  const s0 = adv ? adv.startSpeed : START_SPEED;
+  const s0 = startSpeed();
   const a = mode === 'lan' && lanMode === 'elimination' ? ACCEL * 2.5 : ACCEL;
   return Math.min(MAX_SPEED, Math.sqrt(s0 * s0 + (2 * a * (spawnScore ?? score)) / 0.75));
 }
@@ -826,6 +833,20 @@ function buildCustom(over, biomeId) {
   if (o.kind === 'platform') for (let x = o.sx0 + 0.3; x < o.sx1; x += 0.8) addCoin(x0 + x, o.base + o.amp + 1.3);
 }
 
+// Hand-made patterns: a few obstacles at a fixed rhythm, mixed in with the random ones, more
+// often as the speed grows. Gaps are in seconds of running (the random ones are 0.72 .. 1.57).
+// c small cactus, C big one, l low bird (jump), m middle bird (duck), z swooping bird,
+// r boulder, p pit, f floating platform
+const PATTERNS = [
+  { from: 450, list: [['c', 0.8], ['C', 0.8], ['c', 1]] }, // stairs: three jumps in a row
+  { from: 550, list: [['m', 0.75], ['c', 0.8], ['m', 1]] }, // duck, jump, duck
+  { from: 650, list: [['p', 0.8], ['p', 0.8], ['p', 1]] }, // three pits
+  { from: 800, list: [['c', 0.8], ['l', 0.8], ['p', 0.8], ['m', 1]] }, // a bit of everything
+  { from: 900, list: [['r', 0.95], ['r', 1.05]] }, // two boulders
+  { from: 1000, list: [['f', 0.9], ['c', 0.8], ['z', 1.05]] }, // platform, cactus, swooping bird
+  { from: 1300, list: [['m', 0.75], ['m', 0.75], ['c', 0.8], ['C', 1.05]] }, // duck, duck, jump, jump
+];
+
 function buildNext(over) {
   const s = spawnScore;
   const biomeId = BIOMES[adv ? adv.world : biomeAt(s)].id;
@@ -847,9 +868,20 @@ function buildNext(over) {
     // seeded randomness (that would make the rest of a shared track different).
     const trackR = R;
     R = Math.random;
-    gapLeft = speed * 2.2;
-    if (R() < 0.5) addObstacle(groundObstacle(biomeId, true));
-    coinWave(SPAWN_X + 4, 6);
+    if (boss.attack === 'roll' && !boss.leaving) {
+      // the walker sends boulders down the track
+      gapLeft = speed * 1.5;
+      addObstacle(boulder(biomeId));
+      coinWave(SPAWN_X + 6, 5);
+    } else if (boss.attack === 'swim' && !boss.leaving) {
+      // the octopus sends fish: low ones to jump, middle ones to duck under
+      gapLeft = speed * 1.35;
+      addObstacle(bird(R() < 0.5 ? 0 : 1));
+    } else {
+      gapLeft = speed * 2.2;
+      if (R() < 0.5) addObstacle(groundObstacle(biomeId, true));
+      coinWave(SPAWN_X + 4, 6);
+    }
     R = trackR;
     return;
   }
@@ -864,7 +896,19 @@ function buildNext(over) {
     const step = tutorial.plan.shift();
     o = step === 'bird' ? bird(1) : groundObstacle(biomeId, true);
     o.tutorial = step === 'bird' ? 'duck' : 'jump';
+  } else if (pattern.length) {
+    o = patternObstacle(pattern[0][0], biomeId);
+    o.patternGap = pattern.shift()[1];
   } else {
+    // now and then a hand-made pattern instead of a random obstacle (more often when faster)
+    const ok = PATTERNS.filter((pt) => s > pt.from);
+    if (ok.length && !forceKind && R() < Math.min(0.16, 0.04 + s / 25000)) {
+      pattern = ok[Math.floor(R() * ok.length)].list.slice();
+      o = patternObstacle(pattern[0][0], biomeId);
+      o.patternGap = pattern.shift()[1];
+    }
+  }
+  if (!o) {
     const opts = [['ground', 1]];
     if (s > 280) opts.push(['bird', 0.32]);
     if (s > 400) opts.push(['boulder', 0.12]);
@@ -878,6 +922,7 @@ function buildNext(over) {
     if (s > 900) opts.push(['zig', 0.1]);
     if (s > 750 && !solidFloor) opts.push(['platform', 0.07]);
     if (biomeId === 'ocean') opts.push(['bird', 0.4], ['zig', 0.25]); // fish and jellyfish
+    if (mode === 'mutator' && mut && mut.id === 'birds') opts.push(['bird', s > 60 ? 1.1 : 0], ['zig', s > 300 ? 0.4 : 0]);
     let pick = R() * opts.reduce((a, b) => a + b[1], 0);
     let kind = forceKind || 'ground';
     if (forceKind) pick = Infinity;
@@ -894,7 +939,7 @@ function buildNext(over) {
   addObstacle(o, x0);
   // low gravity means longer jumps, so space gets wider gaps
   const air = feat.gravity < 1 ? 1.35 : 1;
-  const gap = o.width + trackSpeed() * (0.72 * air + R() * 0.85) + R() * 2 + o.extra * 0.6 + (o.tutorial ? 10 : 0);
+  const gap = o.patternGap ? o.width + trackSpeed() * o.patternGap * air + o.extra * 0.6 : o.width + trackSpeed() * (0.72 * air + R() * 0.85) + R() * 2 + o.extra * 0.6 + (o.tutorial ? 10 : 0);
   gapLeft = gap - over; // the leftover distance counts, or the gaps would depend on the frame rate
 
   // bones: an arc over ground obstacles and pits, or a line in the gap after
@@ -914,7 +959,7 @@ function buildNext(over) {
   if (players.some((p) => p.alive && p.power.rocket > 1)) for (let x = x0; x < x0 + gap - 1; x += 1.2) addCoin(x, 4.4);
   // a power-up roughly every 300-600 points, floating in the gap
   if (!tutorial && rules().powerups && s > nextPowerAt && gap > o.width + 5) {
-    nextPowerAt = s + (300 + IR() * 300) * powerGapK();
+    nextPowerAt = s + (300 + IR() * 300) * powerGapK() * (mode === 'mutator' && mut && mut.id === 'giant' ? 0.5 : 1);
     addItem(POWERUPS[Math.floor(IR() * POWERUPS.length)], x0 + o.width + gap * 0.5, 1.1);
   } else if (!tutorial && mode !== 'lan' && !isLocal() && s > nextFossilAt && gap > o.width + 5) {
     // a rare fossil for the album
@@ -925,6 +970,21 @@ function buildNext(over) {
     nextBombAt = s + 220 + IR() * 120;
     addItem('bomb', x0 + o.width + gap * 0.5, 1.1);
   }
+}
+
+function patternObstacle(k, biomeId) {
+  const solid = biomeId === 'space' || biomeId === 'ocean'; // no holes there: a cactus instead
+  const make = {
+    c: () => groundObstacle(biomeId, true),
+    C: () => groundObstacle(biomeId, false, true),
+    l: () => bird(0),
+    m: () => bird(1),
+    z: zigBird,
+    r: () => boulder(biomeId),
+    p: () => (solid ? groundObstacle(biomeId, true) : pit()),
+    f: () => (solid ? groundObstacle(biomeId, true) : platform()),
+  };
+  return (make[k] || make.c)();
 }
 
 function collides(p, o) {
@@ -1007,8 +1067,11 @@ const RULES = {
   lan: { revive: false, powerups: true, bones: 1, missions: true, record: true },
   challenge: { revive: false, powerups: true, bones: 1, missions: true, record: true },
   custom: { revive: false, powerups: true, bones: 1, missions: true, record: false },
+  mutator: { revive: true, powerups: true, bones: 1, missions: true, record: false },
 };
-const rules = () => RULES[mode] || RULES.solo;
+let mut = null; // the rule of the day, while playing it
+const rules = () => (mode === 'mutator' && mut ? { ...RULES.mutator, bones: mut.bones } : RULES[mode] || RULES.solo);
+const startSpeed = () => (adv ? adv.startSpeed : START_SPEED * (mode === 'mutator' && mut && mut.speed ? mut.speed : 1));
 
 function resetPlayer(p) {
   Object.assign(p, {
@@ -1074,10 +1137,11 @@ function resetRun(seed) {
   endEvent(true);
   endBoss(true);
   R = seed != null ? rng(seed) : Math.random;
+  pattern = [];
   // power-ups, fossils and bombs have their own stream: how often they come depends on the
   // player's "luck" upgrade, and that must not change the obstacles of a shared track
   IR = seed != null ? rng((seed ^ 0x5bd1e995) >>> 0) : Math.random;
-  speed = adv ? adv.startSpeed : START_SPEED;
+  speed = startSpeed();
   score = 0;
   runTime = 0;
   lastMilestone = 0;
@@ -1093,6 +1157,7 @@ function resetRun(seed) {
   speedBoost = 1;
   for (const p of players) resetPlayer(p);
   if (upgradeLevel('shieldStart') && rules().powerups) for (const p of players) p.power.shield = powerTime().shield;
+  if (mode === 'mutator' && mut && mut.id === 'giant') for (const p of players) p.power.giant = 8;
   if (petPw.shield && pet && rules().powerups) player.power.shield = Math.max(player.power.shield, powerTime().shield * 0.5); // a fully grown pet
   run = newRunStats();
   ghostRec = [];
@@ -1143,6 +1208,8 @@ function startMode(m, opts = {}) {
   sfx.unlock();
   if (lan) leaveLan();
   mode = m;
+  mut = m === 'mutator' ? todayMutator() : null;
+  runFlags.moon = !!mut && mut.id === 'moon';
   daily = m === 'daily' ? dailyInfo() : null;
   if (m === 'challenge') challenge = { seed: opts.seed >>> 0, score: opts.score || 0, name: opts.name || '?' };
   else challenge = null;
@@ -1157,6 +1224,7 @@ function startMode(m, opts = {}) {
   if (adv && adv.custom) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
   else if (adv) ui.toast(t('advLevelTitle', { w: t('biome_' + adv.biome), n: adv.level + 1 }), 'biome');
   if (m === 'zen' || m === 'hardcore') ui.toast(t('mode_' + m), 'gold');
+  if (mut) ui.toast(t('mut_' + mut.id), 'gold');
   if (m === 'bot') ui.toast(t('botStart', { lvl: t('bot_' + profile.settings.botLevel) }), 'gold');
 }
 
@@ -1334,7 +1402,7 @@ function celebrate({ missionsDone, xp, ach, petGrew, weekly, medals }) {
   for (const l of xp.levelUps) ui.toast(t('levelUp', { n: l }), 'gold');
   for (const id of xp.unlocked) ui.toast(t('skinUnlocked', { name: t('skin_' + id) }), 'gold');
   for (const a of ach) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
-  if (petGrew) ui.toast(t('petGrew', { name: t('pet_' + profile.pet), n: petGrew }), 'gold');
+  if (petGrew) ui.toast(t(petGrew >= PET_MAX ? 'petEvolved' : 'petGrew', { name: t('pet_' + profile.pet), n: petGrew }), 'gold');
   if (weekly) {
     for (const m of weekly.done) ui.toast(t('weeklyDone', { n: m.reward }), 'gold');
     if (weekly.bonus) ui.toast(t('weeklyBonus', { n: weekly.bonus }), 'gold');
@@ -1352,7 +1420,22 @@ function finishRun() {
   state = 'over';
   const p = player;
   const pts = isLocal() ? Math.max(...players.map((q) => (q.alive ? q.points : q.finalPts))) : p.alive ? p.points : p.finalPts;
+  const prevBest = profile.stats.best;
   const res = recordRun(pts);
+  // rule of the day: its own best score for today
+  let mutResult = null;
+  if (mode === 'mutator' && mut) {
+    const before = profile.mutator.best;
+    if (res.s > before) profile.mutator.best = res.s;
+    save();
+    mutResult = { id: mut.id, best: profile.mutator.best, isBest: res.s > before && res.s > 0 };
+  }
+  // "so close!": a few points short of the record, or of the finish line in a level
+  let near = null;
+  if (adv && !rules().noDeath) {
+    const k = adv.custom ? adv.custom.i / Math.max(1, adv.custom.t.length) : score / (adv.finishAt ?? adv.length);
+    if (k >= 0.75 && k < 1) near = { kind: 'finish', n: Math.max(1, Math.round((1 - k) * 100)) };
+  } else if (rules().record && !isLocal() && !res.isRecord && prevBest >= 200 && res.s >= prevBest * 0.88) near = { kind: 'record', n: Math.max(1, prevBest - res.s) };
   let botResult = null;
   if (mode === 'bot') {
     const bot = players[1];
@@ -1391,6 +1474,8 @@ function finishRun() {
     daily: mode === 'daily' ? dailyInfo() : null,
     bot: botResult,
     mode,
+    near,
+    mutator: mutResult,
   });
   celebrate(res);
   // a new record: the dino pulls itself together and dances
@@ -1411,7 +1496,7 @@ function finishRun() {
 function winLevel() {
   state = 'won';
   const s = scoreLevel(adv.bonesTaken || 0, adv.bonesSpawned, adv.hits);
-  const reward = adv.custom ? saveLevelStars(adv.custom.lv, s) : saveLevel(adv.world, adv.level, s);
+  const reward = adv.custom ? saveLevelStars(adv.custom.lv, s) + finishWeeklyTrack(adv.custom.lv) : saveLevel(adv.world, adv.level, s);
   if (adv.boss) profile.stats.bosses++;
   const res = recordRun(player.points);
   sfx.reward();
@@ -1481,6 +1566,8 @@ function toMenu() {
   state = 'menu';
   daily = null;
   adv = null;
+  mut = null;
+  runFlags.moon = false;
   clearTrack();
   shatter.clear();
   trail.clear();
@@ -1533,16 +1620,16 @@ function endEvent(silent) {
 }
 
 // ------------------------------------------------------------------ adventure boss
-// a giant pterodactyl that circles above the track and drops burning rocks
+// every world has its own boss (see bosses.js): flyers circle above the track and drop
+// burning rocks, walkers run beside it and send boulders, the octopus sends fish
 function startBoss(dur = adv ? adv.bossTime : MINI_BOSS_TIME) {
-  const b = createPtero();
-  b.root.scale.setScalar(3.4);
-  b.root.position.set(30, 7, -3);
+  const b = createBoss(BIOMES[env.biome].id);
+  b.root.position.set(30, b.ground ? 0 : 4.6, b.ground ? -7 : -5);
   b.root.rotation.y = 0;
   scene.add(b.root);
   boss = { ...b, t: dur, dur, drop: 1.5, phase: 0, mini: !adv };
   ui.toast(t(adv ? 'bossArrives' : 'miniBossArrives'), 'red');
-  ui.bossBar(1);
+  ui.bossBar(1, b.kind);
   sfx.boom();
   shake = 0.4;
 }
@@ -1561,21 +1648,28 @@ function endBoss(silent) {
 function updateBoss(dt) {
   if (!boss) return;
   boss.phase += dt;
-  const a = Math.sin(boss.phase * 7) * 0.9;
-  boss.wings[0].pivot.rotation.x = -a;
-  boss.wings[1].pivot.rotation.x = a;
+  if (boss.wings) {
+    const a = Math.sin(boss.phase * 7) * 0.9;
+    boss.wings[0].pivot.rotation.x = -a;
+    boss.wings[1].pivot.rotation.x = a;
+  }
+  if (boss.rotor) boss.rotor.rotation.y += dt * 20;
   if (boss.leaving) {
     boss.root.position.x += dt * 18;
-    boss.root.position.y += dt * 4;
+    if (!boss.ground) boss.root.position.y += dt * 4;
     if (boss.root.position.x > 70) endBoss(true);
     return;
   }
   boss.root.position.x += (12 + Math.sin(boss.phase * 0.7) * 4 - boss.root.position.x) * Math.min(1, dt * 1.2);
-  boss.root.position.y = 7 + Math.sin(boss.phase * 1.3) * 0.8;
+  if (boss.ground) {
+    boss.root.position.y = Math.abs(Math.sin(boss.phase * 6)) * 0.35; // stomping along
+    boss.root.rotation.z = Math.sin(boss.phase * 6) * 0.04;
+  } else boss.root.position.y = 4.6 + Math.sin(boss.phase * 1.3) * 0.6; // low enough to be seen on wide screens
+  if (boss.kind === 'ufo') boss.root.rotation.y += dt * 1.5;
   boss.t -= dt;
   boss.drop -= dt;
-  ui.bossBar(Math.max(0, boss.t / boss.dur));
-  if (boss.drop <= 0 && boss.t > 1.5) {
+  ui.bossBar(Math.max(0, boss.t / boss.dur), boss.kind);
+  if (boss.drop <= 0 && boss.t > 1.5 && boss.attack === 'drop') {
     boss.drop = 1.1 + Math.random() * 0.7;
     // far enough ahead that the red warning is visible before the rock lands, and never
     // right before or after another obstacle (two jumps in a row with no room between)
@@ -2123,6 +2217,7 @@ function updateWorld(dt, v) {
 
   // day / night
   nightTimer = Math.max(0, nightTimer - (state === 'running' ? dt : 0));
+  if (mode === 'mutator' && mut && mut.id === 'night' && state !== 'menu') nightTimer = Math.max(nightTimer, 5); // the night never ends
   night += clamp((nightTimer > 0 ? 1 : 0) - night, -dt / 4, dt / 4); // dusk and dawn take a few seconds
   const nightSky = env.biome === 6 ? NIGHT_SKY_VOLCANO : NIGHT_SKY;
   const n = night * (1 - feat.dark) * (1 - feat.stars); // no extra night in the cave or in space
@@ -2135,7 +2230,8 @@ function updateWorld(dt, v) {
   pathMat.color.copy(cur.path);
   hemi.groundColor.copy(cur.hemiGround);
   const dim = 1 - feat.dark * 0.82;
-  hemi.intensity = lerp(1.7, 0.45, n) * (1 - rain * 0.2) * dim;
+  // nights and dark worlds stay readable: a little more ambient light than before
+  hemi.intensity = Math.max(lerp(1.7, 0.7, n) * (1 - rain * 0.2) * dim, 0.42);
   hemi.color.copy(HEMI_SKY).lerp(nightSky, n * 0.3);
   sun.intensity = lerp(2.6, 0.9, n) * (1 - rain * 0.35) * dim;
   sun.color.copy(cur.sun).lerp(SUNSET_SUN, dusk * 0.6).lerp(MOON_LIGHT, n * n);
@@ -2201,6 +2297,7 @@ function shockwave(p) {
   if (broke && p === player) {
     profile.stats.pounds += broke;
     run.obstacles += broke;
+    freeze(0.08, 0.3);
   }
 }
 
@@ -2422,6 +2519,7 @@ function updateObstacles(dt, v) {
             if (p === player) {
               run.perfects++;
               ui.perfect();
+              freeze(0.07, 0.06);
             }
           }
           if (p === player) {
@@ -2468,6 +2566,7 @@ function hitCheck(p) {
       breakObstacle(o, p.index, 1.6);
       shake = Math.max(shake, 0.15);
       sfx.boom();
+      if (p === player) freeze(0.05);
       continue;
     }
     if (adv && p === player) adv.hits++;
@@ -2637,14 +2736,15 @@ function updatePet(dt) {
   const p = player;
   const tt = time;
   if (pet.kind === 'ptera') {
-    pet.root.position.set(-0.6 + Math.sin(tt * 1.3) * 0.3, Math.max(0, p.y) + 3.4 + (petPw.scale - 1) * 2.5 + Math.sin(tt * 3) * 0.2, p.lane + 0.9);
+    pet.root.position.set(-1.4 + Math.sin(tt * 1.3) * 0.3, Math.max(0, p.y) + 3.4 + (petPw.scale - 1) * 2.5 + Math.sin(tt * 3) * 0.2, p.lane + 0.9);
     const a = Math.sin(tt * 12) * 0.9;
     pet.wings[0].pivot.rotation.x = -a;
     pet.wings[1].pivot.rotation.x = a;
     pet.root.rotation.y = Math.PI; // faces the same way as the dino
   } else {
     const hop = pet.kind === 'chick' ? Math.abs(Math.sin(tt * 10)) * 0.25 : 0;
-    pet.root.position.set(pet.kind === 'turtle' ? -1.9 : -1.4, hop, p.lane + 1.1);
+    // behind the dino and on the near edge of the path, so it never covers the dino
+    pet.root.position.set((pet.kind === 'turtle' ? -2.6 : -2.2) - (petPw.scale - 1) * 2, hop, p.lane + 1.5);
     pet.root.rotation.z = pet.kind === 'turtle' ? Math.sin(tt * 8) * 0.05 : 0;
   }
   pet.root.visible = p.dino.root.visible || state === 'menu';
@@ -2748,6 +2848,16 @@ async function openLan() {
         const team = Math.max(0, ...results.map((r) => r.sc || 0));
         st.coopGames = (st.coopGames || 0) + 1;
         st.coopBest = Math.max(st.coopBest || 0, team);
+        // the team leaderboard on this device: the best 10 teams (names sorted, so the same team is one row)
+        if (team > 0 && results.length > 1) {
+          const names = results.map((r) => r.name).sort().join(' · ');
+          const top = profile.coopTop;
+          const old = top.find((e) => e.names === names);
+          if (old) old.s = Math.max(old.s, team), (old.d = Date.now());
+          else top.push({ s: team, names, d: Date.now() });
+          top.sort((a, b) => b.s - a.s);
+          top.length = Math.min(top.length, 10);
+        }
         const bonus = Math.floor(team / 100) * 3;
         if (bonus) {
           profile.coins += bonus;
@@ -2924,11 +3034,24 @@ function driveBot(p) {
   if (want !== 'duck' && p.input.duck) duckUp(p);
 }
 
+// hit-stop: the game holds its breath for a few frames on a perfect jump or a smash
+// (only when playing alone: in multiplayer everybody must keep the same pace)
+let hitStop = 0;
+function freeze(t, sh = 0) {
+  if (mode === 'lan' || isLocal()) return;
+  hitStop = Math.max(hitStop, t);
+  shake = Math.max(shake, sh);
+}
+
 function update(rawDt) {
   time += rawDt;
   pollGamepads();
   trackFps(rawDt);
   let dt = rawDt;
+  if (hitStop > 0 && state === 'running') {
+    hitStop -= rawDt;
+    dt = rawDt * 0.08;
+  }
   if (state === 'dying') {
     dt = rawDt * 0.25; // slow motion while the dino shatters
     deathTimer -= rawDt;
@@ -3338,6 +3461,7 @@ window.__dino = {
   ui,
   RIG,
   night: (on) => (nightTimer = on ? 999 : 0),
+  die: () => killPlayer(player, null),
   force: (k) => (forceKind = k),
   get vel() {
     return worldV;

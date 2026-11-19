@@ -24,11 +24,16 @@ export function levelDef(w, l) {
 
 export const stars = (w, l) => profile.adventure[levelKey(w, l)] || 0;
 
+// the world of the season opens after the last boss, or early at tier 5 of the season pass
+export const SEASON_PASS_TIER = 5;
 export function unlocked(w, l) {
   if (w === 0 && l === 0) return true;
   if (l > 0) return stars(w, l - 1) > 0;
+  if (BIOMES[w] && BIOMES[w].seasonal && passTier() >= SEASON_PASS_TIER) return true;
   return stars(w - 1, ADV_LEVELS - 1) > 0;
 }
+// the pass tier without importing rewards.js (that would be a loop): same formula as passState
+const passTier = () => Math.floor((profile.pass.xp || 0) / 250);
 
 export function totalStars() {
   return Object.values(profile.adventure).reduce((a, b) => a + b, 0);
@@ -89,4 +94,23 @@ export class BotBrain {
     if (ahead.x < pl.lead && ahead.x > -1) return pl.act;
     return null;
   }
+}
+
+// ------------------------------------------------------------------ rule of the day
+// One extra rule for the whole day, the same for everybody (from the date, no server).
+// bones: how much a bone is worth under this rule.
+export const MUTATORS = {
+  moon: { bones: 1.5 }, // low gravity everywhere
+  night: { bones: 1.5 }, // the night never ends
+  turbo: { bones: 3, speed: 1.35 }, // much faster from the start, triple bones
+  birds: { bones: 2 }, // pterodactyls everywhere
+  giant: { bones: 1 }, // start every run as a giant, and power-ups come twice as often
+};
+export function todayMutator(date = new Date()) {
+  const ids = Object.keys(MUTATORS);
+  const day = Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000);
+  const id = ids[day % ids.length];
+  const key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  if (profile.mutator.date !== key) profile.mutator = { date: key, best: 0 };
+  return { id, ...MUTATORS[id], best: profile.mutator.best };
 }

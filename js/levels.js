@@ -3,6 +3,7 @@
 // fits in a QR code:  ANOTHERDINO-LV;v=1;n=My track;w=2;s=1;t=c.lm..pr;sum=1a2b3c4d
 import { profile, save } from './save.js';
 import { BIOMES } from './biomes.js';
+import { weekInfo } from './missions.js';
 
 const HEADER = 'ANOTHERDINO-LV';
 export const MAX_SLOTS = 60;
@@ -111,4 +112,34 @@ export function saveLevelStars(lv, stars) {
   profile.coins += reward;
   save();
   return reward;
+}
+
+// ------------------------------------------------------------------ track of the week
+// Every week one track is the challenge: picked from the tracks friends sent you (or, with
+// none yet, from a few made by us). The first finish of the week pays WEEKLY_TRACK_REWARD.
+export const WEEKLY_TRACK_REWARD = 100;
+const HOUSE_TRACKS = [
+  { name: 'Dino Rush', w: 0, s: 1, t: 'c..l..c.o..r...m..cc..p..o..C..z...c.u..l..p..C..m..o..rc' },
+  { name: 'Jungle Jump', w: 1, s: 1, t: 'C..m..c..p..o.z..c..l..C.u..r..p..m..c.o..C..z..p..cc' },
+  { name: 'Snow Slide', w: 3, s: 0, t: 'c...l...C..o..p...m..c..r..u..z...C..l..p..c..o..mC' },
+  { name: 'Lava Run', w: 6, s: 2, t: 'c..m..r..p..c.o..z..C..l..f...c..u..m..r..p..C.o..zc' },
+  { name: 'Moon Walk', w: 7, s: 1, t: 'c..l..m..C..o..z..c..r..u..m..c..l..C..o..zc' },
+];
+export function weeklyTrack() {
+  const wk = weekInfo();
+  const sent = profile.levels.filter((lv) => lv.from === 'qr' && pieceCount(lv) >= 8);
+  const pool = sent.length ? sent : HOUSE_TRACKS;
+  const lv = pool[wk.seed % pool.length];
+  const W = profile.weeklyTrack;
+  return { lv: { ...lv, from: lv.from || 'week' }, week: wk.id, daysLeft: wk.daysLeft, done: W.week === wk.id && W.done };
+}
+export const weeklyTrackOpen = () => !weeklyTrack().done;
+// call when a track is finished; returns the bones for the track of the week (0 if not it)
+export function finishWeeklyTrack(lv) {
+  const w = weeklyTrack();
+  if (w.done || levelId(lv) !== levelId(w.lv)) return 0;
+  profile.weeklyTrack = { week: w.week, done: true };
+  profile.coins += WEEKLY_TRACK_REWARD;
+  save();
+  return WEEKLY_TRACK_REWARD;
 }

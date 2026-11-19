@@ -2,7 +2,7 @@
 import { t } from './i18n.js';
 import { BIOMES } from './biomes.js';
 import { profile, save } from './save.js';
-import { PIECES, SPEEDS, MAX_SLOTS, newLevel, encodeLevel, storeLevel, deleteLevel, levelId, pieceCount, trimmed } from './levels.js';
+import { PIECES, SPEEDS, MAX_SLOTS, newLevel, encodeLevel, storeLevel, deleteLevel, levelId, pieceCount, trimmed, weeklyTrack, WEEKLY_TRACK_REWARD } from './levels.js';
 import { qrCanvas } from './transfer.js';
 
 export const PIECE_NAMES = { '.': 'empty', c: 'cactus', C: 'bigCactus', l: 'birdLow', m: 'birdHigh', z: 'zig', r: 'boulder', p: 'pit', f: 'platform', o: 'bones', u: 'power' };
@@ -85,6 +85,7 @@ export function levelsView(ui) {
     'div',
     { class: 'lv-list' },
     h('p', { class: 'small', text: t('lvHelp') }),
+    weeklyCard(ui),
     h('div', { class: 'row-btns' }, h('button', { class: 'menu-btn primary', text: t('lvNew'), onclick: () => ui.editLevel(-1) }), h('button', { class: 'menu-btn', text: t('lvScan'), onclick: () => ((ui.xferTab = 'scan'), ui.openPanel('transfer')) })),
     list.length ? list : h('p', { class: 'muted', text: t('lvNone') }),
   );
@@ -243,4 +244,18 @@ export function startEdit(i) {
   const len = Math.min(MAX_SLOTS, Math.max(24, Math.ceil((trimmed(lv).length + 4) / COLS) * COLS));
   lv.t = (trimmed(lv) + '.'.repeat(MAX_SLOTS)).slice(0, len);
   return lv;
+}
+
+// the track of the week: one track, the same all week, a reward for the first finish
+function weeklyCard(ui) {
+  const w = weeklyTrack();
+  const lv = w.lv;
+  return h(
+    'div',
+    { class: 'lv-row weekly-track' + (w.done ? ' done' : '') },
+    h('b', { text: t('wtTitle') }),
+    h('p', { text: lv.name || t('lvUntitled') }),
+    h('p', { class: 'small muted', text: `${t('biome_' + BIOMES[lv.w].id)} · ${t('lvSpeed_' + lv.s)} · ` + (w.done ? t('wtDone') : t('wtHelp', { n: WEEKLY_TRACK_REWARD, d: w.daysLeft })) }),
+    h('div', { class: 'lv-actions' }, h('button', { class: 'val primary', text: t('lvPlay'), onclick: () => (ui.closePanel(true), ui.g.startMode('custom', { level: lv })) })),
+  );
 }

@@ -34,6 +34,18 @@ export function petPower(id = profile.pet, level = petLevel(id)) {
   return out;
 }
 
+// pet food from the shop; returns { level } when it grew, {} when not, null when it can't eat
+export function feedPet(price, xp) {
+  const id = profile.pet;
+  if (!id || id === 'none' || petLevel(id) >= PET_MAX || profile.coins < price) return null;
+  const before = petLevel(id);
+  profile.coins -= price;
+  profile.petXp[id] = petXp(id) + xp;
+  save();
+  const after = petLevel(id);
+  return after > before ? { level: after } : {};
+}
+
 // Call at the end of a run with the distance; returns the new level if the pet grew, else 0.
 export function growPet(distance) {
   const id = profile.pet;

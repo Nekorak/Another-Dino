@@ -36,6 +36,18 @@ function makeMission() {
   return m;
 }
 
+// a mission you don't like can be swapped for another one, for a few bones
+export const REROLL_PRICE = 25;
+export function rerollMission(i) {
+  const m = profile.missions.active[i];
+  if (!m || profile.coins < REROLL_PRICE) return false;
+  profile.coins -= REROLL_PRICE;
+  // made while the old one is still in the list, so it is always a different kind
+  profile.missions.active[i] = makeMission();
+  save();
+  return true;
+}
+
 export function ensureMissions() {
   while (profile.missions.active.length < 3) profile.missions.active.push(makeMission());
 }

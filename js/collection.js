@@ -22,7 +22,7 @@ export const FOSSIL_TINT = {
 export const FOSSIL_WORLD_REWARD = 100;
 
 export const fossilId = (biomeId, k) => `${biomeId}-${k}`;
-export const allFossils = () => BIOMES.flatMap((b) => FOSSIL_KINDS.map((_, k) => fossilId(b.id, k)));
+export const allFossils = () => BIOMES.filter((b) => !b.seasonal).flatMap((b) => FOSSIL_KINDS.map((_, k) => fossilId(b.id, k)));
 
 const FOSSIL_ART = {
   skull: ['  #####  ', ' ####### ', '##.###.##', '#########', ' ####### ', ' # # # # '],
@@ -56,6 +56,7 @@ export function fossilGeometry(id) {
 
 // a fossil of this world the player does not have yet (or null)
 export function missingFossil(biomeId, r = Math.random) {
+  if (biomeId === 'season') return null; // the world of the season has no fossils (it changes)
   const missing = FOSSIL_KINDS.map((_, k) => fossilId(biomeId, k)).filter((id) => !profile.fossils.includes(id));
   return missing.length ? missing[Math.floor(r() * missing.length)] : null;
 }
@@ -79,8 +80,8 @@ export const TRAILS = {
   bubbles: { price: 150, colors: ['#bfe8ff', '#8fd3ff', '#ffffff'], motion: 'float' },
   sparkles: { price: 200, colors: ['#fff6a0', '#ffffff', '#ffd23f'], motion: 'twinkle' },
   hearts: { price: 200, colors: ['#ff6fa8', '#ff4f7a', '#ffd6e6'], motion: 'float' },
-  rainbow: { price: 250, colors: ['#ff4f5a', '#ff9a2a', '#ffd23f', '#5fd35a', '#3f8fff', '#9a5ad8'], motion: 'line' },
-  fire: { price: 300, colors: ['#ff3b1a', '#ff8a1a', '#ffd23f'], motion: 'rise' },
+  rainbow: { price: 400, colors: ['#ff4f5a', '#ff9a2a', '#ffd23f', '#5fd35a', '#3f8fff', '#9a5ad8'], motion: 'line' },
+  fire: { price: 500, colors: ['#ff3b1a', '#ff8a1a', '#ffd23f'], motion: 'rise' },
   // season pass, tier 20
   confetti: { pass: true, colors: ['#ff4f8a', '#4fc3ff', '#ffd23f', '#5fd35a', '#c86fff', '#ffffff'], motion: 'twinkle' },
 };

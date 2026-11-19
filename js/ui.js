@@ -2,22 +2,23 @@
 import { t, LANGS, getLang } from './i18n.js';
 import { NEWS } from './whatsnew.js';
 import { SKINS, HATS, PETS, POWERUP_COLOR, hatPixels, petPixels } from './models.js';
-import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dailyInfo, EGG_PRICE, openEgg, eggPoolSize } from './progress.js';
-import { BIOMES } from './biomes.js';
-import { ADV_LEVELS, stars as advStars, unlocked as advUnlocked, totalStars } from './modes.js';
+import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dailyInfo, EGG_PRICE, GOLD_EGG_PRICE, openEgg, eggPoolSize, PET_FOOD_PRICE, PET_FOOD_XP } from './progress.js';
+import { BIOMES, SEASON_WORLD } from './biomes.js';
+import { BOSS_KIND } from './bosses.js';
+import { ADV_LEVELS, stars as advStars, unlocked as advUnlocked, totalStars, todayMutator, SEASON_PASS_TIER } from './modes.js';
 import { TRAILS, FOSSIL_KINDS, FOSSIL_WORLD_REWARD, fossilId, fossilPixels, allFossils } from './collection.js';
 import { encodeProgress, decodeProgress, mergeProgress, QR_LIMIT, qrCanvas, readQrFromImage, CameraScanner, LanSync, isChallenge, decodeChallenge } from './transfer.js';
-import { save, resetProgress } from './save.js';
+import { save, resetProgress, profile } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
 import { MAX_PLAYERS, COOP_HEARTS } from './multiplayer.js';
 import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
-import { missionProgress, ACHIEVEMENTS, ensureWeekly, weeklyProgress, weekInfo, WEEKLY_BONUS } from './missions.js';
+import { missionProgress, ACHIEVEMENTS, ensureWeekly, weeklyProgress, weekInfo, WEEKLY_BONUS, rerollMission, REROLL_PRICE } from './missions.js';
 import { MEDALS, MEDAL_REWARD, MEDAL_NAMES, medalOf, medalCount } from './medals.js';
-import { petLevel, petProgress, petPower, PET_MAX } from './pets.js';
+import { petLevel, petProgress, petPower, PET_MAX, feedPet } from './pets.js';
 import { addPhoto, listPhotos, getPhoto, deletePhoto, toPng, MAX_PHOTOS } from './gallery.js';
-import { isLevel, decodeLevel, storeLevel } from './levels.js';
+import { isLevel, decodeLevel, storeLevel, levelId, weeklyTrackOpen } from './levels.js';
 import { levelsView, levelEditView, startEdit } from './leveleditor.js';
 import { checkMedals } from './medals.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -42,6 +43,31 @@ function el(tag, attrs = {}, ...children) {
   return e;
 }
 
+// Step-by-step unlocks: a new player starts with PLAY, the collection and the settings;
+// the rest opens as they play (players from older versions have it all already)
+export function unlocks(p = profile) {
+  const g = p.stats.games;
+  return {
+    modes: g >= 3,
+    collection: true,
+    progress: g >= 1,
+    settings: true,
+    lan: g >= 5,
+    levels: g >= 10 || (p.adventure['0-0'] || 0) > 0,
+  };
+}
+const UNLOCK_LABEL = { modes: 'modes', progress: 'progress', lan: 'multiplayer', levels: 'mode_custom' };
+
+// how many things in the shop the player could buy right now (for the red dot)
+function shopAffordable(p = profile) {
+  let n = 0;
+  for (const [kind, list] of [['skin', SKINS], ['hat', HATS], ['pet', PETS]])
+    for (const [id, it] of Object.entries(list)) if (it.price > 0 && it.price <= p.coins && !p.owned[kind].includes(id)) n++;
+  return n;
+}
+
+const BOSS_EMOJI = { ptero: '🦅', parrot: '🦜', crab: '🦀', mammoth: '🦣', bat: '🦇', robot: '🤖', dragon: '🐉', ufo: '🛸', octopus: '🐙', gummy: '🍬', ghost: '👻' };
+const PU_ICON = { shield: '🛡️', magnet: '🧲', slow: '⏳', double: '⏫', rocket: '🚀', giant: '🦖', rain: '🦴' };
 const BONE_SVG =
   '<svg class="bone" viewBox="0 0 11 5" aria-hidden="true"><path d="M0 0h2v1h1v1h5V1h1V0h2v2h-1v1h1v2H9V4H8V3H3v1H2v1H0V3h1V2H0z"/></svg>';
 const bone = () => {
@@ -132,7 +158,7 @@ function hatIcon(id) {
 }
 
 function petIcon(id) {
-  return pixelIcon(petPixels(id));
+  return pixelIcon(petPixels(id, id !== 'none' && profile.owned.pet.includes(id) && petLevel(id) >= PET_MAX));
 }
 
 function trailIcon(id) {
@@ -242,6 +268,7 @@ export class UI {
     btn('btn-chest', () => this.showChest());
     btn('chest-ok', () => $('chest').classList.add('hidden'));
     btn('news-ok', () => this.closeNews());
+    btn('story-ok', () => this.closeStory());
     btn('btn-replay-close', () => this.hideReplay());
     btn('btn-replay-gif', () => this.saveReplay());
     btn('btn-challenge', () => this.openPanel('challenge'));
@@ -278,25 +305,25 @@ export class UI {
     btn('btn-win-retry', () => g.restart());
 
     const menu = $('menu-buttons');
+    // PLAY and four groups: modes (multiplayer inside), collection (shop, album, pass),
+    // progress (missions, stats, medals) and settings
     const items = [
       ['play', () => g.startSolo(), 'primary'],
       ['modes', () => this.openPanel('modes')],
-      ['multiplayer', () => this.openPanel('lan')],
-      ['shop', () => this.openPanel('shop')],
-      ['missions', () => this.openPanel('missions')],
-      ['album', () => this.openPanel('album')],
-      ['stats', () => this.openPanel('stats')],
-      ['pass', () => this.openPanel('pass')],
+      ['collection', () => this.openPanel('collection')],
+      ['progress', () => this.openPanel('progress')],
       ['settings', () => this.openPanel('settings')],
     ];
     for (const [key, fn, cls] of items) {
       const b = el('button', { class: 'menu-btn ' + (cls || ''), 'data-t': key, id: 'menu-' + key });
       b.addEventListener('click', () => {
         g.unlockAudio();
+        this.markSeen(key);
         fn();
       });
       menu.append(b);
     }
+    this.initSeen();
     $('menu-coins').prepend(bone());
     $('panel-coins').prepend(bone());
     $('runcoins').prepend(bone());
@@ -304,7 +331,7 @@ export class UI {
 
   refreshTexts() {
     for (const e of document.querySelectorAll('[data-t]')) e.textContent = t(e.dataset.t);
-    $('controls-msg').textContent = (this.g.isTouch ? '' : t('controlsKey') + ' · ') + t('abilitiesHint');
+    $('controls-msg').textContent = ''; // the tutorial and Settings already explain the controls
     $('hint-jump').textContent = t('jump');
     $('hint-duck').textContent = t('duck');
     $('hints').classList.toggle('lefty', this.p.settings.lefty);
@@ -314,6 +341,7 @@ export class UI {
     $('revive-title').textContent = t('reviveTitle');
     $('btn-revive-no').textContent = t('reviveNo');
     $('btn-share').textContent = t('share');
+    $('btn-restart-label').textContent = t('again');
     $('btn-bomb').textContent = t('bombSend');
     for (const [id, key] of [['btn-resume', 'resumeBtn'], ['btn-photo', 'photo'], ['btn-pause-menu', 'menu'], ['btn-zen-end', 'zenEnd'], ['btn-photo-back', 'back'], ['btn-photo-save', 'photoSave'], ['btn-photo-share', 'share'], ['btn-win-next', 'advNext'], ['btn-win-map', 'advMap'], ['btn-win-retry', 'again']]) $(id).textContent = t(key);
     $('photo-hint').textContent = t('photoHint');
@@ -370,15 +398,16 @@ export class UI {
       .join('|');
     if (key === this.lastHud) return;
     this.lastHud = key;
+    // a square icon per power-up with a ring that empties as the time runs out
     box.replaceChildren(
       ...Object.entries(power)
         .filter(([, v]) => v > 0)
         .map(([k, v]) =>
           el(
             'div',
-            { class: 'pu', style: `--c:${POWERUP_COLOR[k]}` },
-            el('span', { text: t('pu_' + k) }),
-            el('i', { style: `width:${Math.round((v / max[k]) * 100)}%` }),
+            { class: 'pu', style: `--c:${POWERUP_COLOR[k]};--k:${Math.round(Math.min(1, v / max[k]) * 100)}%`, title: t('pu_' + k), 'aria-label': t('pu_' + k) },
+            el('span', { class: 'pu-icon', text: PU_ICON[k] || '?' }),
+            el('span', { class: 'pu-s', text: String(Math.ceil(v)) }),
           ),
         ),
     );
@@ -420,12 +449,12 @@ export class UI {
     b.classList.toggle('hidden', k == null);
     if (k != null) b.firstElementChild.style.width = Math.round(k * 100) + '%';
   }
-  bossBar(k) {
+  bossBar(k, kind) {
     const b = $('bossbar');
     b.classList.toggle('hidden', k == null);
     if (k != null) {
       b.querySelector('i').style.width = Math.round(k * 100) + '%';
-      b.querySelector('span').textContent = t('bossName');
+      b.querySelector('span').textContent = kind ? t('boss_' + kind) : t('bossName');
     }
   }
   // co-op: the team's shared hearts (null hides them)
@@ -471,7 +500,10 @@ export class UI {
     this.overShownAt = performance.now() / 1000;
     $('win-title').textContent = adv.custom ? t('lvWin') : adv.boss ? t('bossDefeated') : t('advWin');
     $('btn-win-map').textContent = adv.custom ? t('lvList') : t('advMap');
-    $('win-stars').replaceChildren(...[0, 1, 2].map((i) => el('span', { class: 'star' + (i < stars ? ' on' : '') })));
+    // the stars light up one after another, each with a beep
+    $('win-stars').replaceChildren(...[0, 1, 2].map((i) => el('span', { class: 'star' + (i < stars ? ' on' : ''), style: `--i:${i}` })));
+    clearTimeout(this.starTimer);
+    for (let i = 0; i < stars; i++) this.starTimer = setTimeout(() => this.g.sfx.beep(i === 2), 450 + i * 450);
     // replaceChildren would print a null as the text "null"
     const lines = [
       spawned ? el('p', { text: t('advBones', { a: coins, b: spawned }) }) : null,
@@ -481,6 +513,8 @@ export class UI {
     ];
     $('win-details').replaceChildren(...lines.filter(Boolean));
     const hasNext = this.nextLevelOf(adv) != null;
+    // the last page of the story, once, after the boss of the last world (before the seasonal one)
+    if (!adv.custom && adv.boss && adv.world === 9 && !this.p.storySeen.includes('end')) setTimeout(() => this.g.state === 'won' && this.showStory('end'), 2600);
     $('btn-win-next').classList.toggle('hidden', !hasNext);
     $('win').classList.remove('hidden');
     document.body.classList.add('over');
@@ -521,7 +555,7 @@ export class UI {
 
   // ------------------------------------------------------------ screens
   hideScreens() {
-    for (const id of ['menu', 'over', 'paused', 'win', 'chest', 'egg', 'news']) $(id).classList.add('hidden');
+    for (const id of ['menu', 'over', 'paused', 'win', 'chest', 'egg', 'news', 'story']) $(id).classList.add('hidden');
     this.hideReplay();
     document.body.classList.remove('over');
     this.closePanel(true);
@@ -628,8 +662,88 @@ export class UI {
 
   // ------------------------------------------------------------ season pass
   passBadge() {
-    const b = $('menu-pass');
-    if (b) b.classList.toggle('badge', passState().unclaimed.length > 0);
+    this.badges();
+  }
+
+  // ------------------------------------------------------------ red dots and step-by-step unlocks
+  // what is new for each button: a red dot sends the player where something waits for them
+  badgeState() {
+    const p = this.p;
+    const seen = p.seen;
+    const pass = passState().unclaimed.length > 0;
+    const shop = shopAffordable() > seen.shop;
+    const album = p.fossils.length > seen.fossils;
+    const ach = Object.keys(p.achievements).length > seen.ach;
+    const daily = !dailyInfo().done;
+    const levels = p.levels.some((lv) => lv.from === 'qr' && !p.levelStars[levelId(lv)]) || weeklyTrackOpen();
+    return { pass, shop, album, ach, daily, levels, collection: pass || shop || album, progress: ach, modes: daily || levels };
+  }
+  badges() {
+    const st = this.badgeState();
+    const un = unlocks();
+    for (const key of ['modes', 'collection', 'progress', 'settings']) {
+      const b = $('menu-' + key);
+      if (!b) continue;
+      b.classList.toggle('hidden', !un[key]);
+      const isNew = un[key] && !this.p.seen.unlocks.includes(key);
+      b.classList.toggle('badge', !!st[key] && !isNew);
+      b.classList.toggle('is-new', isNew);
+      b.dataset.new = t('newBadge');
+    }
+  }
+  // players who already had everything before this version must not get a pile of "new!"
+  initSeen() {
+    const p = this.p;
+    if (p.seen.init) return;
+    p.seen.init = true;
+    p.seen.ach = Object.keys(p.achievements).length;
+    p.seen.fossils = p.fossils.length;
+    const un = unlocks();
+    p.seen.unlocks = Object.keys(un).filter((k) => un[k]);
+    save();
+  }
+  markSeen(key) {
+    const seen = this.p.seen;
+    if (!seen.unlocks.includes(key)) seen.unlocks.push(key);
+    if (key === 'shop') seen.shop = shopAffordable();
+    if (key === 'album') seen.fossils = this.p.fossils.length;
+    if (key === 'progress' || key === 'missions') seen.ach = Object.keys(this.p.achievements).length;
+    save();
+  }
+  // after a run: tell the player about a button that just opened
+  announceUnlocks() {
+    const un = unlocks();
+    for (const key of Object.keys(un)) if (un[key] && !this.p.seen.unlocks.includes(key) && !(this.announced || (this.announced = new Set())).has(key)) {
+      this.announced.add(key);
+      this.toast(t('unlockedNew', { name: t(UNLOCK_LABEL[key] || key) }), 'gold');
+    }
+  }
+
+  // a menu of big buttons that leads on to other panels (collection, progress)
+  hubView(list) {
+    const st = this.badgeState();
+    return el(
+      'div',
+      { class: 'hub' },
+      list.map(([key, desc, fn, badge]) => {
+        const b = el('button', { class: 'mode-card hub-card' + (st[badge] ? ' badge' : ''), onclick: fn }, el('b', { text: t(key) }), el('span', { class: 'small muted', text: desc }));
+        return b;
+      }),
+    );
+  }
+  collectionView() {
+    return this.hubView([
+      ['shop', t('hubShop'), () => this.openPanel('shop', 'collection'), 'shop'],
+      ['album', t('hubAlbum', { n: this.p.fossils.length, max: 30 }), () => this.openPanel('album', 'collection'), 'album'],
+      ['pass', t('hubPass'), () => this.openPanel('pass', 'collection'), 'pass'],
+    ]);
+  }
+  progressView() {
+    return this.hubView([
+      ['missions', t('hubMissions'), () => this.openPanel('missions', 'progress'), 'ach'],
+      ['albumMedals', t('hubMedals'), () => ((this.albumTab = 'medals'), this.openPanel('album', 'progress'))],
+      ['stats', t('hubStats'), () => this.openPanel('stats', 'progress')],
+    ]);
   }
   passView() {
     const st = passState();
@@ -691,14 +805,31 @@ export class UI {
     document.body.classList.toggle('paused', !!on);
     $('btn-zen-end').classList.toggle('hidden', mode !== 'zen');
   }
-  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge }) {
+  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge, near, mutator }) {
     $('btn-replay').classList.toggle('hidden', !!lan || this.g.replay.length < 5);
     $('btn-challenge').classList.toggle('hidden', !canChallenge || score <= 0);
     this.overShownAt = performance.now() / 1000;
     $('over-title').textContent = mode === 'zen' ? t('zenOver') : 'GAME OVER';
     $('over-score').textContent = pad5(score);
     $('over-record').textContent = record ? t('record') : '';
-    $('over-xp').textContent = xp ? t('xpGained', { n: xp }) : '';
+    $('over-xp').textContent = xp ? '+' + xp + ' XP' : '';
+    // the level bar fills up with the XP of this run
+    const lv = $('over-level');
+    lv.classList.toggle('hidden', !xp);
+    if (xp) {
+      const lp = levelProgress();
+      const to = lp.need ? lp.into / lp.need : 1;
+      const from = lp.into >= xp && lp.need ? (lp.into - xp) / lp.need : 0;
+      $('over-level-n').textContent = t('levelShort', { n: lp.level });
+      const bar = lv.querySelector('.xpbar i');
+      bar.style.transition = 'none';
+      bar.style.width = Math.round(from * 100) + '%';
+      void bar.offsetWidth;
+      bar.style.transition = '';
+      setTimeout(() => (bar.style.width = Math.round(to * 100) + '%'), 250);
+    }
+    // so close: a few points short of the record or of the finish line
+    $('over-near').textContent = near ? (near.kind === 'finish' ? t('nearFinish', { n: near.n }) : t('nearRecord', { n: near.n })) : '';
     const extra = $('over-extra');
     extra.replaceChildren();
     if (local2) {
@@ -711,6 +842,7 @@ export class UI {
       extra.append(
         el('p', { class: challenge.won ? 'winner' : '', text: challenge.won ? t('chWon', { name: challenge.name, n: challenge.reward }) : t('chLost', { name: challenge.name, n: challenge.target }) }),
       );
+    if (mutator) extra.append(el('p', { class: mutator.isBest ? 'winner' : '', text: t('mutBest', { name: t('mut_' + mutator.id), n: mutator.best }) }));
     if (bot) extra.append(el('p', { class: bot.won ? 'winner' : '', text: bot.won ? t('botBeaten', { n: bot.reward }) : t('botWon') }));
     if (daily) extra.append(el('p', { class: daily.done ? 'mission-done' : '', text: daily.done ? t('dailyDoneShort', { n: daily.streak }) : t('dailyBest', { n: daily.best, target: daily.target }) }));
     $('btn-share').classList.toggle('hidden', !!lan || score <= 0);
@@ -722,6 +854,7 @@ export class UI {
     $('over').classList.remove('hidden');
     document.body.classList.add('over');
     this.setCoins();
+    this.announceUnlocks();
   }
   // ------------------------------------------------------------ replay
   showReplay() {
@@ -897,13 +1030,35 @@ export class UI {
     return $('countdown').classList.contains('hidden') ? '' : $('countdown').textContent;
   }
   toast(text, kind = '') {
+    // on the result screens the rewards come one after another, not in a pile
+    if (document.body.classList.contains('over') && kind === 'gold') {
+      this.toastQueue = this.toastQueue || [];
+      this.toastQueue.push(text);
+      if (!this.toastTimer) this.nextToast();
+      return;
+    }
+    this.showToast(text, kind);
+  }
+  nextToast() {
+    const text = this.toastQueue.shift();
+    if (text == null || !document.body.classList.contains('over')) {
+      // left the result screen: whatever is still waiting shows at once
+      this.toastTimer = null;
+      for (const q of this.toastQueue.splice(0)) this.showToast(q, 'gold');
+      return;
+    }
+    this.showToast(text, 'gold', 1500);
+    this.g.sfx.beep?.();
+    this.toastTimer = setTimeout(() => this.nextToast(), 900);
+  }
+  showToast(text, kind = '', life = 2200) {
     const box = $('toasts');
     const n = el('div', { class: 'toast ' + kind, text });
     if (POWERUP_COLOR[kind]) n.style.setProperty('--c', POWERUP_COLOR[kind]);
     box.append(n);
     while (box.children.length > 3) box.firstChild.remove();
-    setTimeout(() => n.classList.add('out'), 2200);
-    setTimeout(() => n.remove(), 2700);
+    setTimeout(() => n.classList.add('out'), life);
+    setTimeout(() => n.remove(), life + 500);
   }
   banner(text, action, fn) {
     const b = $('banner');
@@ -917,18 +1072,23 @@ export class UI {
   }
   // a window on top of the menu (chest, egg, replay, controls editor): keys must not start a run behind it
   modalOpen() {
-    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay', 'photo-view', 'news'].some((id) => !$(id).classList.contains('hidden'));
+    return !!document.getElementById('ctl-editor') || ['chest', 'egg', 'replay', 'photo-view', 'news', 'story'].some((id) => !$(id).classList.contains('hidden'));
   }
   closeModal() {
     const ed = document.getElementById('ctl-editor');
     if (ed) return ed.querySelector('.ctl-bar .ctl-row:last-child .menu-btn:not(.primary)')?.click();
     if (!$('news').classList.contains('hidden')) return this.closeNews();
+    if (!$('story').classList.contains('hidden')) return void $('story').classList.add('hidden');
     if (!$('replay').classList.contains('hidden')) return this.hideReplay();
     if (!$('photo-view').classList.contains('hidden')) return this.closePhoto();
     if (!$('chest').classList.contains('hidden') && !$('chest').classList.contains('shaking')) return $('chest').classList.add('hidden');
     if (!$('egg').classList.contains('hidden') && $('egg').classList.contains('open')) $('egg').classList.add('hidden');
   }
-  openPanel(name) {
+  // parent: the panel that BACK returns to (the menu when there is none)
+  openPanel(name, parent) {
+    this.parentOf = this.parentOf || {};
+    if (parent) this.parentOf[name] = parent;
+    this.markSeen(name);
     this.panel = name;
     $('menu').classList.add('hidden');
     $('panel').classList.remove('hidden');
@@ -963,15 +1123,22 @@ export class UI {
     if (!silent) this.menuInfo();
     if (was === 'lan' && !silent) this.g.lanLeave();
     if (was === 'transfer') this.stopTransfer();
-    if (!silent && this.g.state === 'menu') $('menu').classList.remove('hidden');
+    const parent = this.parentOf && this.parentOf[was];
+    if (!silent && parent && this.g.state === 'menu') return this.openPanel(parent);
+    if (!silent && this.g.state === 'menu') {
+      $('menu').classList.remove('hidden');
+      this.badges();
+    }
   }
   renderPanel() {
-    const titles = { shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle' };
+    const titles = { collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
     const render = {
       shop: () => this.shopView(),
+      collection: () => this.collectionView(),
+      progress: () => this.progressView(),
       missions: () => this.missionsView(),
       stats: () => this.statsView(),
       settings: () => this.settingsView(),
@@ -1018,7 +1185,7 @@ export class UI {
     const list = { skin: SKINS, hat: HATS, pet: PETS, trail: TRAILS, dance: DANCES, theme: THEMES }[kind];
     const owned = p.owned[kind];
     const grid = el('div', { class: 'cards' });
-    if (kind === 'skin' || kind === 'hat' || kind === 'pet') grid.append(this.eggCard());
+    if (kind === 'skin' || kind === 'hat' || kind === 'pet') grid.append(this.eggCard(), this.eggCard(true));
     for (const [id, item] of Object.entries(list)) {
       if (item.hidden) continue;
       const have = owned.includes(id);
@@ -1063,24 +1230,43 @@ export class UI {
       owned && pr.need ? el('div', { class: 'bar' }, el('i', { style: `width:${Math.round((pr.into / pr.need) * 100)}%` })) : null,
       el('p', { class: 'small muted', text: owned ? (pr.need ? t('petGrow', { a: pr.into, b: pr.need }) : t('petMax')) : t('petHelp') }),
       el('ul', { class: 'pet-levels small' }, lines),
+      // pet food: bones make it grow faster
+      owned && pr.need && id === this.p.pet
+        ? el('button', {
+            class: 'menu-btn',
+            text: t('petFeed', { n: PET_FOOD_PRICE, d: PET_FOOD_XP }),
+            onclick: () => {
+              if (this.p.coins < PET_FOOD_PRICE) return this.toast(t('notEnough'), 'red');
+              const r = feedPet(PET_FOOD_PRICE, PET_FOOD_XP);
+              if (!r) return;
+              this.g.sfx.reward();
+              if (r.level) {
+                this.toast(t(r.level >= PET_MAX ? 'petEvolved' : 'petGrew', { name: t('pet_' + id), n: r.level }), 'gold');
+                this.g.previewDino(this.p.skin, this.p.hat, this.p.pet, true);
+              } else this.toast(t('petFed'), 'gold');
+              this.renderPanel();
+            },
+          })
+        : null,
     );
   }
-  eggCard() {
-    const left = eggPoolSize();
+  // gold: the golden egg, only the expensive things inside
+  eggCard(gold = false) {
+    const left = eggPoolSize(gold);
     const card = el(
       'button',
-      { class: 'card egg-card' + (left ? '' : ' locked') },
+      { class: 'card egg-card' + (gold ? ' gold-egg' : '') + (left ? '' : ' locked') },
       el('span', { class: 'egg-icon' }),
-      el('span', { class: 'card-name', text: t('egg') }),
-      left ? el('span', { class: 'card-price' }, bone(), ' ' + EGG_PRICE) : el('span', { class: 'card-tag', text: t('eggEmpty') }),
+      el('span', { class: 'card-name', text: t(gold ? 'eggGold' : 'egg') }),
+      left ? el('span', { class: 'card-price' }, bone(), ' ' + (gold ? GOLD_EGG_PRICE : EGG_PRICE)) : el('span', { class: 'card-tag', text: t('eggEmpty') }),
     );
-    card.addEventListener('click', () => this.openEggClick());
+    card.addEventListener('click', () => this.openEggClick(gold));
     return card;
   }
-  openEggClick() {
-    if (!eggPoolSize()) return this.toast(t('eggEmpty'), 'gold');
-    if (this.p.coins < EGG_PRICE) return this.toast(t('notEnough'), 'red');
-    const prize = openEgg();
+  openEggClick(gold = false) {
+    if (!eggPoolSize(gold)) return this.toast(t('eggEmpty'), 'gold');
+    if (this.p.coins < (gold ? GOLD_EGG_PRICE : EGG_PRICE)) return this.toast(t('notEnough'), 'red');
+    const prize = openEgg(gold);
     if (!prize) return;
     const box = $('egg');
     const result = $('egg-result');
@@ -1187,50 +1373,104 @@ export class UI {
         }),
       ),
     );
+    const un = unlocks();
+    const st = this.badgeState();
+    // a mode that opens later: shown greyed out, with what it takes to open it
+    const locked = (key, need) => el('div', { class: 'mode-card locked' }, el('b', { text: '🔒 ' + t(key) }), el('span', { class: 'small muted', text: need }));
+    const mu = todayMutator();
+    const withBadge = (c, on) => (on && c.classList.add('badge'), c);
     return el(
       'div',
       { class: 'modes' },
-      card('mode_adventure', t('modeDesc_adventure', { n: totalStars(), max: BIOMES.length * ADV_LEVELS * 3 }), () => this.openPanel('adventure')),
-      card('daily', d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }), () => g.startMode('daily')),
+      card('mode_adventure', t('modeDesc_adventure', { n: totalStars(), max: BIOMES.length * ADV_LEVELS * 3 }), () => this.openPanel('adventure', 'modes')),
+      withBadge(card('daily', d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }), () => g.startMode('daily')), st.daily),
+      card('mode_mutator', t('mut_' + mu.id) + ' · ' + t('mutDesc', { k: mu.bones, n: mu.best }), () => g.startMode('mutator')),
+      un.lan ? card('multiplayer', t('modeDesc_lan'), () => this.openPanel('lan', 'modes')) : locked('multiplayer', t('unlockAfter', { n: 5 })),
       card('mode_zen', t('modeDesc_zen'), () => g.startMode('zen')),
       card('mode_hardcore', t('modeDesc_hardcore'), () => g.startMode('hardcore')),
       card('mode_bot', t('modeDesc_bot'), () => g.startMode('bot'), botBtn),
-      card('mode_custom', t('modeDesc_custom', { n: this.p.levels.length }), () => this.openPanel('levels')),
+      un.levels ? withBadge(card('mode_custom', t('modeDesc_custom', { n: this.p.levels.length }), () => this.openPanel('levels', 'modes')), st.levels) : locked('mode_custom', t('unlockLevels')),
       card('mode_challenge', t('modeDesc_challenge'), () => {
         // scanning a friend's challenge uses the same scanner as the progress transfer
         this.xferTab = 'scan';
-        this.openPanel('transfer');
+        this.openPanel('transfer', 'modes');
       }),
-      el('div', { class: 'mode-card' }, el('b', { text: t('mode_local') }), el('span', { class: 'small muted', text: t('modeDesc_local') }), localBtns),
+      un.lan ? el('div', { class: 'mode-card' }, el('b', { text: t('mode_local') }), el('span', { class: 'small muted', text: t('modeDesc_local') }), localBtns) : locked('mode_local', t('unlockAfter', { n: 5 })),
     );
   }
 
   // ------------------------------------------------------------ adventure map
+  // a winding road through the worlds: every world is a little scene in its own colours,
+  // with its three levels as stops on the road and the dino standing at the next one
   adventureView() {
-    const worlds = BIOMES.map((b, w) =>
-      el(
+    let here = null; // the first open level without stars: where the dino stands
+    BIOMES.forEach((b, w) => {
+      for (let l = 0; l < ADV_LEVELS; l++) if (!here && advUnlocked(w, l) && !advStars(w, l)) here = [w, l];
+    });
+    const worlds = BIOMES.map((b, w) => {
+      const open0 = advUnlocked(w, 0);
+      const stops = Array.from({ length: ADV_LEVELS }, (_, l) => {
+        const open = advUnlocked(w, l);
+        const st = advStars(w, l);
+        const isHere = here && here[0] === w && here[1] === l;
+        const btn = el(
+          'button',
+          { class: 'stop' + (open ? '' : ' locked') + (l === ADV_LEVELS - 1 ? ' boss' : '') + (st ? ' done' : '') + (isHere ? ' here' : ''), disabled: !open },
+          isHere ? dinoIcon(this.p.skin) : null,
+          el('span', { class: 'stop-n', text: l === ADV_LEVELS - 1 ? t('bossShort') : String(w * ADV_LEVELS + l + 1) }),
+          el('span', { class: 'mini-stars' }, [0, 1, 2].map((i) => el('i', { class: i < st ? 'on' : '' }))),
+        );
+        btn.addEventListener('click', () => this.playLevel(w, l));
+        return btn;
+      });
+      const story = el('button', { class: 'val story-btn', text: '📖', 'aria-label': t('storyRead'), title: t('storyRead'), disabled: !open0, onclick: () => this.showStory(w) });
+      return el(
         'div',
-        { class: 'world' },
-        el('b', { class: 'world-name', text: t('biome_' + b.id) }),
-        el(
-          'div',
-          { class: 'levels' },
-          Array.from({ length: ADV_LEVELS }, (_, l) => {
-            const open = advUnlocked(w, l);
-            const st = advStars(w, l);
-            const btn = el(
-              'button',
-              { class: 'level' + (open ? '' : ' locked') + (l === ADV_LEVELS - 1 ? ' boss' : ''), disabled: !open },
-              el('span', { text: l === ADV_LEVELS - 1 ? t('bossShort') : String(w * ADV_LEVELS + l + 1) }),
-              el('span', { class: 'mini-stars' }, [0, 1, 2].map((i) => el('i', { class: i < st ? 'on' : '' }))),
-            );
-            btn.addEventListener('click', () => this.g.startMode('adventure', { world: w, level: l }));
-            return btn;
-          }),
-        ),
-      ),
+        { class: 'map-world' + (w % 2 ? ' rev' : '') + (open0 ? '' : ' locked'), style: `--sky:${b.sky};--ground:${b.ground};--path:${b.path}` },
+        el('div', { class: 'map-head' }, el('b', { text: t('biome_' + b.id) }), story),
+        el('div', { class: 'map-road' }, stops),
+        b.seasonal && !open0 ? el('p', { class: 'small', text: t('seasonWorldHow', { n: SEASON_PASS_TIER }) }) : null,
+      );
+    });
+    return el('div', {}, el('p', { class: 'small muted', text: t('advHelp') }), el('div', { class: 'adv-map' }, worlds));
+  }
+  // the story page of a world comes before its first level, the first time
+  playLevel(w, l) {
+    const start = () => this.g.startMode('adventure', { world: w, level: l });
+    if (l === 0 && !this.p.storySeen.includes(w)) return this.showStory(w, start);
+    start();
+  }
+  // w: a world index, or 'end' for the last page (after the last boss)
+  showStory(w, then) {
+    const end = w === 'end';
+    const b = end ? BIOMES[9] : BIOMES[w];
+    const scene = $('story-scene');
+    scene.style.cssText = `--sky:${b.sky};--ground:${b.ground}`;
+    const kind = end ? null : BOSS_KIND[b.id];
+    scene.replaceChildren(
+      el('span', { class: 'story-sky', text: end ? '✨🌠✨' : '☄️' }),
+      el('span', { class: 'story-boss', text: kind ? BOSS_EMOJI[kind] || '' : '🥳' }),
+      dinoIcon(this.p.skin),
     );
-    return el('div', {}, el('p', { class: 'small muted', text: t('advHelp') }), el('div', { class: 'worlds' }, worlds));
+    $('story-title').textContent = end ? t('storyEndTitle') : t('storyChapter', { n: w + 1, name: t('biome_' + b.id) });
+    $('story-text').textContent = t(end ? 'story_end' : b.seasonal ? 'story_season_' + SEASON_WORLD : 'story_' + b.id);
+    $('story-ok').textContent = then ? t('storyGo') : t('newsOk');
+    this.storyThen = then || null;
+    $('story').classList.remove('hidden');
+    const key = end ? 'end' : w;
+    if (!this.p.storySeen.includes(key)) {
+      this.p.storySeen.push(key);
+      save();
+    }
+  }
+  closeStory() {
+    $('story').classList.add('hidden');
+    const fn = this.storyThen;
+    this.storyThen = null;
+    if (fn) {
+      this.closePanel(true);
+      fn();
+    }
   }
 
   // ------------------------------------------------------------ album: fossils, medals, photos
@@ -1357,7 +1597,7 @@ export class UI {
   fossilsView() {
     const have = new Set(this.p.fossils);
     const total = allFossils().length;
-    const rows = BIOMES.map((b) => {
+    const rows = BIOMES.filter((b) => !b.seasonal).map((b) => {
       const done = FOSSIL_KINDS.every((_, k) => have.has(fossilId(b.id, k)));
       return el(
         'div',
@@ -1588,15 +1828,26 @@ export class UI {
 
   // ------------------------------------------------------------ missions
   missionsView() {
-    const ms = this.p.missions.active.map((m) => {
+    const ms = this.p.missions.active.map((m, i) => {
       const prog = missionProgress(m, null);
       const pct = Math.round((Math.max(0, prog) / m.target) * 100);
+      // another mission instead of this one, for a few bones
+      const reroll = el('button', {
+        class: 'val reroll',
+        'aria-label': t('missionReroll', { n: REROLL_PRICE }),
+        title: t('missionReroll', { n: REROLL_PRICE }),
+        onclick: () => {
+          if (!rerollMission(i)) return this.toast(t('notEnough'), 'red');
+          this.g.sfx.beep();
+          this.renderPanel();
+        },
+      }, '↻ ', bone(), ' ' + REROLL_PRICE);
       return el(
         'div',
         { class: 'mission' },
         el('p', { text: t('m_' + m.kind, { n: m.target }) }),
         m.scope === 'run' ? null : el('div', { class: 'bar' }, el('i', { style: `width:${pct}%` })),
-        el('p', { class: 'mission-meta' }, m.scope === 'run' ? '' : `${Math.max(0, prog)}/${m.target}  `, bone(), ' +' + m.reward),
+        el('p', { class: 'mission-meta' }, m.scope === 'run' ? '' : `${Math.max(0, prog)}/${m.target}  `, bone(), ' +' + m.reward, reroll),
       );
     });
     const ach = ACHIEVEMENTS.map((a) => {
@@ -1862,6 +2113,7 @@ export class UI {
       ),
       this.myIp ? el('p', { class: 'muted small', text: t('mpYourIp', { ip: this.myIp }) }) : null,
       el('p', { class: 'muted small', text: t('mpHotspotTip') }),
+      this.coopTopEl(),
     );
   }
   lobbyEl() {
@@ -1915,10 +2167,22 @@ export class UI {
       tour && !tour.done ? null : el('h3', { class: 'winner', text: head }),
       tourEls,
       el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: p.name })))),
+      coop ? this.coopTopEl() : null,
       this.lanIsHost
         ? el('button', { class: 'menu-btn primary', text: again, disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
         : el('p', { class: 'blink', text: t('mpWaitHost') }),
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
+    );
+  }
+  // co-op: the best teams that played on this device
+  coopTopEl() {
+    const top = this.p.coopTop;
+    if (!top.length) return null;
+    return el(
+      'div',
+      { class: 'coop-top' },
+      el('h3', { text: t('coopTopTitle') }),
+      el('ol', { class: 'top' }, top.map((e) => el('li', {}, el('b', { text: pad5(e.s) }), el('span', { text: e.names })))),
     );
   }
   leaveLanToMenu() {

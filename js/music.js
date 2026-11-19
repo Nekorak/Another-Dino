@@ -24,6 +24,8 @@ const SONGS = [
   { root: 52, scale: [0, 2, 3, 5, 7, 9, 10], chords: [0, 4, 3, 1], bpm: 100, lead: 0.5 },
   // candy: C major, sugary and quick
   { root: 60, scale: [0, 2, 4, 5, 7, 9, 11], chords: [0, 5, 3, 4], bpm: 152, lead: 0.125 },
+  // world of the season: A harmonic minor, a bit mysterious
+  { root: 57, scale: [0, 2, 3, 5, 7, 8, 11], chords: [0, 3, 5, 4], bpm: 136, lead: 0.25 },
 ];
 
 const midiHz = (m) => 440 * 2 ** ((m - 69) / 12);
