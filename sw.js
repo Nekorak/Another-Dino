@@ -1,5 +1,5 @@
 // Offline support: serve from cache, refresh the cache in the background.
-const CACHE = 'another-dino-v8';
+const CACHE = 'another-dino-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -32,6 +32,7 @@ const ASSETS = [
   './js/gallery.js',
   './js/levels.js',
   './js/leveleditor.js',
+  './js/whatsnew.js',
   './vendor/capacitor-core.js',
   './vendor/qrcode.mjs',
   './vendor/jsQR.js',
@@ -68,7 +69,7 @@ self.addEventListener('fetch', (e) => {
           if (res && (res.ok || res.type === 'opaque')) cache.put(e.request, res.clone());
           return res;
         })
-        .catch(() => cached);
+        .catch(() => cached || Response.error());
       return cached || network;
     }),
   );

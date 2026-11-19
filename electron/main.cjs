@@ -135,23 +135,37 @@ const updateMode = !app.isPackaged
 
 const sendToPage = (channel, value) => win && win.webContents.send(channel, value);
 
+// Downloads into file.part and renames it only when every byte arrived, so a cut
+// connection never leaves a broken installer behind (or swaps one into place).
 async function downloadTo(url, file) {
   const res = await net.fetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const total = Number(res.headers.get('content-length')) || 0;
-  const out = fs.createWriteStream(file);
+  const part = file + '.part';
+  const out = fs.createWriteStream(part);
+  let failed = null;
+  out.on('error', (err) => (failed = err)); // a full disk must not crash the whole app
   const reader = res.body.getReader();
   let done = 0;
   let last = -1;
-  for (;;) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    if (!out.write(Buffer.from(chunk.value))) await new Promise((r) => out.once('drain', r));
-    done += chunk.value.length;
-    const pct = total ? Math.floor((done * 100) / total) : -1;
-    if (pct !== last) sendToPage('update:progress', (last = pct));
+  try {
+    for (;;) {
+      if (failed) throw failed;
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      if (!out.write(Buffer.from(chunk.value))) await new Promise((r) => (failed ? r() : out.once('drain', r).once('error', r)));
+      done += chunk.value.length;
+      const pct = total ? Math.floor((done * 100) / total) : -1;
+      if (pct !== last) sendToPage('update:progress', (last = pct));
+    }
+    await new Promise((resolve, reject) => out.end((err) => (err || failed ? reject(err || failed) : resolve())));
+    if (total && done !== total) throw new Error(`download cut off (${done} of ${total} bytes)`);
+    fs.renameSync(part, file);
+  } catch (err) {
+    out.destroy();
+    fs.rmSync(part, { force: true });
+    throw err;
   }
-  await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
 }
 
 async function startUpdate(version) {
