@@ -1717,6 +1717,11 @@ body.photo #lan-actions {
   border: 3px solid var(--line);
 }
 
+/* a long progress code makes a dense QR: show it bigger so a camera can still read it */
+.xfer.qr-big .qr {
+  width: min(380px, 100%);
+}
+
 .code {
   width: 100%;
   padding: 8px;

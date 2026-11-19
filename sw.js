@@ -1,5 +1,5 @@
 // Offline support: serve from cache, refresh the cache in the background.
-const CACHE = 'another-dino-v9';
+const CACHE = 'another-dino-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -70,7 +70,7 @@ self.addEventListener('fetch', (e) => {
           if (res && (res.ok || res.type === 'opaque')) cache.put(e.request, res.clone());
           return res;
         })
-        .catch(() => cached);
+        .catch(() => cached || Response.error());
       return cached || network;
     }),
   );
