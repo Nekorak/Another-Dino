@@ -1,14 +1,14 @@
 // All menus, panels and HUD elements (plain DOM on top of the 3D canvas).
 import { t, LANGS, getLang } from './i18n.js';
 import { NEWS } from './whatsnew.js';
-import { SKINS, HATS, PETS, POWERUP_COLOR, hatPixels, petPixels } from './models.js';
+import { SKINS, HATS, PETS, POWERUP_COLOR, hatPixels, petPixels, BOSS_HAT } from './models.js';
 import { UPGRADES, nextUpgradeCost, buyUpgrade, upgradeLevel, levelProgress, dailyInfo, EGG_PRICE, GOLD_EGG_PRICE, openEgg, eggPoolSize, PET_FOOD_PRICE, PET_FOOD_XP } from './progress.js';
 import { BIOMES, SEASON_WORLD } from './biomes.js';
 import { BOSS_KIND } from './bosses.js';
-import { ADV_LEVELS, ADV_ORDER, advPos, LAST_STORY_W, SEASON_W, seasonRunBest, stars as advStars, unlocked as advUnlocked, totalStars, todayMutator, SEASON_PASS_TIER } from './modes.js';
+import { ADV_LEVELS, ADV_ORDER, advPos, LAST_STORY_W, SEASON_W, seasonRunBest, advPlusOpen, advHardOn, levelKey, stars as advStars, unlocked as advUnlocked, totalStars, todayMutator, SEASON_PASS_TIER } from './modes.js';
 import { TRAILS, FOSSIL_KINDS, FOSSIL_WORLD_REWARD, fossilId, fossilPixels, allFossils } from './collection.js';
 import { encodeProgress, decodeProgress, mergeProgress, QR_LIMIT, qrCanvas, readQrFromImage, CameraScanner, LanSync, isChallenge, decodeChallenge } from './transfer.js';
-import { save, resetProgress, profile } from './save.js';
+import { save, resetProgress, profile, SETTING_DEFAULTS } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
 import { MAX_PLAYERS, COOP_HEARTS } from './multiplayer.js';
@@ -496,7 +496,7 @@ export class UI {
     document.body.classList.toggle('photo', on);
     $('photo-ui').classList.toggle('hidden', !on);
   }
-  showWin({ stars, reward, adv, coins, spawned, hits, xp }) {
+  showWin({ stars, reward, adv, coins, spawned, hits, xp, timing }) {
     this.overShownAt = performance.now() / 1000;
     $('win-title').textContent = adv.custom ? t('lvWin') : adv.boss ? t('bossDefeated') : t('advWin');
     $('btn-win-map').textContent = adv.custom ? t('lvList') : t('advMap');
@@ -510,6 +510,8 @@ export class UI {
       el('p', { text: hits ? t('advHits', { n: hits }) : t('advNoHits') }),
       reward ? el('p', { class: 'mission-done', text: t('coinsEarned', { n: reward }) }) : null,
       xp ? el('p', { class: 'small', text: t('xpGained', { n: xp }) }) : null,
+      timing ? el('p', { class: timing.isBest ? 'winner' : 'small', text: t(timing.isBest ? 'timeBest' : 'timeLine', { n: timing.time, b: timing.best }) }) : null,
+      timing && timing.crown ? el('p', { class: 'mission-done', text: t('crownGot', { n: 40 }) }) : null,
     ];
     $('win-details').replaceChildren(...lines.filter(Boolean));
     const hasNext = this.nextLevelOf(adv) != null;
@@ -735,7 +737,8 @@ export class UI {
   collectionView() {
     return this.hubView([
       ['shop', t('hubShop'), () => this.openPanel('shop', 'collection'), 'shop'],
-      ['album', t('hubAlbum', { n: this.p.fossils.length, max: 30 }), () => this.openPanel('album', 'collection'), 'album'],
+      ['album', t('hubAlbum', { n: this.p.fossils.length, max: allFossils().length }), () => this.openPanel('album', 'collection'), 'album'],
+      ['bestiary', t('hubBestiary'), () => this.openPanel('bestiary', 'collection')],
       ['pass', t('hubPass'), () => this.openPanel('pass', 'collection'), 'pass'],
       ['jukebox', t('hubJukebox'), () => this.openPanel('jukebox', 'collection')],
     ]);
@@ -745,7 +748,45 @@ export class UI {
       ['missions', t('hubMissions'), () => this.openPanel('missions', 'progress'), 'ach'],
       ['albumMedals', t('hubMedals'), () => ((this.albumTab = 'medals'), this.openPanel('album', 'progress'))],
       ['stats', t('hubStats'), () => this.openPanel('stats', 'progress')],
+      ['playerCard', t('hubPlayerCard'), () => this.sharePlayerCard()],
     ]);
+  }
+  async sharePlayerCard() {
+    let data;
+    try {
+      data = await this.g.playerCard();
+    } catch {
+      return this.toast(t('shareFailed'), 'red');
+    }
+    return this.shareData(data, 'image/png');
+  }
+  dinoCanvas(skin) {
+    return dinoIcon(SKINS[skin] ? skin : 'classic');
+  }
+  // every world's boss and obstacles: how often you beat them (unknown ones stay hidden)
+  bestiaryView() {
+    const kills = this.p.bossKills;
+    const obs = this.p.obsBiome;
+    const rows = ADV_ORDER.map((w) => {
+      const b = BIOMES[w];
+      const kind = BOSS_KIND[b.id];
+      const met = (kills[kind] || 0) > 0 || (obs[b.id] || 0) > 0 || advStars(w, 0) > 0;
+      const hat = BOSS_HAT[b.id];
+      return el(
+        'div',
+        { class: 'beast' + (met ? '' : ' locked'), style: `--sky:${b.sky};--ground:${b.ground}` },
+        el('span', { class: 'beast-icon', text: met ? BOSS_EMOJI[kind] || '?' : '?' }),
+        el(
+          'div',
+          { class: 'beast-text' },
+          el('b', { text: met ? t('boss_' + kind) : '???' }),
+          el('span', { class: 'small', text: t('biome_' + b.id) }),
+          el('span', { class: 'small muted', text: t('beastLine', { n: kills[kind] || 0, o: obs[b.id] || 0 }) }),
+          hat && this.p.owned.hat.includes(hat) ? el('span', { class: 'small', text: '🎩 ' + t('hat_' + hat) }) : null,
+        ),
+      );
+    });
+    return el('div', {}, el('p', { class: 'small muted', text: t('bestiaryHelp') }), el('div', { class: 'bestiary' }, rows));
   }
   passView() {
     const st = passState();
@@ -807,7 +848,7 @@ export class UI {
     document.body.classList.toggle('paused', !!on);
     $('btn-zen-end').classList.toggle('hidden', mode !== 'zen');
   }
-  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge, near, mutator, season }) {
+  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge, near, mutator, season, rush, team }) {
     $('btn-replay').classList.toggle('hidden', !!lan || this.g.replay.length < 5);
     $('btn-challenge').classList.toggle('hidden', !canChallenge || score <= 0);
     this.overShownAt = performance.now() / 1000;
@@ -837,7 +878,7 @@ export class UI {
     if (local2) {
       const best = Math.max(...local2.map((q) => q.sc));
       const top = local2.filter((q) => q.sc === best);
-      const head = top.length > 1 ? t('draw') : t('mpWinner', { name: top[0].name });
+      const head = team ? t('localCoopResult', { n: best }) : top.length > 1 ? t('draw') : t('mpWinner', { name: top[0].name });
       extra.append(el('p', { class: 'winner', text: head }), el('p', { text: local2.map((q) => `${q.name} ${pad5(q.sc)}`).join('   ') }));
     }
     if (challenge)
@@ -845,6 +886,11 @@ export class UI {
         el('p', { class: challenge.won ? 'winner' : '', text: challenge.won ? t('chWon', { name: challenge.name, n: challenge.reward }) : t('chLost', { name: challenge.name, n: challenge.target }) }),
       );
     if (mutator) extra.append(el('p', { class: mutator.isBest ? 'winner' : '', text: t('mutBest', { name: t('mut_' + mutator.id), n: mutator.best }) }));
+    if (rush)
+      extra.append(
+        el('p', { class: rush.isBest ? 'winner' : '', text: rush.done ? t('rushDone', { time: rush.time, n: 150 }) : t('rushResult', { n: rush.n, max: rush.max }) }),
+        el('p', { class: 'small muted', text: t('rushBest', { n: rush.best, max: rush.max, time: rush.bestTime ? rush.bestTime + 's' : '-' }) }),
+      );
     if (season) extra.append(el('p', { class: season.isBest ? 'winner' : '', text: t('seasonBest', { name: t('biome_season'), n: season.best }) }));
     if (bot) extra.append(el('p', { class: bot.won ? 'winner' : '', text: bot.won ? t('botBeaten', { n: bot.reward }) : t('botWon') }));
     if (daily) extra.append(el('p', { class: daily.done ? 'mission-done' : '', text: daily.done ? t('dailyDoneShort', { n: daily.streak }) : t('dailyBest', { n: daily.best, target: daily.target }) }));
@@ -1187,12 +1233,13 @@ export class UI {
     }
   }
   renderPanel() {
-    const titles = { collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle', jukebox: 'jukebox' };
+    const titles = { bestiary: 'bestiary', collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle', jukebox: 'jukebox' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
     const render = {
       shop: () => this.shopView(),
+      bestiary: () => this.bestiaryView(),
       collection: () => this.collectionView(),
       progress: () => this.progressView(),
       missions: () => this.missionsView(),
@@ -1266,7 +1313,68 @@ export class UI {
       grid.append(card);
     }
     const info = kind === 'pet' ? this.petInfo(this.preview.pet) : null;
-    return el('div', {}, tabs, info, grid);
+    return el('div', {}, tabs, kind === 'skin' || kind === 'hat' ? this.dailyShopEl() : null, info, grid);
+  }
+  // the shop of the day: three things you do not have yet, 30% off, the same all day
+  dailyOffers() {
+    const d = new Date();
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    if (this.p.dailyShop.date !== key) this.p.dailyShop = { date: key, bought: [] };
+    if (this.p.dailyShop.offers) return this.p.dailyShop.offers; // the same three all day
+    const pool = [
+      ...Object.entries(SKINS).filter(([id, it]) => it.price > 0 && !it.editor && !this.p.owned.skin.includes(id)).map(([id, it]) => ['skin', id, it.price]),
+      ...Object.entries(HATS).filter(([id, it]) => it.price > 0 && !this.p.owned.hat.includes(id)).map(([id, it]) => ['hat', id, it.price]),
+    ].sort((a, b) => (a[0] + a[1] < b[0] + b[1] ? -1 : 1));
+    let seed = [...key].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const out = [];
+    while (pool.length && out.length < 3) {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      const [kind, id, price] = pool.splice(seed % pool.length, 1)[0];
+      out.push({ kind, id, price: Math.round((price * 0.7) / 5) * 5 });
+    }
+    this.p.dailyShop.offers = out;
+    save();
+    return out;
+  }
+  dailyShopEl() {
+    const offers = this.dailyOffers().filter((o) => !this.p.dailyShop.bought.includes(o.kind + ':' + o.id));
+    if (!offers.length) return null;
+    return el(
+      'div',
+      { class: 'daily-shop' },
+      el('b', { text: t('dailyShop') }),
+      el(
+        'div',
+        { class: 'cards' },
+        offers.map((o) => {
+          const icon = o.kind === 'skin' ? dinoIcon(o.id) : hatIcon(o.id);
+          const full = (o.kind === 'skin' ? SKINS : HATS)[o.id].price;
+          return el(
+            'button',
+            {
+              class: 'card deal',
+              onclick: () => {
+                if (this.p.coins < o.price) return this.toast(t('notEnough'), 'red');
+                this.p.coins -= o.price;
+                this.p.owned[o.kind].push(o.id);
+                this.p[o.kind] = o.id;
+                this.p.dailyShop.bought.push(o.kind + ':' + o.id);
+                save();
+                this.g.sfx.reward();
+                this.toast(t('bought'), 'gold');
+                this.preview[o.kind] = o.id;
+                this.g.previewDino(this.preview.skin, this.preview.hat, this.preview.pet);
+                this.g.lanSetLook();
+                this.renderPanel();
+              },
+            },
+            icon,
+            el('span', { class: 'card-name', text: t(o.kind + '_' + o.id) }),
+            el('span', { class: 'card-price' }, el('s', { text: String(full) }), ' ', bone(), ' ' + o.price),
+          );
+        }),
+      ),
+    );
   }
   // what the chosen pet can do now, and what it learns as it grows
   petInfo(id) {
@@ -1416,16 +1524,26 @@ export class UI {
         this.renderPanel();
       },
     });
+    // versus or co-op (3 shared hearts and a team boss), then how many players
     const localBtns = el(
       'span',
       { class: 'mode-count' },
+      el('button', {
+        class: 'val' + (this.localCoop ? ' on' : ''),
+        text: t(this.localCoop ? 'localCoop' : 'localVs'),
+        onclick: (e) => {
+          e.stopPropagation();
+          this.localCoop = !this.localCoop;
+          this.renderPanel();
+        },
+      }),
       [2, 3, 4].map((n) =>
         el('button', {
           class: 'val',
           text: String(n),
           onclick: (e) => {
             e.stopPropagation();
-            g.startMode('local', { count: n });
+            g.startMode('local', { count: n, coop: !!this.localCoop });
           },
         }),
       ),
@@ -1441,6 +1559,9 @@ export class UI {
       { class: 'modes' },
       card('mode_adventure', t('modeDesc_adventure', { n: totalStars(), max: BIOMES.length * ADV_LEVELS * 3 }), () => this.openPanel('adventure', 'modes')),
       withBadge(card('daily', d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }), () => g.startMode('daily')), st.daily),
+      advStars(0, ADV_LEVELS - 1) > 0
+        ? card('mode_bossrush', t('modeDesc_bossrush', { n: this.p.bossRush.best, max: ADV_ORDER.length, time: this.p.bossRush.time ? this.p.bossRush.time + 's' : '-' }), () => g.startMode('bossrush'))
+        : locked('mode_bossrush', t('unlockBossRush')),
       card('mode_mutator', t('mut_' + mu.id) + ' · ' + t('mutDesc', { k: mu.bones, n: mu.best }), () => g.startMode('mutator')),
       un.lan ? card('multiplayer', t('modeDesc_lan'), () => this.openPanel('lan', 'modes')) : locked('multiplayer', t('unlockAfter', { n: 5 })),
       advUnlocked(SEASON_W, 0)
@@ -1478,7 +1599,10 @@ export class UI {
           isHere ? dinoIcon(this.p.skin) : null,
           el('span', { class: 'stop-n', text: l === ADV_LEVELS - 1 ? t('bossShort') : String(pos * ADV_LEVELS + l + 1) }),
           el('span', { class: 'mini-stars' }, [0, 1, 2].map((i) => el('i', { class: i < st ? 'on' : '' }))),
+          this.p.advCrowns[levelKey(w, l)] ? el('span', { class: 'crown', text: '👑' }) : null,
         );
+        const best = this.p.advTimes[levelKey(w, l) + (advHardOn() ? 'h' : '')];
+        if (best) btn.title = t('bestTime', { n: best });
         btn.addEventListener('click', () => this.playLevel(w, l));
         return btn;
       });
@@ -1491,7 +1615,19 @@ export class UI {
         b.seasonal && !open0 ? el('p', { class: 'small', text: t('seasonWorldHow', { n: SEASON_PASS_TIER }) }) : null,
       );
     });
-    return el('div', {}, el('p', { class: 'small muted', text: t('advHelp') }), el('div', { class: 'adv-map' }, worlds));
+    const plus = advPlusOpen()
+      ? el(
+          'div',
+          {},
+          this.row(t('advPlus'), advHardOn() ? t('on') : t('off'), () => {
+            this.p.advHard = !this.p.advHard;
+            save();
+            this.renderPanel();
+          }),
+          el('p', { class: 'small muted', text: t('advPlusHelp', { n: Object.keys(this.p.advCrowns).length, max: ADV_ORDER.length * ADV_LEVELS }) }),
+        )
+      : null;
+    return el('div', { class: advHardOn() ? 'adv-hard' : '' }, el('p', { class: 'small muted', text: t('advHelp') }), plus, el('div', { class: 'adv-map' }, worlds));
   }
   // the story page of a world comes before its first level, the first time
   playLevel(w, l) {
@@ -1969,7 +2105,7 @@ export class UI {
     const fmtTime = (sec) => `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
     const lp = levelProgress();
     const level = el('div', { class: 'stat' }, el('span', { text: t('levelShort', { n: lp.level }) }), el('b', { text: `${lp.into}/${lp.need} XP` }));
-    const rows = ['best', 'games', 'distance', 'jumps', 'ducks', 'coins', 'obstacles', 'perfects', 'bestCombo', 'powerups', 'meteors', 'pounds', 'revives', 'dailies', 'eggs', 'bosses', 'botWins', 'time', 'mpGames', 'mpWins', 'coopGames', 'coopBest', 'goldBones', 'miniBosses', 'chests', 'challengesWon', 'tournaments', 'levelsMade', 'levelsWon', 'weeklies', 'photos'].map((k) =>
+    const rows = ['best', 'games', 'distance', 'jumps', 'ducks', 'coins', 'obstacles', 'perfects', 'bestCombo', 'powerups', 'meteors', 'pounds', 'revives', 'dailies', 'eggs', 'bosses', 'botWins', 'time', 'mpGames', 'mpWins', 'coopGames', 'coopBest', 'goldBones', 'miniBosses', 'chests', 'challengesWon', 'tournaments', 'levelsMade', 'levelsWon', 'weeklies', 'photos', 'teamBosses', 'seasonRuns', 'seasonBest', 'rushes'].map((k) =>
       el('div', { class: 'stat' }, el('span', { text: t('st_' + k) }), el('b', { text: k === 'time' ? fmtTime(s[k] || 0) : String(s[k] || 0) })),
     );
     const top = this.p.top.length
@@ -2011,31 +2147,42 @@ export class UI {
         reset.textContent = t('set_resetConfirm');
       }
     });
+    const head = (key) => el('h3', { class: 'set-head', text: t(key) });
+    const defaults = el('button', {
+      class: 'menu-btn',
+      text: t('set_defaults'),
+      onclick: () => {
+        // settings only: the progress stays
+        const keep = { lang: s.lang, controls: s.controls, keyJump: s.keyJump, keyDuck: s.keyDuck };
+        Object.assign(s, SETTING_DEFAULTS, keep);
+        apply();
+        this.toast(t('set_defaultsDone'), 'gold');
+        this.renderPanel();
+      },
+    });
     return el(
       'div',
       { class: 'settings' },
+      head('setSec_game'),
       cycle('lang', LANGS, (v) => (v === 'auto' ? t('lang_auto') : v.toUpperCase())),
-      toggle('music'),
-      cycle('musicVol', [25, 50, 75, 100], (v) => v + '%'),
-      toggle('sfx'),
-      cycle('sfxVol', [25, 50, 75, 100], (v) => v + '%'),
-      toggle('vibration'),
-      toggle('lefty'),
-      cycle('style', ['normal', 'outline', 'gameboy', 'crt'], (v) => t('style_' + v)),
-      cycle('pixel', [0, 1, 2], (v) => 'PX' + (v + 1)),
       toggle('ghost'),
-      cycle('quality', ['auto', 'high', 'medium', 'low'], (v) => t('q_' + v)),
-      toggle('highlight'),
-      toggle('bigText'),
-      this.g.isTouch ? null : this.keyRow('keyJump'),
-      this.g.isTouch ? null : this.keyRow('keyDuck'),
       toggle('seasons'),
+      toggle('autoPause'),
+      this.g.isTouch ? null : this.row(t('set_fullscreen'), document.fullscreenElement ? t('on') : t('off'), () => this.toggleFullscreen()),
+      head('setSec_sound'),
+      toggle('music'),
+      cycle('musicVol', [0, 25, 50, 75, 100], (v) => v + '%'),
+      toggle('sfx'),
+      cycle('sfxVol', [0, 25, 50, 75, 100], (v) => v + '%'),
       this.row(t('set_menuMusic'), s.menuMusic ? t('on') : t('off'), () => {
         s.menuMusic = !s.menuMusic;
         save();
         this.g.menuMusic();
         this.renderPanel();
       }),
+      head('setSec_controls'),
+      this.g.isTouch ? null : this.keyRow('keyJump'),
+      this.g.isTouch ? null : this.keyRow('keyDuck'),
       this.g.isTouch
         ? this.row(t('set_controls'), t(s.controls.mode === 'buttons' ? 'ctlModeButtons' : 'ctlModeZones'), () => {
             this.closePanel(true);
@@ -2045,11 +2192,35 @@ export class UI {
             });
           })
         : null,
+      toggle('lefty'),
+      toggle('vibration'),
+      head('setSec_graphics'),
+      cycle('quality', ['auto', 'high', 'medium', 'low'], (v) => t('q_' + v)),
+      cycle('style', ['normal', 'outline', 'gameboy', 'crt'], (v) => t('style_' + v)),
+      cycle('pixel', [0, 1, 2], (v) => 'PX' + (v + 1)),
+      toggle('shake'),
+      toggle('showFps'),
+      head('setSec_access'),
+      toggle('bigText'),
+      toggle('highlight'),
+      toggle('colorblind'),
+      toggle('reduceFx'),
+      toggle('oneButton'),
+      el('p', { class: 'small muted', text: t('setAccessHelp') }),
+      head('setSec_data'),
       this.row(t('transfer'), t('open'), () => this.openPanel('transfer')),
       this.row(t('set_news'), t('open'), () => this.showNews()),
       this.g.isApp ? this.updateRow() : null,
+      this.row(t('set_about'), t('open'), () => this.toast(t('aboutText'), 'gold')),
+      defaults,
       reset,
     );
+  }
+  toggleFullscreen() {
+    const d = document;
+    if (d.fullscreenElement) d.exitFullscreen?.();
+    else d.documentElement.requestFullscreen?.().catch(() => {});
+    setTimeout(() => this.panel === 'settings' && this.renderPanel(), 300);
   }
   keyRow(key) {
     const label = this.capturing === key ? t('pressKey') : keyName(this.p.settings[key]);
@@ -2211,7 +2382,7 @@ export class UI {
       ),
     );
     const canStart = this.lobby.length >= 2;
-    const MODES = ['race', 'sabotage', 'elimination', 'tournament', 'coop'];
+    const MODES = ['race', 'sabotage', 'elimination', 'tournament', 'coop', 'teams', 'bosses'];
     const modeRow = this.lanIsHost
       ? this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => this.g.lanSetMode(MODES[(MODES.indexOf(this.lanMode || 'race') + 1) % MODES.length]))
       : this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => {});
@@ -2233,7 +2404,25 @@ export class UI {
   resultsEl() {
     const r = this.results || [];
     const winner = r[0];
-    const coop = this.lanMode === 'coop';
+    const coop = this.lanMode === 'coop' || this.lanMode === 'bosses';
+    // teams: A and B alternate in lobby order, a team scores the sum of its runners
+    if (this.lanMode === 'teams' && winner) {
+      const tt = this.g.teamTotals(r, this.lobby);
+      const name = (i) => t(i ? 'teamB' : 'teamA');
+      const mine = tt.of.get(this.myId);
+      const headT = tt.winner == null ? t('draw') : tt.winner === mine ? t('teamsWeWon', { team: name(tt.winner) }) : t('mpWinner', { name: name(tt.winner) });
+      return el(
+        'div',
+        { class: 'lan' },
+        el('h3', { class: 'winner', text: headT }),
+        el('p', { text: `${name(0)} ${pad5(tt.sum[0])}   ${name(1)} ${pad5(tt.sum[1])}` }),
+        el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: `${p.name} · ${name(tt.of.get(p.id) ?? 0)}` })))),
+        this.lanIsHost
+          ? el('button', { class: 'menu-btn primary', text: t('again'), disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
+          : el('p', { class: 'blink', text: t('mpWaitHost') }),
+        el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
+      );
+    }
     const head = coop && winner ? t('coopResult', { n: Math.max(...r.map((p) => p.sc)) }) : winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
     const tour = this.tour;
     // tournament: the standings after this race, and the champion after the last one

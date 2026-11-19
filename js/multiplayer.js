@@ -271,7 +271,7 @@ export class LanSession {
       } else if (m.t === 's' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
         if (this.state === 'race') this.peerStates.set(m.from, { ...m.s, id: m.from });
-      } else if (m.t === 'hit' && this.players.has(m.from) && this.state === 'race' && this.mode === 'coop') {
+      } else if (m.t === 'hit' && this.players.has(m.from) && this.state === 'race' && (this.mode === 'coop' || this.mode === 'bosses')) {
         const key = m.from + ':' + m.k;
         if (!this.hitsSeen.has(key)) {
           this.hitsSeen.add(key);

@@ -15,6 +15,11 @@ export const SEASON_W = BIOMES.findIndex((b) => b.seasonal);
 export const LAST_STORY_W = ADV_ORDER.filter((w) => !BIOMES[w].seasonal).at(-1); // after its boss: the end of the story
 const CANDY_W = BIOMES.findIndex((b) => b.id === 'candy'); // the season world opens after this one, as before v1.6
 
+// Adventure+: after the end of the story the levels can be played again, faster, for a crown
+export const advPlusOpen = () => profile.storySeen.includes('end');
+export const advHardOn = () => !!profile.advHard && advPlusOpen();
+export const HARD_SPEED = 5;
+
 export function levelDef(w, l) {
   const boss = l === ADV_LEVELS - 1;
   const pos = BIOMES[w].seasonal ? CANDY_W + 1 : advPos(w); // the season world keeps its old speed
@@ -27,7 +32,7 @@ export function levelDef(w, l) {
     length: boss ? 750 : 450 + l * 250, // in points of distance
     bossAt: 260,
     bossTime: 24,
-    startSpeed: 13 + pos * 1.1 + l * 0.6,
+    startSpeed: 13 + pos * 1.1 + l * 0.6 + (advHardOn() ? HARD_SPEED : 0),
   };
 }
 

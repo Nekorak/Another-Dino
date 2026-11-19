@@ -52,9 +52,11 @@ Toată lista din notes/todo-design-gameplay.md (design și gameplay), plus cele 
 4. Două lumi noi în Aventură: Mlaștina (crocodil) și Insulele din nori (pasărea furtunii), cu muzică
 5. 3 skin-uri, 5 pălării și 10 realizări noi
 6. O pălărie unică pentru fiecare boss învins prima dată (13 lumi)
-7. Echilibrare: stelele și primul boss dau mai mult în lumile de la final, boșii mici dintr-o tură dau tot mai mult
+7. Boss Rush, Aventură+ cu coroane și timpi, co-op pe același ecran, Echipe și Boși în echipă în LAN
+8. Bestiar, ofertele zilei, Cartea de jucător, lumile Aventurii în turele normale
+9. Setări pe secțiuni și accesibilitate (daltoniști, mai puține efecte, un singur buton)
+10. Echilibrare: stelele și primul boss dau mai mult în lumile de la final, boșii mici dintr-o tură dau tot mai mult
 
 ## Idei noi
 
 - Salvare în cloud, clasament online și publicare pe Google Play (amânate deocamdată, au nevoie de server sau de cont de dezvoltator).
-- Lumile din Aventură și în turele normale, după 8000 de puncte.

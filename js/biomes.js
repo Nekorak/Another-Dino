@@ -42,7 +42,14 @@ BIOMES.push(
 );
 
 export const ENDLESS_BIOMES = BIOMES.filter((b) => !b.advOnly).length;
-export const biomeAt = (score) => Math.floor(score / BIOME_LENGTH) % ENDLESS_BIOMES;
+// v1.6: after the eight usual worlds (8000 points) the run goes on through the adventure
+// worlds too (under the sea, candy land, swamp, sky islands), then all twelve in a loop
+const LATE_WORLDS = ['ocean', 'candy', 'swamp', 'sky'].map((id) => BIOMES.findIndex((b) => b.id === id));
+const EXTENDED = [...LATE_WORLDS, ...BIOMES.keys()].filter((w, i, a) => !BIOMES[w].seasonal && a.indexOf(w) === i);
+export const biomeAt = (score) => {
+  const k = Math.floor(score / BIOME_LENGTH);
+  return k < ENDLESS_BIOMES ? k : EXTENDED[(k - ENDLESS_BIOMES) % EXTENDED.length];
+};
 
 // ------------------------------------------------------------------ helpers
 function boxFill(vs, x0, x1, y0, y1, z0, z1, color) {

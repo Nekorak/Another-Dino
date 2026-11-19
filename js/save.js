@@ -46,6 +46,13 @@ function defaults() {
       musicVol: 100, // percent
       sfxVol: 100,
       menuSong: -1, // jukebox pick for the menu, -1: the theme's song
+      // v1.6
+      shake: true, // the screen shakes on hits
+      autoPause: true, // pause when the window loses focus
+      showFps: false,
+      colorblind: false, // blue instead of red/green for warnings and signals
+      reduceFx: false, // no shaking, no flashes, no slow-motion freezes
+      oneButton: false, // only jump: the dino ducks by itself
       // on-screen controls: 'zones' (left/right halves) or movable 'buttons'
       controls: { mode: 'zones', split: 0.4, jump: { x: 0.86, y: 0.78, s: 1 }, duck: { x: 0.14, y: 0.78, s: 1 } },
     },
@@ -81,6 +88,7 @@ function defaults() {
       teamBosses: 0, // v1.6: bosses beaten together in LAN co-op
       seasonRuns: 0, // v1.6: runs in the world of the season (normal mode)
       seasonBest: 0,
+      rushes: 0, // v1.6: boss rushes finished
       levelsWon: 0,
       levelsMade: 0,
       photos: 0,
@@ -101,7 +109,14 @@ function defaults() {
     coopTop: [], // co-op: the best teams on this device { s, names, d }
     mutator: { date: '', best: 0 }, // rule of the day: best score today
     // v1.6
-    seasonRun: { key: '', best: 0, runs: 0 }, // the season run: best score of this season (key: year + season)
+    seasonRun: { key: '', best: 0, runs: 0 },
+    bossRush: { best: 0, time: 0 }, // most bosses in a row, best time for all of them
+    advHard: false, // Adventure+ switched on
+    advCrowns: {}, // Adventure+: levels won with three stars ("3-1": 1)
+    advTimes: {}, // best time per level ("3-1", and "3-1h" in Adventure+)
+    bossKills: {}, // bestiary: boss kind -> times beaten
+    obsBiome: {}, // bestiary: world -> obstacles passed there
+    dailyShop: { date: '', bought: [] }, // the offers of the day already bought // the season run: best score of this season (key: year + season)
   };
 }
 
@@ -159,6 +174,8 @@ function load() {
 }
 
 export const profile = load();
+// the settings as on a fresh install (Settings > Default settings)
+export const SETTING_DEFAULTS = defaults().settings;
 
 export function save() {
   write(KEY, profile);
