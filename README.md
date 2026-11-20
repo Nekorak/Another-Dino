@@ -187,6 +187,11 @@ GitHub Pages pe un repo privat cere un cont plătit. Pe un repo public e gratuit
 
 Pe telefon, deschide link-ul și alege „Adaugă pe ecranul principal” pentru a-l avea ca aplicație full-screen.
 
+## Documentație
+
+- [Cum se joacă](docs/CUM-SE-JOACA.md): controale, moduri, multiplayer, colecție, transfer, setări.
+- [Documentație tehnică](docs/TEHNIC.md): arhitectura, bucla jocului, lumile, datele salvate, protocolul LAN, release și testare.
+
 ## Ce urmează
 
 Ideile pentru versiunile viitoare sunt în [PlanViitor.md](PlanViitor.md).
