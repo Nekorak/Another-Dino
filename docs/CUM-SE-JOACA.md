@@ -100,6 +100,8 @@ Granița dintre zone se poate muta, sau poți pune două butoane vizibile, din *
 ![Colecția](img/14-colectie.png)
 
 1. **Magazin.** Pe lângă skin-uri și accesorii: **Titluri** (lângă numele tău în LAN), **Abțibilduri** (pachete de 3; dublurile devin sclipici cu care cumperi ce lipsește) și **Măiestrie** (3 stele pentru fiecare skin, +5% oase fiecare).
+1. **Casa:** cumperi mobilă și o așezi în cameră (perete, masă, podea), alegi tapetul și podeaua. Confortul dă până la +10% oase. Pe raft stau trofeele.
+1. **Evenimente:** de 6 ori pe an (iarna, Mărțișorul, Ziua copiilor, vara, Halloween, Toamna de aur): oase +20% și un skin care se vinde doar atunci.
 2. **Album:** fosile, medalii și poze.
 3. **Bestiar:** boșii și lumile întâlnite.
 4. **Pass:** treptele pass-ului de sezon.
@@ -230,6 +232,8 @@ Le găsești în meniul **Moduri**. Unele se deschid treptat, pe măsură ce joc
 | Boși în echipă | Ca Echipa, dar boșii vin unul după altul, la fiecare 700 de puncte. |
 | Ștafetă | Echipa A contra echipei B, dar aleargă câte unul din fiecare echipă. Când cade, următorul din echipă pleacă de unde a rămas, cu aceeași viteză. |
 | Cupa 1 la 1 | Tablou cu eliminare: perechi, toți aleargă deodată, dar contează doar duelul tău. Câștigătorul trece în runda următoare, până la campion (+150 oase). |
+| Constructor | Unul pune obstacole (cactus, pterodactil, bolovan, zid) cu energie care se umple singură; ceilalți aleargă până la 1500. Dacă toți cad, câștigă constructorul. Rolul trece pe rând. |
+| Raid | Toți împotriva unui boss uriaș cu o bară de viață comună. Fiecare obstacol trecut îl lovește, o lovitură de sus îl lovește de două ori. 3 inimi comune. |
 
 - **Traseu din editor:** gazda poate alege un traseu făcut în editor. Câștigă cine trece primul linia de sosire (+250 de puncte), ceilalți după puncte.
 - **Intrare târzie și reconectare:** poți intra într-o cameră în timpul cursei (aștepți următoarea). Dacă îți cade Wi-Fi-ul, jocul încearcă singur să se reconecteze 15 secunde.
@@ -237,6 +241,8 @@ Le găsești în meniul **Moduri**. Unele se deschid treptat, pe măsură ce joc
 - **Handicap:** Normal, Mai ușor (lumea cu 15% mai încet, +1 inimă) sau Mult mai ușor (30% mai încet, +2 inimi). Punctele se numără ca la ceilalți.
 - **Doar mă uit:** stai în cameră ca spectator; camera îl urmărește pe cel din frunte.
 - **Pachet de trasee:** gazda trimite toate traseele din editor tuturor din cameră (le găsesc în Editorul de trasee).
+- **Liga prietenilor:** fiecare cursă dă puncte după loc (10, 8, 6…); cine e primul duminică seara ia coroana ligii.
+- **Trofee:** cupe, turnee, coroane de ligă, raiduri, victorii de constructor. Se văd lângă nume în cameră și pe raftul din casă.
 - **Mesaje rapide:** 8 fraze („Încă una!”, „Bravo!”, „GG”…) pe care le văd toți din cameră.
 
 Pe PC, Windows întreabă de firewall la primul multiplayer: permite accesul în rețeaua privată.

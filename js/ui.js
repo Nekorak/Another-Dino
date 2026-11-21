@@ -11,7 +11,7 @@ import { encodeProgress, decodeProgress, mergeProgress, QR_LIMIT, qrCanvas, read
 import { save, resetProgress, profile, SETTING_DEFAULTS } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
-import { MAX_PLAYERS, COOP_HEARTS, LAN_MODES, TRACK_MODES, TEAM_MODES, HANDICAPS, GIFTS, GIFTS_PER_DAY, QUICK_MSGS, isLanJoin, decodeLanJoin, encodeLanJoin } from './multiplayer.js';
+import { MAX_PLAYERS, COOP_HEARTS, LAN_MODES, TRACK_MODES, TEAM_MODES, HANDICAPS, GIFTS, GIFTS_PER_DAY, QUICK_MSGS, COOP_MODES, BUILD_PIECES, BUILD_GOAL, BUILD_ENERGY, isLanJoin, decodeLanJoin, encodeLanJoin } from './multiplayer.js';
 import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS, ensureWeekly, weeklyProgress, weekInfo, WEEKLY_BONUS, rerollMission, REROLL_PRICE } from './missions.js';
@@ -22,6 +22,8 @@ import { isLevel, decodeLevel, storeLevel, levelId, weeklyTrackOpen, PIECES, tri
 import { levelsView, levelEditView, startEdit } from './leveleditor.js';
 import { TITLES, buyTitle, checkEarnedTitles, PAGES, STICKERS, PACK_PRICE, PACK_SIZE, GLITTER_COST, PAGE_REWARD, openPack, craftSticker, stickerCount, pageDone, MASTERY, MASTERY_BONUS, masteryOf, masteryCost, buyMastery, stars } from './longterm.js';
 import { checkMedals } from './medals.js';
+import { TROPHIES, trophyCount, leagueTable, leagueDaysLeft, LEAGUE_POINTS, FURNITURE, SLOTS, WALLS, FLOORS, comfort, houseBonus, HOUSE_MAX_BONUS, COMFORT_MAX, buyFurniture, placeFurniture, buyStyle, hasStyle, houseSlots } from './house.js';
+import { currentEvent, eventDaysLeft, nextEvent, EVENTS, EVENT_BONES, DAY_GOALS } from './calendar.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 const Updater = registerPlugin('Updater');
@@ -93,9 +95,10 @@ export function choiceRow({ icon, label, desc, options, value, pick, disabled, c
   );
 }
 // an animated picture for each LAN mode and each game mode
-const LAN_MODE_ICON = { race: '🏃', sabotage: '🪨', elimination: '⚡', tournament: '🏆', coop: '❤️', teams: '🆚', bosses: '🐉', relay: '🏃‍♂️', bracket: '🥊' };
+const LAN_MODE_ICON = { race: '🏃', sabotage: '🪨', elimination: '⚡', tournament: '🏆', coop: '❤️', teams: '🆚', bosses: '🐉', relay: '🏃‍♂️', bracket: '🥊', builder: '🧱', raid: '🐲' };
 const MODE_ICON = { mode_adventure: '🗺️', daily: '📅', mode_bossrush: '👹', mode_mutator: '🎲', multiplayer: '📶', mode_season: '🍂', mode_zen: '🧘', mode_hardcore: '💀', mode_bot: '🤖', mode_custom: '✏️', mode_challenge: '📷', mode_local: '🎮' };
 const HC_ICON = ['🦖', '🐢', '🐌'];
+const BUILD_ICON = { cactus: '🌵', bird: '🦅', boulder: '🪨', wall: '🧱' };
 const GIFT_ICON = { b25: '🦴', b100: '🎁', snack: '🍖' };
 
 // Step-by-step unlocks: a new player starts with PLAY, the collection and the settings;
@@ -117,7 +120,7 @@ const UNLOCK_LABEL = { modes: 'modes', progress: 'progress', lan: 'multiplayer',
 function shopAffordable(p = profile) {
   let n = 0;
   for (const [kind, list] of [['skin', SKINS], ['hat', HATS], ['pet', PETS]])
-    for (const [id, it] of Object.entries(list)) if (it.price > 0 && it.price <= p.coins && !p.owned[kind].includes(id)) n++;
+    for (const [id, it] of Object.entries(list)) if (it.price > 0 && !it.event && it.price <= p.coins && !p.owned[kind].includes(id)) n++;
   return n;
 }
 
@@ -410,7 +413,7 @@ export class UI {
     const db = $('menu-daily');
     if (db) {
       db.textContent = '';
-      db.append(el('span', { text: t('daily') }), el('small', { text: d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }) }));
+      db.append(el('span', { text: t('daily') }), el('small', { text: d.done ? t('dailyDoneShort', { n: d.streak }) : this.dailyLine(d) }));
       db.classList.toggle('done', d.done);
     }
     const lp = levelProgress();
@@ -513,6 +516,33 @@ export class UI {
     }
   }
   // co-op: the team's shared hearts (null hides them)
+  // builder vs runners: the builder's energy and the four pieces (null hides it)
+  buildBar(energy) {
+    let box = $('build-bar');
+    if (energy == null) return box && box.remove();
+    if (!box) {
+      box = el('div', { id: 'build-bar', class: 'build-bar' });
+      document.body.append(box);
+    }
+    const n = Math.floor(energy);
+    box.replaceChildren(
+      el('p', { class: 'small', text: '🧱 ' + t('bldHelpShort') }),
+      el('div', { class: 'bld-energy', 'aria-label': t('bldEnergy', { n }) }, Array.from({ length: BUILD_ENERGY }, (_, i) => el('i', { class: i < n ? 'on' : '' }))),
+      el(
+        'div',
+        { class: 'bld-btns' },
+        Object.entries(BUILD_PIECES).map(([k, cost]) =>
+          el(
+            'button',
+            { class: 'bld-btn', disabled: n < cost, 'aria-label': t('bld_' + k) + ' · ' + cost, onclick: () => this.g.lanBuild(k) },
+            el('span', { class: 'bld-ico', 'aria-hidden': 'true', text: BUILD_ICON[k] }),
+            el('small', { text: t('bld_' + k) }),
+            el('b', { text: '⚡' + cost }),
+          ),
+        ),
+      ),
+    );
+  }
   coopHearts(n) {
     const box = $('coop-hearts');
     if (n == null) {
@@ -572,6 +602,8 @@ export class UI {
     const hasNext = this.nextLevelOf(adv) != null;
     // the last page of the story, once, after the boss of the last world (before the seasonal one)
     if (!adv.custom && adv.boss && adv.world === LAST_STORY_W && !this.p.storySeen.includes('end')) setTimeout(() => this.g.state === 'won' && this.showStory('end'), 2600);
+    // v1.9: the end of act 2, after the last boss in Adventure+
+    else if (!adv.custom && adv.boss && adv.world === LAST_STORY_W && advHardOn() && !this.p.storySeen.includes('a2end')) setTimeout(() => this.g.state === 'won' && this.showStory('a2end'), 2600);
     $('btn-win-next').classList.toggle('hidden', !hasNext);
     $('win').classList.remove('hidden');
     document.body.classList.add('over');
@@ -796,7 +828,176 @@ export class UI {
       ['bestiary', t('hubBestiary'), () => this.openPanel('bestiary', 'collection')],
       ['pass', t('hubPass'), () => this.openPanel('pass', 'collection'), 'pass'],
       ['jukebox', t('hubJukebox'), () => this.openPanel('jukebox', 'collection')],
+      ['house', t('hubHouse', { n: comfort(), b: Math.round(houseBonus() * 100) }), () => this.openPanel('house', 'collection')],
+      ['events', this.eventLine(), () => this.openPanel('events', 'collection')],
     ]);
+  }
+  // the challenge of the day: its goal, its world and the reward
+  dailyLine(d) {
+    return `${DAY_GOALS[d.goal] || ''} ${t('dailyGoal_' + d.goal, { n: d.target })} · ${t('biome_' + BIOMES[d.w || 0].id)} · +${d.reward} 🦴`;
+  }
+  // the seasonal event running now, or the next one
+  eventLine() {
+    const ev = currentEvent();
+    if (ev) return ev.icon + ' ' + t('eventNow', { name: t('event_' + ev.id), n: eventDaysLeft(ev) });
+    const nx = nextEvent();
+    return nx ? nx.ev.icon + ' ' + t('eventNext', { name: t('event_' + nx.ev.id), n: nx.days }) : '';
+  }
+  // ------------------------------------------------------------ v1.9: seasonal events
+  eventsView() {
+    const ev = currentEvent();
+    const when = (e) => `${e.from[1]}.${String(e.from[0]).padStart(2, '0')} – ${e.to[1]}.${String(e.to[0]).padStart(2, '0')}`;
+    return el(
+      'div',
+      { class: 'events' },
+      infoRow('📆', t('eventsTitle'), t('eventsHelp', { n: Math.round((EVENT_BONES - 1) * 100) }), null),
+      ev
+        ? el(
+            'div',
+            { class: 'event-now' },
+            el('span', { class: 'event-ico', 'aria-hidden': 'true', text: ev.icon }),
+            el('b', { text: t('eventNow', { name: t('event_' + ev.id), n: eventDaysLeft(ev) }) }),
+            el('p', { class: 'small', text: t('eventDesc_' + ev.id) }),
+            el('div', { class: 'event-skin' }, dinoIcon(ev.skin), el('span', { text: t('skin_' + ev.skin) + (this.p.owned.skin.includes(ev.skin) ? ' · ' + t('owned') : ' · 🦴 ' + SKINS[ev.skin].price) })),
+            this.p.owned.skin.includes(ev.skin)
+              ? null
+              : el('button', {
+                  class: 'menu-btn primary',
+                  text: t('eventToShop'),
+                  onclick: () => {
+                    this.shopTab = 'skin';
+                    this.preview.skin = ev.skin;
+                    this.openPanel('shop', 'collection');
+                  },
+                }),
+          )
+        : el('p', { class: 'muted', text: this.eventLine() }),
+      el('h3', { text: t('eventsYear') }),
+      el(
+        'div',
+        { class: 'event-list' },
+        EVENTS.map((e) =>
+          el(
+            'div',
+            { class: 'event-row' + (ev && ev.id === e.id ? ' on' : '') },
+            el('span', { class: 'event-ico', 'aria-hidden': 'true', text: e.icon }),
+            el('span', {}, el('b', { text: t('event_' + e.id) }), el('small', { class: 'muted', text: when(e) + ' · ' + t('skin_' + e.skin) })),
+            dinoIcon(e.skin),
+          ),
+        ),
+      ),
+    );
+  }
+  // ------------------------------------------------------------ v1.9: the dino's house
+  houseView() {
+    const h = this.p.house;
+    const slots = houseSlots();
+    const sel = this.houseSlot || null;
+    const slotBtn = (k) =>
+      el(
+        'button',
+        {
+          class: 'h-slot hs-' + k.replace(/\d/, '') + (sel === k ? ' sel' : '') + (slots[k] ? ' full' : ''),
+          'aria-label': t('houseSlot_' + k.replace(/\d/, '')) + (slots[k] ? ': ' + t('furn_' + slots[k]) : ''),
+          onclick: () => {
+            this.houseSlot = sel === k ? null : k;
+            this.renderPanel();
+          },
+        },
+        slots[k] ? FURNITURE[slots[k]].icon : '＋',
+      );
+    const keys = (s) => Array.from({ length: SLOTS[s] }, (_, i) => s + i);
+    const trophies = Object.keys(TROPHIES).filter((id) => trophyCount(id) > 0);
+    const room = el(
+      'div',
+      { class: 'h-room', style: `--wall:${(WALLS[h.wall] || WALLS.cream).c};--floor:${(FLOORS[h.floor] || FLOORS.wood).c}` },
+      el('div', { class: 'h-wall' }, keys('wall').map(slotBtn)),
+      el('div', { class: 'h-shelf', title: t('trophyShelf') }, trophies.length ? trophies.map((id) => el('span', { class: 'h-trophy', title: t('trophy_' + id) }, TROPHIES[id].icon, el('small', { text: '×' + trophyCount(id) }))) : el('small', { class: 'muted', text: t('trophyShelfEmpty') })),
+      el('div', { class: 'h-table' }, keys('table').map(slotBtn)),
+      el('div', { class: 'h-floor' }, el('span', { class: 'h-dino', 'aria-hidden': 'true' }, dinoIcon(SKINS[this.p.skin] ? this.p.skin : 'classic')), keys('floor').map(slotBtn)),
+    );
+    // the chosen slot: what can stand there
+    let picker = null;
+    if (sel) {
+      const kind = sel.replace(/\d/, '');
+      const mine = h.owned.filter((id) => FURNITURE[id].slot === kind);
+      picker = el(
+        'div',
+        { class: 'h-picker' },
+        el('p', { class: 'small', text: t('housePick', { where: t('houseSlot_' + kind).toLowerCase() }) }),
+        el(
+          'div',
+          { class: 'seg' },
+          [el('button', { class: 'seg-opt' + (!slots[sel] ? ' on' : ''), onclick: () => (placeFurniture(sel, ''), this.renderPanel()) }, el('span', { class: 'seg-ico', text: '∅' }), el('span', { class: 'seg-name', text: t('houseEmpty') }))].concat(
+            mine.map((id) => el('button', { class: 'seg-opt' + (slots[sel] === id ? ' on' : ''), onclick: () => (placeFurniture(sel, id), this.renderPanel()) }, el('span', { class: 'seg-ico', text: FURNITURE[id].icon }), el('span', { class: 'seg-name', text: t('furn_' + id) }))),
+          ),
+        ),
+        mine.length ? null : el('p', { class: 'muted small', text: t('houseNoneYet') }),
+      );
+    }
+    const style = (kind, list) =>
+      choiceRow({
+        icon: kind === 'wall' ? '🎨' : '🟫',
+        label: t(kind === 'wall' ? 'houseWall' : 'houseFloor'),
+        options: Object.entries(list).map(([id, it]) => ({
+          v: id,
+          pic: el('span', { class: 'h-swatch', style: `background:${it.c}` }),
+          name: t((kind === 'wall' ? 'wall_' : 'floor_') + id),
+          desc: hasStyle(kind, id) ? t('owned') : t('housePrice', { n: it.price }),
+        })),
+        value: h[kind],
+        pick: (v) => {
+          if (!buyStyle(kind, v)) return this.toast(t('notEnough'), 'red');
+          this.g.sfx.reward();
+          this.renderPanel();
+        },
+      });
+    const shop = ['wall', 'table', 'floor'].map((s) =>
+      el(
+        'div',
+        {},
+        el('h3', { text: t('houseSlot_' + s) }),
+        Object.entries(FURNITURE)
+          .filter(([, f]) => f.slot === s)
+          .map(([id, f]) =>
+            infoRow(
+              f.icon,
+              t('furn_' + id),
+              t('furnComfort', { n: f.comfort }),
+              h.owned.includes(id)
+                ? el('span', { class: 'card-tag', text: Object.values(slots).includes(id) ? t('housePlaced') : t('owned') })
+                : el('button', {
+                    class: 'val',
+                    text: '🦴 ' + f.price,
+                    disabled: this.p.coins < f.price,
+                    onclick: () => {
+                      if (!buyFurniture(id)) return this.toast(t('notEnough'), 'red');
+                      this.g.sfx.reward();
+                      this.toast(t('bought'), 'gold');
+                      this.setCoins();
+                      this.renderPanel();
+                    },
+                  }),
+            ),
+          ),
+      ),
+    );
+    const c = comfort();
+    return el(
+      'div',
+      { class: 'house' },
+      infoRow('🏠', t('houseTitle'), t('houseHelp', { max: Math.round(HOUSE_MAX_BONUS * 100), n: COMFORT_MAX }), null),
+      el('p', { class: 'album-count', text: t('houseComfort', { n: c, b: Math.round(houseBonus() * 100) }) }),
+      el('div', { class: 'bar' }, el('i', { style: `width:${Math.min(100, Math.round((c / COMFORT_MAX) * 100))}%` })),
+      room,
+      picker,
+      el('p', { class: 'muted small', text: t('houseTapSlot') }),
+      style('wall', WALLS),
+      style('floor', FLOORS),
+      shop,
+      el('h3', { text: '🏆 ' + t('trophiesTitle') }),
+      Object.keys(TROPHIES).map((id) => infoRow(TROPHIES[id].icon, t('trophy_' + id) + (trophyCount(id) ? ' ×' + trophyCount(id) : ''), t('trophyHow_' + id), null)),
+    );
   }
   progressView() {
     return this.hubView([
@@ -1290,7 +1491,7 @@ export class UI {
     }
   }
   renderPanel() {
-    const titles = { bestiary: 'bestiary', collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle', jukebox: 'jukebox' };
+    const titles = { bestiary: 'bestiary', collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle', jukebox: 'jukebox', house: 'house', events: 'events' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
     const body = $('panel-body');
@@ -1310,6 +1511,8 @@ export class UI {
       challenge: () => this.challengeView(),
       pass: () => this.passView(),
       jukebox: () => this.jukeboxView(),
+      house: () => this.houseView(),
+      events: () => this.eventsView(),
       levels: () => levelsView(this),
       leveledit: () => levelEditView(this),
       editor: () =>
@@ -1350,11 +1553,13 @@ export class UI {
     const owned = p.owned[kind];
     const grid = el('div', { class: 'cards' });
     if (kind === 'skin' || kind === 'hat' || kind === 'pet') grid.append(this.eggCard(), this.eggCard(true));
+    const ev = currentEvent();
     for (const [id, item] of Object.entries(list)) {
       if (item.hidden) continue;
       const have = owned.includes(id);
       const status = item.editor && have ? t('edOpen') : id === p[kind] ? t('equipped') : have ? t('owned') : null;
       if ((item.season || item.album || item.pass || item.boss) && !have) continue; // gifts are shown once you have them
+      if (item.event && !have && (!ev || ev.id !== item.event)) continue; // event skins: only while the event runs
       const icon =
         kind === 'skin' ? dinoIcon(id) : kind === 'hat' ? hatIcon(id) : kind === 'pet' ? petIcon(id) : kind === 'dance' ? danceIcon(id, p.skin) : kind === 'theme' ? themeIcon(id) : trailIcon(id);
       const price = item.level
@@ -1382,7 +1587,7 @@ export class UI {
     if (this.p.dailyShop.date !== key) this.p.dailyShop = { date: key, bought: [] };
     if (this.p.dailyShop.offers) return this.p.dailyShop.offers; // the same three all day
     const pool = [
-      ...Object.entries(SKINS).filter(([id, it]) => it.price > 0 && !it.editor && !this.p.owned.skin.includes(id)).map(([id, it]) => ['skin', id, it.price]),
+      ...Object.entries(SKINS).filter(([id, it]) => it.price > 0 && !it.editor && !it.event && !this.p.owned.skin.includes(id)).map(([id, it]) => ['skin', id, it.price]),
       ...Object.entries(HATS).filter(([id, it]) => it.price > 0 && !this.p.owned.hat.includes(id)).map(([id, it]) => ['hat', id, it.price]),
     ].sort((a, b) => (a[0] + a[1] < b[0] + b[1] ? -1 : 1));
     let seed = [...key].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -1446,7 +1651,7 @@ export class UI {
       const pw = petPower(id, l);
       const what =
         id === 'turtle' ? t('petPw_turtle', { n: pw.bones100 }) : id === 'ptera' ? t('petPw_ptera', { n: Math.round((pw.reach / 1.4) * 100) }) : id === 'frog' ? t('petPw_frog', { n: pw.tongue.toFixed(1) }) : t('petPw_chick', { n: Math.round((pw.powerK - 1) * 100) });
-      lines.push(el('li', { class: owned && l <= pr.level ? 'on' : 'muted' }, `${t('petLevel', { n: l })}: ${what}${l === PET_MAX ? ' · ' + t('petPw_shield') : ''}`));
+      lines.push(el('li', { class: owned && l <= pr.level ? 'on' : 'muted' }, `${t('petLevel', { n: l })}: ${what}${pw.saves ? ' · 🛟 ' + t('petPw_saves', { n: pw.saves }) : ''}${l === PET_MAX ? ' · ' + t('petPw_shield') : ''}`));
     }
     return el(
       'div',
@@ -1772,7 +1977,7 @@ export class UI {
       'div',
       { class: 'modes' },
       card('mode_adventure', t('modeDesc_adventure', { n: totalStars(), max: BIOMES.length * ADV_LEVELS * 3 }), () => this.openPanel('adventure', 'modes')),
-      withBadge(card('daily', d.done ? t('dailyDoneShort', { n: d.streak }) : t('dailyTarget', { n: d.target, b: d.reward }), () => g.startMode('daily')), st.daily),
+      withBadge(card('daily', d.done ? t('dailyDoneShort', { n: d.streak }) : this.dailyLine(d), () => g.startMode('daily')), st.daily),
       advStars(0, ADV_LEVELS - 1) > 0
         ? card('mode_bossrush', t('modeDesc_bossrush', { n: this.p.bossRush.best, max: ADV_ORDER.length, time: this.p.bossRush.time ? this.p.bossRush.time + 's' : '-' }), () => g.startMode('bossrush'))
         : locked('mode_bossrush', t('unlockBossRush')),
@@ -1846,6 +2051,8 @@ export class UI {
   playLevel(w, l) {
     const start = () => this.g.startMode('adventure', { world: w, level: l });
     if (l === 0 && !this.p.storySeen.includes(w)) return this.showStory(w, start);
+    // v1.9: Adventure+ has a story of its own, act 2 (one new chapter per world)
+    if (l === 0 && advHardOn() && !BIOMES[w].seasonal && !this.p.storySeen.includes('a2-' + w)) return this.showStory('a2-' + w, start);
     start();
   }
   // the season run has a story page of its own, a new one every season (shown once)
@@ -1858,6 +2065,7 @@ export class UI {
   // second chapter of the season world (the season run)
   showStory(w, then) {
     if (w === 's2') return this.showSeasonStory(then);
+    if (typeof w === 'string' && w.startsWith('a2')) return this.showAct2(w, then);
     const end = w === 'end';
     const b = end ? BIOMES[LAST_STORY_W] : BIOMES[w];
     const scene = $('story-scene');
@@ -1876,6 +2084,30 @@ export class UI {
     const key = end ? 'end' : w;
     if (!this.p.storySeen.includes(key)) {
       this.p.storySeen.push(key);
+      save();
+    }
+  }
+  // act 2: 'a2-<world>' before a world in Adventure+, 'a2end' after its last boss
+  showAct2(key, then) {
+    const end = key === 'a2end';
+    const w = end ? LAST_STORY_W : Number(key.slice(3));
+    const b = BIOMES[w];
+    const kind = BOSS_KIND[b.id];
+    $('story-scene').style.cssText = `--sky:${end ? '#1a1440' : b.sky};--ground:${b.ground}`;
+    $('story-scene').replaceChildren(el('span', { class: 'story-sky', text: end ? '🌙✨🌙' : '💫' }), el('span', { class: 'story-boss', text: end ? '🏡' : BOSS_EMOJI[kind] || '' }), dinoIcon(this.p.skin));
+    $('story-title').textContent = end ? t('act2EndTitle') : t('act2Chapter', { n: advPos(w) + 1, name: t('biome_' + b.id) });
+    $('story-text').textContent = t(end ? 'act2_end' : 'act2_' + b.id);
+    $('story-ok').textContent = then ? t('storyGo') : t('newsOk');
+    this.storyThen = then || null;
+    $('story').classList.remove('hidden');
+    if (!this.p.storySeen.includes(key)) {
+      this.p.storySeen.push(key);
+      if (end) {
+        // the end of act 2: a reward, once
+        this.p.act2 = true;
+        this.p.coins += 500;
+        setTimeout(() => this.toast(t('act2Reward', { n: 500 }), 'gold'), 600);
+      }
       save();
     }
   }
@@ -2548,8 +2780,9 @@ export class UI {
     if (this.lanView === 'home' && !isHost) this.lanView = 'lobby';
     if (this.panel === 'lan' && this.lanView === 'lobby') this.renderPanel();
   }
-  mpResults(results, myId, tour, mode, cup) {
+  mpResults(results, myId, tour, mode, cup, bld) {
     this.results = results;
+    this.resultsBld = bld || null;
     this.resultsCup = cup || null;
     this.resultsMode = mode || this.lanMode;
     this.tour = tour || null;
@@ -2744,6 +2977,7 @@ export class UI {
       el('p', { class: 'muted small', text: t('mpHotspotTip') }),
       this.hcEl(),
       this.specEl(),
+      this.leagueEl(),
       this.lanHistEl(),
       this.coopTopEl(),
     );
@@ -2878,6 +3112,7 @@ export class UI {
         dinoIcon(SKINS[p.skin] ? p.skin : 'classic'),
         el('span', { text: p.name }),
         TITLES[p.ti] ? el('span', { class: 'title-tag small', text: TITLES[p.ti].icon + ' ' + t('title_' + p.ti) }) : null,
+        p.tr && p.tr.length ? el('span', { class: 'trophy-tag', title: p.tr.map((id) => t('trophy_' + id)).join(', '), 'aria-label': t('trophiesOf', { n: p.tr.length }), text: p.tr.map((id) => (TROPHIES[id] || {}).icon || '').join('') }) : null,
         el('span', {
           class: 'muted small',
           text: [
@@ -2925,7 +3160,7 @@ export class UI {
     const r = this.results || [];
     const winner = r[0];
     const mode = this.resultsMode || this.lanMode;
-    const coop = mode === 'coop' || mode === 'bosses';
+    const coop = COOP_MODES.includes(mode);
     const timeOf = (p) => (p.ft ? ' · 🏁 ' + p.ft.toFixed(1) + 's' : '') + (p.hc ? ' · ' + HC_ICON[p.hc] : '');
     const again = (label) =>
       this.lanIsHost ? el('button', { class: 'menu-btn primary', text: label, disabled: this.lobby.filter((p) => !p.spec).length < 2, onclick: () => this.g.lanStart() }) : el('p', { class: 'blink', text: t('mpWaitHost') });
@@ -2963,7 +3198,21 @@ export class UI {
         this.lanHistEl(),
       );
     }
-    const head = coop && winner ? t('coopResult', { n: Math.max(...r.map((p) => p.sc)) }) : winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
+    // builder vs runners, the raid boss: who won is the first line
+    const bldName = this.resultsBld ? (this.lobby.find((p) => p.id === this.resultsBld) || {}).name || '?' : '';
+    const special =
+      mode === 'builder' && winner
+        ? r.some((p) => p.ft)
+          ? t('bldRunnersWon', { name: r.find((p) => p.ft).name })
+          : this.resultsBld === this.myId
+            ? t('bldYouWon')
+            : t('bldBuilderWon', { name: bldName })
+        : mode === 'raid' && winner
+          ? r.some((p) => p.ft)
+            ? t('raidResultWon')
+            : t('raidResultLost')
+          : null;
+    const head = special ? special : coop && winner ? t('coopResult', { n: Math.max(...r.map((p) => p.sc)) }) : winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
     const tour = this.tour;
     // tournament: the standings after this race, and the champion after the last one
     const tourEls = tour
@@ -2983,7 +3232,22 @@ export class UI {
       again(tour ? (tour.done ? t('tourNew') : t('tourNext')) : t('again')),
       this.quickEl(),
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
+      this.leagueEl(),
       this.lanHistEl(),
+    );
+  }
+  // the friends' league: this week's points, and the champions of the last weeks
+  leagueEl() {
+    const done = this.g.leagueRoll();
+    if (done) setTimeout(() => this.toast(done.me ? t('leagueYouChamp') : t('leagueChamp', { name: done.name }), 'gold'), 300);
+    const rows = leagueTable();
+    const champs = this.p.league.champs || [];
+    return el(
+      'div',
+      { class: 'lan-hist league' },
+      infoRow('👑', t('leagueTitle', { n: leagueDaysLeft() }), t('leagueHelp', { pts: LEAGUE_POINTS.slice(0, 3).join(', ') }), null),
+      rows.length ? el('ol', { class: 'top' }, rows.slice(0, 8).map((e, i) => el('li', { class: e.name === this.p.name ? 'me' : '' }, el('b', { text: (i === 0 ? '👑 ' : '') + e.pts }), el('span', { text: e.name })))) : el('p', { class: 'muted small', text: t('leagueEmpty') }),
+      champs.length ? el('p', { class: 'muted small', text: t('leaguePast') + ' ' + champs.slice(0, 4).map((c) => '👑 ' + c.name).join(' · ') }) : null,
     );
   }
   // the last 10 LAN races on this device, and who wins most often
@@ -2994,7 +3258,7 @@ export class UI {
       .slice(0, 5);
     const when = (d) => new Date(d).toLocaleString(undefined, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const line = (e) => {
-      const coop = e.m === 'coop' || e.m === 'bosses';
+      const coop = COOP_MODES.includes(e.m);
       const team = TEAM_MODES.includes(e.m);
       const res = coop
         ? t('lanHistCoop', { n: Math.max(0, ...e.r.map((x) => x.s)) })

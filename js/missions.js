@@ -205,6 +205,13 @@ export const ACHIEVEMENTS = [
   { id: 'stickers24', test: () => Object.keys(profile.stickers || {}).length >= 24 },
   { id: 'mastery1', test: () => Object.values(profile.mastery || {}).some((r) => r >= 1) },
   { id: 'titled', test: () => (profile.titles || []).length >= 3 },
+  // v1.9
+  { id: 'raidWin', test: (s) => (s.raids || 0) >= 1 },
+  { id: 'builderWin', test: (s) => (s.builderWins || 0) >= 1 },
+  { id: 'leagueChamp', test: (s) => (s.leagues || 0) >= 1 },
+  { id: 'house3', test: () => (profile.house.owned || []).length >= 3 },
+  { id: 'act2', test: () => !!profile.act2 },
+  { id: 'eventSkin', test: () => profile.owned.skin.some((id) => SKINS[id] && SKINS[id].event) },
 ];
 // the boss level of a world, as saved in profile.adventure ("11-2")
 const advBoss = (id) => `${BIOMES.findIndex((b) => b.id === id)}-2`;

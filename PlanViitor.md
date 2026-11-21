@@ -76,6 +76,19 @@ Toată lista din notes/todo-design-gameplay.md (design și gameplay), plus cele 
 5. Realizări și medalii noi pentru LAN (ștafete, cupe, cadouri, sosiri, mesaje)
 6. Magazin pe termen lung: 20 de titluri, album de 48 de abțibilduri cu sclipici, măiestria skin-urilor (3 stele), îmbunătățiri noi (experiență, reînviere, cufăr) și mai multe niveluri pentru cele vechi. Peste 200 000 de oase de cheltuit în total.
 
+## Gata în v1.9
+
+1. LAN Raid: toți împotriva unui boss cu bară de viață comună (obstacolele trecute îl lovesc)
+2. LAN Constructor contra alergători: constructorul pune obstacole cu energie, alergătorii trebuie să ajungă la 1500
+3. Liga prietenilor: puncte pe loc în fiecare cursă LAN, campion în fiecare săptămână
+4. Trofee (cupe, turnee, ligă, raid, constructor, ștafetă) pe raftul din casă și lângă nume în camera LAN
+5. Provocarea zilei: 31 de provocări după ziua din lună (lume + scop)
+6. Actul 2 al poveștii în Aventura+ (12 capitole noi și un final)
+7. Animăluțul te salvează de 1–2 ori pe tură (de la nivelul 2 / 4)
+8. Vremea și noaptea schimbă jocul: ploaia alunecă, noaptea oasele +25%
+9. Casa dinozaurului: 19 piese de mobilă, tapet, podea; confortul dă până la +10% oase
+10. Evenimente de sezon (6 pe an) cu skin vândut doar atunci și oase +20%
+
 ## Idei noi
 
 - Salvare în cloud, clasament online și publicare pe Google Play (amânate deocamdată, au nevoie de server sau de cont de dezvoltator).

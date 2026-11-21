@@ -13,6 +13,7 @@ import { MEDALS } from './medals.js';
 import { levelId, MAX_LEVELS, MAX_SLOTS, PIECES, SPEEDS } from './levels.js';
 import { BIOMES } from './biomes.js';
 import { TITLES, STICKERS, MASTERY, PAGES } from './longterm.js';
+import { FURNITURE, WALLS, FLOORS } from './house.js';
 import qrcode from 'qrcode';
 
 const HEADER = 'ANOTHERDINO';
@@ -27,6 +28,7 @@ const STAT_KEYS = [
   'teamBosses', 'seasonRuns', 'seasonBest', 'rushes',
   // v1.7 / v1.8: LAN and the long-term shop
   'giftsGot', 'giftsSent', 'relayWins', 'brackets', 'lanFinishes', 'packs', 'quickMsgs',
+  'raids', 'builderWins', 'leagues',
 ];
 
 function fnv(str) {
@@ -147,7 +149,7 @@ export function encodeProgress({ levels = true } = {}) {
     ['lvstars', Object.entries(p.levelStars || {}).map(([k, v]) => `${k}:${v}`).join(',')],
   ];
   // v1.5: story pages already seen, the track of the week, the rule of the day
-  fields.push(['story', (p.storySeen || []).map((k) => String(k).replace(/[^a-z0-9]/gi, '')).join(',')]);
+  fields.push(['story', (p.storySeen || []).map((k) => String(k).replace(/[^a-z0-9-]/gi, '')).join(',')]);
   if (p.weeklyTrack && p.weeklyTrack.done) fields.push(['wtrack', p.weeklyTrack.week]);
   // v1.6: best score of the season run (only while it is the same season)
   // v1.6: Adventure+ crowns and the boss rush record
@@ -162,6 +164,13 @@ export function encodeProgress({ levels = true } = {}) {
   if (p.pagesDone.length) fields.push(['pages', p.pagesDone.join(',')]);
   const mast = Object.entries(p.mastery).filter(([, r]) => r > 0);
   if (mast.length) fields.push(['mast', mast.map(([k, r]) => `${k}:${r}`).join(',')]);
+  // v1.9: the dino's house (furniture, where it stands, wallpaper and floor)
+  const h = p.house;
+  if (h.owned.length || h.styles.length) {
+    fields.push(['house', [h.wall, h.floor, ...h.owned].join(',')]);
+    fields.push(['hslot', Object.entries(h.slots).filter(([, id]) => id).map(([k, id]) => `${k}:${id}`).join(',')]);
+    if (h.styles.length) fields.push(['hsty', h.styles.join(',')]);
+  }
   if (levels && p.levels && p.levels.length) fields.push(['levels', levelsToText(p.levels)]);
   // the co-op leaderboard (best 5 teams) travels with the tracks: both stay out of a too-big QR
   if (levels && p.coopTop && p.coopTop.length) fields.push(['coop', p.coopTop.slice(0, 5).map((e) => `${Math.floor(e.s) || 0}~${String(e.names || '').replace(/[;=,|~]/g, '').slice(0, 60)}`).join('|')]);
@@ -253,7 +262,20 @@ export function decodeProgress(text) {
         .filter(([k]) => SKINS[k])
         .map(([k, v]) => [k, Math.min(MASTERY.length, num(v))]),
     ),
-    storySeen: list('story').filter((k) => /^[a-z0-9]{1,8}$/i.test(k)).map((k) => (/^\d+$/.test(k) ? Number(k) : k)),
+    house: vars.house
+      ? {
+          wall: WALLS[list('house')[0]] ? list('house')[0] : 'cream',
+          floor: FLOORS[list('house')[1]] ? list('house')[1] : 'wood',
+          owned: list('house').slice(2).filter((id) => FURNITURE[id]),
+          slots: Object.fromEntries(
+            list('hslot')
+              .map((e) => e.split(':'))
+              .filter(([k, id]) => /^(wall|floor|table)\d$/.test(k) && FURNITURE[id]),
+          ),
+          styles: list('hsty').filter((s) => /^(wall|floor):[a-z]+$/.test(s)),
+        }
+      : null,
+    storySeen: list('story').filter((k) => /^[a-z0-9-]{1,8}$/i.test(k)).map((k) => (/^\d+$/.test(k) ? Number(k) : k)),
     weeklyTrack: /^[\w-]{1,16}$/.test(vars.wtrack || '') ? vars.wtrack : '',
     mutator: (() => {
       const [date, best] = (vars.mut || '').split(',');
@@ -380,6 +402,17 @@ export function mergeProgress(d) {
   p.glitter = Math.max(p.glitter || 0, d.glitter || 0);
   for (const n of d.pagesDone || []) if (!p.pagesDone.includes(n)) p.pagesDone.push(n);
   for (const [k, v] of Object.entries(d.mastery || {})) p.mastery[k] = Math.max(p.mastery[k] || 0, v);
+  // v1.9: the house: furniture and styles from both devices; the layout of the other one if this one is empty
+  if (d.house) {
+    const h = p.house;
+    for (const id of d.house.owned) if (!h.owned.includes(id)) h.owned.push(id);
+    for (const s of d.house.styles) if (!h.styles.includes(s)) h.styles.push(s);
+    if (!Object.values(h.slots).some(Boolean)) {
+      h.slots = { ...h.slots, ...d.house.slots };
+      h.wall = d.house.wall;
+      h.floor = d.house.floor;
+    }
+  }
   if (!p.name && d.name) p.name = d.name;
   save();
 }

@@ -3,6 +3,39 @@
 // id не связан с номером сборки (его ставит CI), поэтому окно работает и в браузере, и в приложениях.
 export const NEWS = [
   {
+    id: '2026-11-21-v19',
+    ro: [
+      'Casa dinozaurului (Colecție > Casa): cumperi mobilă, alegi tapetul și podeaua. Confortul dă până la +10% oase, iar pe raft stau trofeele tale.',
+      'LAN: Raid, toți împotriva unui boss uriaș cu bară de viață comună. Și Constructor: unul pune obstacole, ceilalți aleargă până la 1500.',
+      'LAN: Liga prietenilor, cu puncte pentru fiecare cursă și un campion în fiecare săptămână. Trofeele tale se văd lângă nume în cameră.',
+      'Provocarea zilei e alta în fiecare zi a lunii: altă lume și alt scop (puncte, oase, sărituri, obstacole).',
+      'Evenimente de sezon, de 6 ori pe an: oase +20% și un skin care se vinde doar atunci. Acum e Toamna de aur!',
+      'Animăluțul (de la nivelul 2) sare în fața obstacolului și te salvează o dată pe tură (de două ori de la nivelul 4).',
+      'Vremea contează: în ploaie aluneci puțin, iar noaptea fiecare os valorează +25%.',
+      'Aventura+ are actul 2 al poveștii: un capitol nou în fiecare lume și un final nou.',
+    ],
+    ru: [
+      'Дом динозавра (Коллекция > Дом): покупай мебель, выбирай обои и пол. Уют даёт до +10% косточек, а на полке стоят твои трофеи.',
+      'LAN: Рейд, все против огромного босса с общей полоской здоровья. И Строитель: один ставит препятствия, остальные бегут до 1500.',
+      'LAN: Лига друзей, очки за каждую гонку и чемпион каждую неделю. Твои трофеи видны рядом с именем в комнате.',
+      'Задание дня своё для каждого дня месяца: другой мир и другая цель (очки, косточки, прыжки, препятствия).',
+      'Сезонные события, 6 раз в год: косточки +20% и скин, который продаётся только тогда. Сейчас — Золотая осень!',
+      'Питомец (с 2 уровня) прыгает перед препятствием и спасает тебя раз за забег (дважды с 4 уровня).',
+      'Погода важна: в дождь немного скользишь, а ночью каждая косточка стоит +25%.',
+      'В Приключении+ есть второй акт истории: новая глава в каждом мире и новый финал.',
+    ],
+    en: [
+      'The dino\'s house (Collection > House): buy furniture, pick the wallpaper and floor. Comfort gives up to +10% bones, and your trophies stand on the shelf.',
+      'LAN: Raid, everyone against one huge boss with a shared health bar. And Builder: one places obstacles, the others run to 1500.',
+      'LAN: the friends\' league, points for every race and a champion every week. Your trophies show next to your name in the room.',
+      'The daily challenge is different on every day of the month: another world and another goal (points, bones, jumps, obstacles).',
+      'Seasonal events, 6 times a year: bones +20% and a skin sold only then. Golden autumn is on now!',
+      'Your pet (from level 2) jumps in front of an obstacle and saves you once a run (twice from level 4).',
+      'Weather matters: in the rain you slide a little, and at night every bone is worth +25%.',
+      'Adventure+ has act 2 of the story: a new chapter in every world and a new ending.',
+    ],
+  },
+  {
     id: '2026-11-21-v18',
     ro: [
       'LAN: un mod nou, Cupa 1 la 1. Tablou cu eliminare: câștigi duelul și treci în runda următoare, până la campion.',

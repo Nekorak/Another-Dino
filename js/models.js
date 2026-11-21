@@ -17,6 +17,13 @@ export const SKINS = {
   coral: { price: 500, body: '#ff8a6a', dark: '#d8604a', belly: '#ffe0c8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#6a2414', foot: '#b84a34', pattern: 'spots' },
   tiger: { price: 700, body: '#f29a2a', dark: '#2a1c10', belly: '#fff0d8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#3a1a08', foot: '#c8741a', pattern: 'stripes' },
   robot: { price: 2200, body: '#a9b4c0', dark: '#6d7884', belly: '#d3dbe3', eye: '#ff3b30', pupil: '#ffd2cf', mouth: '#38404a', foot: '#56606b', pattern: 'panels' },
+  // v1.9: sold only during a seasonal event (see calendar.js)
+  snowman: { price: 600, event: 'winter', body: '#f4f8fc', dark: '#c8d6e4', belly: '#ffffff', eye: '#1b1b1b', pupil: '#ff7a1a', mouth: '#1b1b1b', foot: '#3a6ab8', pattern: 'ice' },
+  blossom: { price: 600, event: 'spring', body: '#ffb3d1', dark: '#e07aa6', belly: '#fff4fa', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#7a2a4a', foot: '#6fbf4a', pattern: 'spots' },
+  party: { price: 600, event: 'kids', body: '#ffd23f', dark: '#3f7fd9', belly: '#ff6f91', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#3a1a08', foot: '#3f7fd9', pattern: 'rainbow' },
+  surf: { price: 600, event: 'summer', body: '#2fc4d6', dark: '#1a8a9a', belly: '#ffe9a8', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#0e4a52', foot: '#ff8a3a', pattern: 'stripes' },
+  ghostly: { price: 600, event: 'halloween', body: '#e8e4f4', dark: '#9a8ab8', belly: '#ffffff', eye: '#1b1b1b', pupil: '#ff8a1a', mouth: '#2a1a3a', foot: '#7a6a98', pattern: 'ribs' },
+  autumn: { price: 600, event: 'harvest', body: '#d9772a', dark: '#8a3f14', belly: '#ffd98a', eye: '#ffffff', pupil: '#1b1b1b', mouth: '#4a1a08', foot: '#a8521a', pattern: 'spots' },
   // unlocked by player level, not bought
   lava: { level: 5, body: '#3a2a2a', dark: '#241818', belly: '#ff8c1a', eye: '#ffcf3a', pupil: '#ff3b00', mouth: '#120a0a', foot: '#241818', pattern: 'lava' },
   ice: { level: 10, body: '#a8e4ff', dark: '#6cc4ec', belly: '#ffffff', eye: '#ffffff', pupil: '#2a6aa8', mouth: '#3a7ab8', foot: '#6cc4ec', pattern: 'ice' },

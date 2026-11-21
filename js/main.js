@@ -31,7 +31,7 @@ import { createTransport } from './net.js';
 import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked, SEASON_W, seasonRunKey, ADV_ORDER, levelKey, advHardOn } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
-import { LanSession, COOP_HEARTS, HANDICAPS, GIFTS, GIFTS_PER_DAY, TEAM_MODES } from './multiplayer.js';
+import { LanSession, COOP_HEARTS, HANDICAPS, GIFTS, GIFTS_PER_DAY, TEAM_MODES, COOP_MODES, BUILD_PIECES, BUILD_GOAL, BUILD_ENERGY } from './multiplayer.js';
 import { UI } from './ui.js';
 import { Recorder } from './replay.js';
 import { addPassXp } from './rewards.js';
@@ -41,6 +41,8 @@ import { petPower, growPet, petLevel, PET_MAX } from './pets.js';
 import { SPEEDS, trimmed, levelId, saveLevelStars, finishWeeklyTrack, storeLevel } from './levels.js';
 import { createBoss } from './bosses.js';
 import { masteryK, checkEarnedTitles, TITLES } from './longterm.js';
+import { DAY_GOALS, eventBonesK, currentEvent, eventDaysLeft } from './calendar.js';
+import { houseK, leagueRace, leagueRoll, myTrophies } from './house.js';
 
 setCustomSkin(profile.customSkin); // the dino painted in the skin editor
 const recorder = new Recorder(); // the last 10 seconds, for the replay after a game over
@@ -60,6 +62,7 @@ const SWIM_TOP = 3.4; // the dino can't swim higher than this (so the high fish 
 const SPAWN_X = 42;
 const DESPAWN_X = -16;
 const NIGHT_EVERY = 700;
+const NIGHT_BONES = 1.25; // v1.9: bones are worth more at night
 const NIGHT_LEN = 20;
 const MINI_BOSS_EVERY = 2000; // endless modes: a short boss fight every 2000 points
 const MINI_BOSS_TIME = 14;
@@ -409,6 +412,8 @@ function rebuildDino(p, skin, hat) {
 // pet that follows player 1
 let pet = null;
 let petPw = petPower('none');
+let petSaves = 0; // v1.9: hits the pet can still take for you in this run
+let petHop = 0; // the pet's jump when it saves you
 function setPet(id) {
   if (pet) scene.remove(pet.root);
   pet = createPet(id, petLevel(id) >= PET_MAX); // at the top level the pet evolves
@@ -1054,6 +1059,11 @@ let daily = null;
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const isApp = !!(window.desktop || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()));
 
+// the challenge of the day: how far this run is towards its goal
+function dailyValue(points) {
+  if (!daily) return 0;
+  return daily.goal === 'bones' ? run.coins : daily.goal === 'jumps' ? run.jumps : daily.goal === 'obstacles' ? run.obstacles : points;
+}
 function newRunStats() {
   return { score: 0, jumps: 0, coins: 0, obstacles: 0, ducks: 0, powerups: 0, biome: 1, meteors: 0, perfects: 0 };
 }
@@ -1077,7 +1087,7 @@ const RULES = {
   bossrush: { revive: false, powerups: true, bones: 1, missions: true, record: false },
 };
 // LAN modes where the team shares the hearts
-const isCoopLan = (m) => m === 'coop' || m === 'bosses';
+const isCoopLan = (m) => COOP_MODES.includes(m);
 let rush = null; // boss rush: { i, world, done }
 let localCoop = false; // 2-4 players on one screen, sharing the hearts
 let localHearts = 0;
@@ -1166,17 +1176,18 @@ function resetRun(seed) {
   nextBombAt = 200 + IR() * 100;
   nextEventAt = 900 + R() * 600;
   nextFossilAt = 350 + IR() * 500;
-  nextBossAt = rush ? 120 : mode === 'lan' && lanMode === 'bosses' ? 300 : MINI_BOSS_EVERY;
+  nextBossAt = rush ? 120 : mode === 'lan' && lanMode === 'bosses' ? 300 : mode === 'lan' && lanMode === 'raid' ? Infinity : MINI_BOSS_EVERY;
   slowK = 1;
   speedBoost = 1;
   for (const p of players) resetPlayer(p);
   if (upgradeLevel('shieldStart') && rules().powerups) for (const p of players) p.power.shield = powerTime().shield;
   if (mode === 'mutator' && mut && mut.id === 'giant') for (const p of players) p.power.giant = 8;
+  petSaves = pet ? petPw.saves : 0;
   if (petPw.shield && pet && rules().powerups) player.power.shield = Math.max(player.power.shield, powerTime().shield * 0.5); // a fully grown pet
   run = newRunStats();
   ghostRec = [];
   ghostClock = 0;
-  const startBiome = adv ? adv.world : mode === 'season' ? SEASON_W : rush ? rush.world : 0;
+  const startBiome = adv ? adv.world : mode === 'season' ? SEASON_W : rush ? rush.world : daily ? daily.w || 0 : 0;
   if (env.biome !== startBiome) setBiome(startBiome, true);
   tutorial = mode === 'solo' && !profile.tutorial ? { plan: ['cactus', 'bird'], freeze: null, done: false } : null;
   run.hadTutorial = !!tutorial;
@@ -1242,7 +1253,7 @@ function startMode(m, opts = {}) {
   }
   if (rush) ui.toast(t('mode_bossrush'), 'gold');
   if (challenge) ui.toast(t('chBeat', { name: challenge.name, n: challenge.score }), 'gold');
-  if (daily) ui.toast(t('dailyGoal', { n: daily.target }), 'gold');
+  if (daily) ui.toast(DAY_GOALS[daily.goal] + ' ' + t('dailyGoal_' + daily.goal, { n: daily.target }), 'gold');
   if (adv && adv.custom) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
   else if (adv) ui.toast(t('advLevelTitle', { w: t('biome_' + adv.biome), n: adv.level + 1 }), 'biome');
   if (m === 'zen' || m === 'hardcore' || m === 'season') ui.toast(t('mode_' + m), 'gold');
@@ -1288,6 +1299,13 @@ const teamPlay = () => isCoop() || (isLocal() && localCoop);
 // final: the team is out of hearts (co-op), so this hit really ends the run
 function killPlayer(p, o, final = false) {
   if (rules().noDeath) return zenBump(p, o);
+  // v1.9: the pet jumps in front of the obstacle (once or twice a run, by its level)
+  if (p === player && !final && pet && petSaves > 0 && rules().powerups) {
+    petSaves--;
+    coopRescue(p, o, null, -1);
+    petHop = 0.6;
+    return ui.toast(t('petSaved', { name: t('pet_' + profile.pet), n: petSaves }), 'gold');
+  }
   // LAN handicap: a spare heart of this player's own comes before the team's
   if (mode === 'lan' && p === player && !final && p.spare > 0) return coopRescue(p, o, null, --p.spare);
   if (isCoop() && p === player && !final && lan.coopHit() > 0) return coopRescue(p, o, lan.hearts);
@@ -1334,6 +1352,7 @@ function coopRescue(p, o, hearts, spare = null) {
   sfx.shieldBreak();
   vibrate([40, 30, 40]);
   shake = 0.25;
+  if (spare === -1) return; // the pet: it says so itself
   if (spare != null) return ui.toast(t('hcHeartLost', { n: spare }), 'red');
   ui.coopHearts(hearts);
   ui.toast(t('coopHeartLost', { n: hearts }), 'red');
@@ -1414,7 +1433,7 @@ function recordRun(pts) {
     ghost = { samples: ghostRec, score: Math.floor(player.final || score), skin: profile.skin, hat: profile.hat };
     saveGhost(ghost);
   }
-  if (mode === 'daily') recordDaily(s);
+  if (mode === 'daily') recordDaily(dailyValue(s));
   run.score = s;
   const missionsDone = R2.missions ? checkMissions(run) : [];
   const xp = addXp((s / 10 + run.coins * 2 + missionsDone.length * 20) * (mode === 'zen' ? 0.5 : 1) * xpK());
@@ -1759,7 +1778,8 @@ function startBoss(dur = adv ? adv.bossTime : rush ? RUSH_BOSS_TIME : teamPlay()
   scene.add(b.root);
   boss = { ...b, t: dur, dur, drop: 1.5, phase: 0, mini: !adv, team };
   music.boss = true;
-  ui.toast(rush ? t('rushBoss', { n: rush.i + 1, max: ADV_ORDER.length, name: t('boss_' + b.kind) }) : t(adv ? 'bossArrives' : team ? 'teamBossArrives' : 'miniBossArrives', { n: dur }), 'red');
+  if (raid && dur > 999) ui.toast(t('raidBoss', { name: t('boss_' + b.kind) }), 'red');
+  else ui.toast(rush ? t('rushBoss', { n: rush.i + 1, max: ADV_ORDER.length, name: t('boss_' + b.kind) }) : t(adv ? 'bossArrives' : team ? 'teamBossArrives' : 'miniBossArrives', { n: dur }), 'red');
   ui.bossBar(1, b.kind);
   sfx.boom();
   sfx.alarm();
@@ -1801,7 +1821,12 @@ function updateBoss(dt) {
   if (boss.kind === 'ufo') boss.root.rotation.y += dt * 1.5;
   boss.t -= dt;
   boss.drop -= dt;
-  ui.bossBar(Math.max(0, boss.t / boss.dur), boss.kind);
+  if (raid && boss.dur > 999) {
+    // the raid boss has no timer: the whole team's hits empty its health
+    const left = raidLeft();
+    boss.t = left > 0 ? 999 : 0;
+    ui.bossBar(left / raid.max, boss.kind);
+  } else ui.bossBar(Math.max(0, boss.t / boss.dur), boss.kind);
   if (boss.drop <= 0 && boss.t > 1.5 && boss.attack === 'drop') {
     boss.drop = 1.1 + Math.random() * 0.7;
     // far enough ahead that the red warning is visible before the rock lands, and never
@@ -1841,6 +1866,8 @@ function updateBoss(dt) {
         nextBossAt = score + 120;
         ui.toast(t('rushNext', { n: rush.i, max: ADV_ORDER.length }), 'gold');
       }
+    } else if (raid) {
+      raidWon();
     } else if (team) {
       // co-op: the team still had hearts when the boss gave up
       nextBossAt = score + (mode === 'lan' && lanMode === 'bosses' ? 700 : MINI_BOSS_EVERY);
@@ -2385,6 +2412,9 @@ function updateWorld(dt, v) {
   night += clamp((nightTimer > 0 ? 1 : 0) - night, -dt / 4, dt / 4); // dusk and dawn take a few seconds
   const nightSky = env.biome === 6 ? NIGHT_SKY_VOLCANO : NIGHT_SKY;
   const n = night * (1 - feat.dark) * (1 - feat.stars); // no extra night in the cave or in space
+  env.night = n;
+  // v1.9: the night is darker, but every bone is worth more
+  if (n > 0.5 && state === 'running') note('weatherNight');
   const dusk = Math.sin(Math.PI * clamp(n, 0, 1)) * (1 - feat.stars); // orange sky on the way into the night and out of it
   scene.background.copy(cur.sky).lerp(SUNSET_SKY, dusk * 0.55).lerp(RAIN_SKY, rain * 0.35).lerp(STORM_SKY, storm * 0.45).lerp(nightSky, n * n).lerp(BONUS_SKY, bonusTint * 0.5);
   scene.fog.color.copy(scene.background);
@@ -2458,6 +2488,7 @@ function shockwave(p) {
   }
   shake = Math.max(shake, 0.22);
   sfx.boom();
+  if (broke && p === player && raid) raid.dmg += 2 * broke; // a ground pound hits the raid boss harder
   if (broke && p === player) {
     profile.stats.pounds += broke;
     run.obstacles += broke;
@@ -2484,6 +2515,10 @@ function land(p) {
   if (BIOMES[env.biome].id === 'snow') {
     p.slip = 0.2;
     note('weatherIce');
+  } else if (weather.type === 'rain' && weather.intensity > 0.5) {
+    // v1.9: wet ground in the rain, a shorter slide than on ice
+    p.slip = 0.12;
+    note('weatherRain');
   }
   if (p.jumpBuffer > 0 && p.slip <= 0) doJump(p);
 }
@@ -2698,6 +2733,7 @@ function updateObstacles(dt, v) {
       }
       if (player.alive && o.kind !== 'finish') {
         run.obstacles++;
+        if (raid) raid.dmg++; // v1.9 raid: every obstacle passed hits the boss
         profile.stats.obstacles++;
         const wid = BIOMES[env.biome].id;
         profile.obsBiome[wid] = (profile.obsBiome[wid] || 0) + 1;
@@ -2755,7 +2791,9 @@ function hitCheck(p) {
 
 function giveBone(p, value = 1) {
   // skin mastery: +5% bones per rank of the skin you wear
-  let n = value * (Math.random() < doubleBoneChance() ? 2 : 1) * rules().bones * (p === player ? masteryK() : 1);
+  // v1.9: seasonal events, the dino house's comfort and the night make bones worth a bit more
+  const nightK = mode !== 'zen' && env.night > 0.5 ? NIGHT_BONES : 1;
+  let n = value * (Math.random() < doubleBoneChance() ? 2 : 1) * rules().bones * (p === player ? masteryK() * houseK() : 1) * eventBonesK() * nightK;
   n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); // zen counts a quarter of the bones
   if (p === player || isLocal()) {
     run.coins += n;
@@ -2915,6 +2953,13 @@ function updatePet(dt) {
     pet.root.position.set((pet.kind === 'turtle' ? -2.6 : -2.2) - (petPw.scale - 1) * 2, hop, p.lane + 1.5);
     pet.root.rotation.z = pet.kind === 'turtle' ? Math.sin(tt * 8) * 0.05 : 0;
   }
+  // v1.9: after saving you, the pet leaps forward over the dino and back
+  if (petHop > 0) {
+    petHop = Math.max(0, petHop - dt);
+    const k = Math.sin((1 - petHop / 0.6) * Math.PI);
+    pet.root.position.x += k * 3.5;
+    pet.root.position.y += k * 2.2;
+  }
   pet.root.visible = p.dino.root.visible || state === 'menu';
 }
 
@@ -2991,7 +3036,13 @@ const EMOTES = ['😂', '🔥', '👋', '😱'];
 let lanHandiK = 1;
 let relayWait = null; // relay: { prev, name } = the teammate whose baton we wait for
 let relayV = 0; // relay: the speed when this runner fell (the next one starts with it)
-let lanWatching = false; // this device only watches the race (spectator, or out of the cup)
+// v1.9 raid: { dmg } = my hits on the team's boss; builder: { energy } while this device builds
+let raid = null;
+let builder = null;
+const RAID_HP = 30; // the raid boss's health for every runner
+const RAID_BONES = 150;
+let lanWatching = false;
+let lanBld = null; // builder mode: who builds this race // this device only watches the race (spectator, or out of the cup)
 
 function myLanInfo() {
   if (!profile.name) profile.name = 'Dino-' + Math.floor(1000 + Math.random() * 9000);
@@ -3000,14 +3051,14 @@ function myLanInfo() {
   if (!profile.lanId) profile.lanId = Math.random().toString(36).slice(2, 10);
   save();
   const id = profile.lanId + (transport && transport.kind === 'test' ? '-' + Math.random().toString(36).slice(2, 5) : '');
-  return { id, name: profile.name, skin: profile.skin, hat: profile.hat, hc: profile.lanHc | 0, ti: profile.title || '', spec: profile.lanSpec ? 1 : 0 };
+  return { id, name: profile.name, skin: profile.skin, hat: profile.hat, hc: profile.lanHc | 0, ti: profile.title || '', spec: profile.lanSpec ? 1 : 0, tr: myTrophies() };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 // the last 10 LAN races on this device, and how many times each name won
 function rememberLanRace(results, mode, myId) {
   const team = TEAM_MODES.includes(mode);
-  const coop = mode === 'coop' || mode === 'bosses';
+  const coop = COOP_MODES.includes(mode);
   let winner = null;
   if (team) {
     const tt = teamTotals(results, lan ? lan.lobby : []);
@@ -3082,6 +3133,44 @@ function lanFinish() {
   deathTimer = 0.6;
 }
 
+// raid: the boss's health left after everybody's hits
+function raidLeft() {
+  if (!raid || !lan) return 0;
+  let hits = raid.dmg;
+  for (const s of lan.others()) hits += s.dm || 0;
+  return Math.max(0, raid.max - hits);
+}
+// raid: the boss is down; every runner still standing ends the race as a winner
+function raidWon() {
+  if (raid.won) return;
+  raid.won = true;
+  profile.stats.raids = (profile.stats.raids || 0) + 1;
+  giveBone(player, RAID_BONES);
+  ui.toast(t('raidWon', { n: RAID_BONES }), 'gold');
+  if (player.alive && state === 'running') {
+    player.finishT = Math.max(0.1, runTime);
+    player.points += 250;
+    player.alive = false;
+    player.final = score;
+    player.finalPts = player.points;
+    state = 'dying';
+    deathTimer = 0.8;
+  }
+}
+// builder: one piece on every runner's track, if there is enough energy
+function lanBuild(k) {
+  if (!builder || !lan || !(k in BUILD_PIECES) || builder.energy < BUILD_PIECES[k]) return false;
+  builder.energy -= BUILD_PIECES[k];
+  lan.attack(k);
+  sfx.beep();
+  ui.buildBar(builder.energy);
+  return true;
+}
+function buildPiece(k) {
+  const id = BIOMES[env.biome].id;
+  return k === 'bird' ? bird(Math.random() < 0.5 ? 0 : 1) : k === 'boulder' ? boulder(id) : k === 'wall' ? groundObstacle(id, false, true) : groundObstacle(id, true);
+}
+
 // relay: after the countdown this runner waits, unseen, until the teammate before them falls
 function waitForBaton() {
   state = 'spectate';
@@ -3118,6 +3207,9 @@ function lanRewards() {
   for (const a of checkAchievements()) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
   celebrateMedals(checkMedals());
   for (const id of checkEarnedTitles()) ui.toast(t('titleGot', { name: TITLES[id].icon + ' ' + t('title_' + id) }), 'gold');
+  // new trophies: the others in the room see them next to my name
+  const tr = myTrophies();
+  if (lan && tr.join() !== (lan.me.tr || []).join()) lan.setMe({ tr });
 }
 // tracks a friend sent: kept in the level editor list (the same track is kept once)
 function receivePack(from, list) {
@@ -3163,6 +3255,21 @@ async function openLan() {
       }
       rememberLanRace(results, endMode || session.mode, session.me.id);
       relayWait = null;
+      // v1.9: the friends' league (modes where everybody runs for themselves)
+      if (results.length > 1 && ['race', 'sabotage', 'elimination', 'tournament', 'bracket'].includes(em)) leagueRace(results);
+      // builder vs runners: the builder wins if nobody reached the finish
+      const bldId = lanBld;
+      if (em === 'builder' && bldId === session.me.id && !results.some((r) => r.ft)) {
+        st.builderWins = (st.builderWins || 0) + 1;
+        profile.coins += 60;
+        ui.toast(t('bldBonus', { n: 60 }), 'gold');
+      }
+      raid = null;
+      builder = null;
+      lanBld = null;
+      ui.buildBar(null);
+      ui.bossBar(null);
+      ui.advProgress(null);
       // only watched this one: nothing to count, just the results
       if (!results.some((r) => r.id === session.me.id)) {
         save();
@@ -3170,7 +3277,7 @@ async function openLan() {
         lanWatching = false;
         ui.spectate(null);
         music.stop(0.3);
-        return ui.mpResults(results, session.me.id, tour, em, cup);
+        return ui.mpResults(results, session.me.id, tour, em, cup, bldId);
       }
       if (tour && tour.done && tour.table.length > 1 && tour.table[0].id === session.me.id) {
         st.tournaments = (st.tournaments || 0) + 1;
@@ -3178,7 +3285,7 @@ async function openLan() {
         ui.toast(t('tourBonus', { n: 150 }), 'gold');
       }
       st.mpGames++;
-      const coop = session.mode === 'coop' || session.mode === 'bosses';
+      const coop = COOP_MODES.includes(session.mode);
       const won = !coop && results.length > 1 && results[0].id === session.me.id;
       if (won) st.mpWins++;
       if (coop) {
@@ -3220,10 +3327,16 @@ async function openLan() {
       lanWatching = false;
       ui.spectate(null);
       music.stop(0.3);
-      ui.mpResults(results, session.me.id, tour, em, cup);
+      ui.mpResults(results, session.me.id, tour, em, cup, bldId);
     },
-    attack: (by) => {
+    attack: (by, k) => {
       if (state !== 'running' || mode !== 'lan') return;
+      if (k) {
+        // builder vs runners: the builder's piece lands on the track ahead
+        if (lanMode !== 'builder' || !player.alive) return;
+        addObstacle(buildPiece(k), 40);
+        return;
+      }
       addObstacle(boulder(BIOMES[env.biome].id), 34);
       ui.toast(t('mpAttacked', { name: session.nameOf(by) }), 'red');
       sfx.boom();
@@ -3272,6 +3385,10 @@ function lanJoinAt(addr, port, name) {
 
 function leaveLan() {
   relayWait = null;
+  raid = null;
+  builder = null;
+  lanBld = null;
+  ui.buildBar(null);
   if (!lan) return;
   const l = lan;
   lan = null;
@@ -3307,6 +3424,10 @@ function beginCountdown(seed, m, x = {}) {
   relayV = 0;
   // a spectator (or someone out of the cup) only watches this race
   lanWatching = Array.isArray(x.ord) && !x.ord.includes(lan.me.id);
+  // v1.9: the raid boss and the builder
+  raid = lanMode === 'raid' ? { dmg: 0, max: RAID_HP * Math.max(1, (x.ord || []).length), won: false } : null;
+  builder = lanMode === 'builder' && x.bld === lan.me.id ? { energy: BUILD_ENERGY / 2, t: 0 } : null;
+  lanBld = lanMode === 'builder' ? x.bld || null : null;
   // relay: the first runner of each team starts, the others wait for their teammate
   relayWait = null;
   if (lanMode === 'relay' && Array.isArray(x.ord)) {
@@ -3340,7 +3461,11 @@ function beginCountdown(seed, m, x = {}) {
   ui.toast(t('lanMode_' + lanMode), 'gold');
   if (adv) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
   if (relayWait) ui.toast(t('relayYouWait', { name: relayWait.name }), 'gold');
-  if (lanWatching) ui.toast(t('specYouWatch'), 'gold');
+  if (builder) ui.toast(t('bldYou', { n: BUILD_GOAL }), 'gold');
+  else if (lanWatching) ui.toast(t('specYouWatch'), 'gold');
+  if (lanBld && !builder && !lanWatching) ui.toast(t('bldRun', { name: lan.nameOf(lanBld), n: BUILD_GOAL }), 'gold');
+  if (raid && !lanWatching) ui.toast(t('raidStart', { n: raid.max }), 'red');
+  ui.buildBar(builder ? builder.energy : null);
   if (hc.hearts) ui.toast(t('hcStart', { n: hc.hearts }), 'gold');
   sfx.beep();
 }
@@ -3351,6 +3476,17 @@ function updateRivals(dt) {
     ui.coopHearts(lan.hearts);
     // a teammate lost the last heart: everybody's run ends together
     if (lan.hearts <= 0 && player.alive && state === 'running') killPlayer(player, null, true);
+  }
+  // builder: energy comes back over time
+  if (builder && state !== 'countdown') {
+    const before = Math.floor(builder.energy);
+    builder.energy = Math.min(BUILD_ENERGY, builder.energy + dt / 1.3);
+    if (Math.floor(builder.energy) !== before) ui.buildBar(builder.energy);
+  }
+  // a runner against the builder: the finish is BUILD_GOAL away
+  if (lanBld && !lanWatching && player.alive && state === 'running') {
+    ui.advProgress(clamp(score / BUILD_GOAL, 0, 1));
+    if (score >= BUILD_GOAL) lanFinish();
   }
   // relay: the teammate before us fell (or left): our turn
   if (relayWait && state === 'spectate') {
@@ -3385,7 +3521,7 @@ function updateRivals(dt) {
   if (player.alive) relayV = speed;
   if (['countdown', 'running', 'over', 'dying', 'spectate'].includes(state) && !lanWatching) {
     if (relayWait) lan.sendState({ sc: 0, pt: 0, y: 0, d: 0, a: 1, w: 1 });
-    else lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive, v: lanMode === 'relay' ? relayV : 0, ft: player.finishT, hc: lan.me.hc | 0 });
+    else lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive, v: lanMode === 'relay' ? relayV : 0, ft: player.finishT, hc: lan.me.hc | 0, dm: raid ? raid.dmg : 0 });
   }
   // my own dino stays where it fell while the camera follows the others
   if (!player.alive) player.dino.root.position.x = clamp((player.final - score) / 0.75, -30, 40);
@@ -3526,7 +3662,8 @@ function update(rawDt) {
       nightTimer = NIGHT_LEN;
     }
     // adventure levels stay in their world; the endless modes move on every 1000 points
-    const b = adv ? adv.world : mode === 'season' ? SEASON_W : rush ? rush.world : biomeAt(score);
+    // the challenge of the day starts in its own world and goes on from there
+    const b = adv ? adv.world : mode === 'season' ? SEASON_W : rush ? rush.world : biomeAt(score + (daily ? (daily.w || 0) * BIOME_LENGTH : 0));
     if (b !== env.biome) {
       setBiome(b, false);
       run.biome = Math.max(run.biome, Math.floor(score / BIOME_LENGTH) + 1);
@@ -3540,7 +3677,7 @@ function update(rawDt) {
       ui.advProgress(adv.custom ? clamp(adv.custom.i / Math.max(1, adv.custom.t.length), 0, 1) : clamp(score / total, 0, 1));
     } else if (!boss && !event && !tutorial && (mode !== 'lan' || isCoop()) && (!isLocal() || localCoop) && score >= nextBossAt && state === 'running') startBoss();
     updateBoss(dt);
-    if (daily && player.alive && player.points >= daily.target && !daily.rewarded) {
+    if (daily && player.alive && dailyValue(player.points) >= daily.target && !daily.rewarded) {
       daily.rewarded = true;
       const reward = completeDaily();
       if (reward) {
@@ -3591,6 +3728,8 @@ function update(rawDt) {
       music.start();
       sfx.beep(true);
       if (relayWait || lanWatching) waitForBaton();
+      if (raid && !lanWatching) startBoss(9999);
+      if (lanBld && !lanWatching) ui.advProgress(0);
     } else if (String(Math.ceil(left)) !== ui.countdownText()) {
       ui.countdown(String(Math.ceil(left)));
       sfx.beep();
@@ -3905,6 +4044,8 @@ const game = {
     save();
     if (lan) lan.setMe({ name: profile.name });
   },
+  lanBuild,
+  leagueRoll,
   lanSetSpectator(on) {
     profile.lanSpec = !!on;
     save();
@@ -3917,6 +4058,10 @@ const game = {
     profile.stats.quickMsgs = (profile.stats.quickMsgs || 0) + 1;
     lanRewards();
     save();
+  },
+  // test hook: hits on the raid boss
+  raidHit(n = 1) {
+    if (raid) raid.dmg += n;
   },
   get quickLog() {
     return quickLog;
@@ -3940,6 +4085,11 @@ requestAnimationFrame(frame);
 // medals for what was already done before the medal album existed
 setTimeout(() => celebrateMedals(checkMedals()), 1500);
 ui.checkUpdates();
+// v1.9: a seasonal event with its skin (only in the shop while it runs)
+{
+  const ev = currentEvent();
+  if (ev) setTimeout(() => ui.toast(ev.icon + ' ' + t('eventStart', { name: t('event_' + ev.id), n: eventDaysLeft(ev) }), 'gold'), 2200);
+}
 // seasonal event: a free hat and a greeting
 if (season) {
   const gift = giveSeasonGift(season);

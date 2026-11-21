@@ -1,9 +1,11 @@
 // LAN race: one device hosts a room, others on the same Wi-Fi / hotspot join.
 // Everyone runs the same seeded track; positions are exchanged ~15 times a second
 // through the host (star topology), so nobody needs a server or the internet.
+import { cleanTrophies } from './house.js';
 export const LAN_PORT = 47777;
 // v2 (late join, reconnect, gifts, relay, handicap, tracks): older versions don't see these rooms
-export const PROTO = 2;
+// v3 (v1.9: boss raid, builder vs runners, trophies): v1.8 and older don't see these rooms
+export const PROTO = 3;
 export const MAX_PLAYERS = 8;
 export const TOUR_RACES = 5;
 // tournament points for 1st, 2nd, 3rd... place in each race
@@ -13,7 +15,13 @@ export const COOP_HEARTS = 3;
 const TIMEOUT = 4500; // players send something at least every second (heartbeat)
 const RECONNECT = 15000; // a client that lost the host keeps knocking this long before giving up
 // every LAN mode, in the order of the mode picker
-export const LAN_MODES = ['race', 'sabotage', 'elimination', 'tournament', 'bracket', 'coop', 'teams', 'bosses', 'relay'];
+export const LAN_MODES = ['race', 'sabotage', 'elimination', 'tournament', 'bracket', 'builder', 'coop', 'bosses', 'raid', 'teams', 'relay'];
+// co-op modes: the whole team shares the hearts
+export const COOP_MODES = ['coop', 'bosses', 'raid'];
+// builder vs runners: the builder spends energy on obstacles, a runner who reaches this distance wins
+export const BUILD_PIECES = { cactus: 1, bird: 2, boulder: 2, wall: 3 };
+export const BUILD_GOAL = 1500;
+export const BUILD_ENERGY = 6;
 // modes that can run on a track from the level editor instead of a random one
 export const TRACK_MODES = ['race', 'sabotage', 'tournament', 'bracket', 'coop', 'teams'];
 // modes played as two teams, A and B, alternating in lobby order
@@ -138,8 +146,8 @@ export class LanSession {
   }
 
   sendJoin() {
-    const { name, skin, hat, hc, ti, spec } = this.me;
-    this.toHost({ t: 'join', name, skin, hat, hc, ti, spec: spec ? 1 : 0 });
+    const { name, skin, hat, hc, ti, spec, tr } = this.me;
+    this.toHost({ t: 'join', name, skin, hat, hc, ti, spec: spec ? 1 : 0, tr: cleanTrophies(tr) });
   }
 
   setMe(fields) {
@@ -186,7 +194,7 @@ export class LanSession {
   }
 
   publishLobby() {
-    this.lobby = [...this.players.values()].map(({ id, name, skin, hat, hc, ti, spec }) => ({ id, name, skin, hat, hc: hc | 0, ti: ti || '', spec: spec ? 1 : 0, late: this.state === 'race' && !this.raceIds.has(id) ? 1 : 0 }));
+    this.lobby = [...this.players.values()].map(({ id, name, skin, hat, hc, ti, spec, tr }) => ({ id, name, skin, hat, hc: hc | 0, ti: ti || '', spec: spec ? 1 : 0, tr: cleanTrophies(tr), late: this.state === 'race' && !this.raceIds.has(id) ? 1 : 0 }));
     this.cup = this.cupInfo();
     const tour = this.tour ? { race: this.tour.race, total: this.tour.total } : null;
     this.lobbySt = this.state;
@@ -225,6 +233,11 @@ export class LanSession {
       if (!this.bracket || this.bracket.done) this.bracket = { round: 0, alive: shuffle(runners), rounds: [], done: false, champ: null };
       this.bracket.alive = this.bracket.alive.filter((id) => this.players.has(id));
       this.order = this.bracket.alive.slice();
+    } else if (this.mode === 'builder' && runners.length >= 2) {
+      // builder vs runners: everybody gets a turn as the builder, one race each
+      this.bldTurn = (this.bldTurn ?? -1) + 1;
+      this.builder = runners[this.bldTurn % runners.length];
+      this.order = runners.filter((id) => id !== this.builder);
     } else this.order = runners;
     this.raceIds = new Set(this.order);
     const x = this.raceExtra();
@@ -253,7 +266,7 @@ export class LanSession {
 
   raceExtra() {
     const trk = this.trackFor();
-    return { ord: this.order, ...(trk ? { trk } : {}) };
+    return { ord: this.order, ...(trk ? { trk } : {}), ...(this.mode === 'builder' && this.builder ? { bld: this.builder } : {}) };
   }
 
   // co-op: this player was hit. Returns the hearts the team has left after it (0 = the run is over).
@@ -277,6 +290,7 @@ export class LanSession {
     if (st.v) s.v = Math.round(st.v * 10) / 10; // relay: the speed the next runner starts with
     if (st.ft) s.ft = Math.round(st.ft * 10) / 10; // a track's finish line: the time
     if (st.hc) s.hc = st.hc;
+    if (st.dm) s.dm = st.dm | 0; // raid: this player's hits on the boss
     if (this.role === 'host') {
       this.peerStates.set(this.me.id, s);
       this.checkEnd();
@@ -354,9 +368,9 @@ export class LanSession {
   }
 
   // sabotage: drop a boulder on everyone else's track
-  attack() {
-    if (this.role === 'host') this.toPeers({ t: 'atk', by: this.me.id });
-    else this.toHost({ t: 'atk' });
+  attack(k) {
+    if (this.role === 'host') this.toPeers({ t: 'atk', by: this.me.id, k });
+    else this.toHost({ t: 'atk', k });
   }
 
   // ------------------------------------------------------------ gifts
@@ -484,22 +498,23 @@ export class LanSession {
           this.players.set(m.from, p);
           if (this.state === 'race' && this.raceIds.has(m.from) && !this.peerStates.has(m.from)) this.peerStates.set(m.from, { id: m.from, sc: 0, y: 0, d: 0, a: 1 });
         }
-        Object.assign(p, { name: String(m.name).slice(0, 12), skin: m.skin, hat: m.hat, hc: Math.max(0, Math.min(HANDICAPS.length - 1, m.hc | 0)), ti: String(m.ti || '').slice(0, 12), spec: m.spec ? 1 : 0, addr: address, port, seen: Date.now() });
+        Object.assign(p, { name: String(m.name).slice(0, 12), skin: m.skin, hat: m.hat, hc: Math.max(0, Math.min(HANDICAPS.length - 1, m.hc | 0)), ti: String(m.ti || '').slice(0, 12), spec: m.spec ? 1 : 0, tr: cleanTrophies(m.tr), addr: address, port, seen: Date.now() });
         this.publishLobby();
       } else if (m.t === 'hb' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
       } else if (m.t === 's' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
         if (this.state === 'race' && this.raceIds.has(m.from)) this.peerStates.set(m.from, { ...m.s, id: m.from });
-      } else if (m.t === 'hit' && this.players.has(m.from) && this.state === 'race' && (this.mode === 'coop' || this.mode === 'bosses')) {
+      } else if (m.t === 'hit' && this.players.has(m.from) && this.state === 'race' && COOP_MODES.includes(this.mode)) {
         const key = m.from + ':' + m.k;
         if (!this.hitsSeen.has(key)) {
           this.hitsSeen.add(key);
           this.hearts = Math.max(0, this.hearts - 1);
         }
       } else if (m.t === 'atk' && this.players.has(m.from) && this.state === 'race') {
-        this.relayFrom({ t: 'atk' }, m.from);
-        this.on.attack(m.from);
+        const k = m.k in BUILD_PIECES ? m.k : undefined;
+        this.relayFrom({ t: 'atk', k }, m.from);
+        this.on.attack(m.from, k);
       } else if (m.t === 'emo' && this.players.has(m.from)) {
         const e = String(m.e).slice(0, 8);
         this.relayFrom({ t: 'emo', e }, m.from);
@@ -557,7 +572,7 @@ export class LanSession {
           }
           break;
         case 'atk':
-          if (m.by !== this.me.id) this.on.attack(m.by);
+          if (m.by !== this.me.id) this.on.attack(m.by, m.k in BUILD_PIECES ? m.k : undefined);
           break;
         case 'emo':
           if (m.by !== this.me.id) this.on.emote(m.by, String(m.e).slice(0, 8));
@@ -587,7 +602,8 @@ export class LanSession {
     this.peerStates.clear();
     this.order = Array.isArray(m.ord) ? m.ord : [];
     const trk = cleanTrack(m.trk);
-    this.on.start(m.seed, this.mode, { ord: this.order, ...(trk ? { trk } : {}) });
+    this.builder = m.bld ? String(m.bld) : null;
+    this.on.start(m.seed, this.mode, { ord: this.order, ...(trk ? { trk } : {}), ...(this.builder ? { bld: this.builder } : {}) });
   }
 
   // a team's runners in relay order (index 0 = A, 1 = B)

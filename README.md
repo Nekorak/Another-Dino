@@ -126,6 +126,8 @@ Gazda alege și **modul**:
 
 În v1.8: **Cupa 1 la 1** (tablou cu eliminare), **spectator** („Doar mă uit”), **pachet de trasee** trimis de gazdă tuturor și **mesaje rapide** în cameră. În magazin: **titluri**, **album de abțibilduri** și **măiestria skin-urilor**, ca oasele să aibă rost mult timp.
 
+În v1.9: **Raid** (boss cu viață comună), **Constructor contra alergători**, **liga prietenilor** pe săptămână, **trofee**, **casa dinozaurului**, **provocarea zilei** după ziua din lună, **evenimente de sezon**, **actul 2** al poveștii, animăluțul care te salvează și vreme care schimbă jocul.
+
 În cursă poți trimite **emoticoane** (butoanele 😂 🔥 👋 😱 sau tastele `1`–`4`). După ce ieși din cursă, camera îi urmărește pe cei rămași.
 
 Merge între telefoane Android și PC-uri (Windows/macOS/Linux) amestecate. Funcționează doar în aplicații, nu în browser. Pe Windows, la prima cursă, permite accesul prin firewall în rețeaua privată. Comunicarea e directă, prin UDP pe portul **47777** (transferul de progres folosește portul **47778**).

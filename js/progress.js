@@ -1,5 +1,6 @@
 // Long-term progress: permanent upgrades, player level, the daily challenge
 // and mystery eggs.
+import { dayChallenge } from './calendar.js';
 import { profile, save } from './save.js';
 import { SKINS, HATS, PETS } from './models.js';
 
@@ -90,6 +91,8 @@ function dayNumber(date) {
 
 export function dailyInfo() {
   const date = today();
+  // v1.9: the world and the goal come from the day of the month (31 hand-made challenges)
+  const ch = dayChallenge(new Date(date + 'T12:00:00'));
   const n = dayNumber(date);
   const d = profile.daily;
   if (d.date !== date) {
@@ -101,7 +104,9 @@ export function dailyInfo() {
   return {
     date,
     seed: (n * 2654435761) >>> 0,
-    target: 600 + (n % 5) * 200,
+    target: ch.n,
+    goal: ch.goal,
+    w: ch.w,
     done: d.done === date,
     best: d.best,
     streak: streakAlive ? d.streak : 0,
@@ -137,7 +142,7 @@ const GOLD_EGG_MIN = 500;
 function eggPool(gold) {
   const min = gold ? GOLD_EGG_MIN : 1;
   const pool = [];
-  for (const [id, it] of Object.entries(SKINS)) if (it.price >= min && !profile.owned.skin.includes(id)) pool.push(['skin', id]);
+  for (const [id, it] of Object.entries(SKINS)) if (it.price >= min && !it.event && !profile.owned.skin.includes(id)) pool.push(['skin', id]);
   for (const [id, it] of Object.entries(HATS)) if (it.price >= min && !profile.owned.hat.includes(id)) pool.push(['hat', id]);
   for (const [id, it] of Object.entries(PETS)) if (it.price >= min && !profile.owned.pet.includes(id)) pool.push(['pet', id]);
   return pool;
@@ -159,7 +164,7 @@ export function openEgg(gold = false) {
 export function eggPoolSize(gold = false) {
   if (gold) return eggPool(true).length;
   let n = 0;
-  for (const [id, it] of Object.entries(SKINS)) if (it.price > 0 && !profile.owned.skin.includes(id)) n++;
+  for (const [id, it] of Object.entries(SKINS)) if (it.price > 0 && !it.event && !profile.owned.skin.includes(id)) n++;
   for (const [id, it] of Object.entries(HATS)) if (it.price > 0 && !profile.owned.hat.includes(id)) n++;
   for (const [id, it] of Object.entries(PETS)) if (it.price > 0 && !profile.owned.pet.includes(id)) n++;
   return n;
