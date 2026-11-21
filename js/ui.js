@@ -404,6 +404,7 @@ export class UI {
     for (const [id, key] of [['btn-resume', 'resumeBtn'], ['btn-photo', 'photo'], ['btn-pause-menu', 'menu'], ['btn-zen-end', 'zenEnd'], ['btn-photo-back', 'back'], ['btn-photo-save', 'photoSave'], ['btn-photo-share', 'share'], ['btn-win-next', 'advNext'], ['btn-win-map', 'advMap'], ['btn-win-retry', 'again']]) $(id).textContent = t(key);
     $('photo-hint').textContent = t('photoHint');
     this.setCoins();
+    this.setHi(this.p.stats.best); // the menu's "Best" label follows the language too
     this.menuInfo();
     if (this.panel) this.renderPanel();
   }

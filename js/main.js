@@ -1123,6 +1123,7 @@ function resetPlayer(p) {
     plat: null,
   });
   p.input.jump = p.input.duck = false;
+  p.tutorialDuck = false;
   for (const k of Object.keys(p.power)) p.power[k] = 0;
   p.dino.root.visible = true;
   p.dino.root.position.set(0, 0, p.lane);
@@ -1999,9 +2000,13 @@ function duckDown(p = player) {
   p.input.duck = true;
   p.gliding = false;
   if (!p.onGround && !p.inPit && p.y > 0.6) p.pounding = true; // ground pound
+  // a quick tap in the tutorial still ducks under the bird (like the jump)
+  if (tutorial && tutorial.freeze === 'duck') p.tutorialDuck = true;
   tutorialRelease('duck');
 }
 function duckUp(p = player) {
+  if (p.tutorialDuck && tutorial) return;
+  p.tutorialDuck = false;
   p.input.duck = false;
 }
 
@@ -2749,6 +2754,7 @@ function updateObstacles(dt, v) {
         ui.toast(t('tutCoins'), 'gold');
         setTimeout(() => ui.toast(t('abilitiesHint'), 'gold'), 2600);
         tutorial = null;
+        if (player.tutorialDuck) player.tutorialDuck = player.input.duck = false;
       }
     }
     if (o.x < DESPAWN_X) removeObstacle(i);
