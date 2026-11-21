@@ -3483,7 +3483,7 @@ const A11Y = {
 export const getLang = () => lang;
 
 export function t(key, vars) {
-  let s = STR[lang][key] ?? STR.en[key] ?? key;
+  let s = String(STR[lang][key] ?? STR.en[key] ?? key ?? '');
   if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
   // the pixel font has ş/Ş (cedilla) but not ș/Ș (comma below)
   if (lang === 'ro') {

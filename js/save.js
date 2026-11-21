@@ -189,7 +189,9 @@ function load() {
     return base;
   }
   if (typeof p !== 'object' || Array.isArray(p)) return base;
-  return sanitize(base, p);
+  const out = sanitize(base, p);
+  out.coins = Math.max(0, Math.floor(out.coins)); // a damaged save never leaves you in debt
+  return out;
 }
 
 export const profile = load();
