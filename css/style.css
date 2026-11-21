@@ -725,7 +725,8 @@ body.panel-open .score-block {
   font-size: clamp(11px, 3vw, 15px);
   font-weight: normal;
   min-width: 0;
-  overflow-wrap: anywhere; /* long titles ("МУЛЬТИПЛЕЕР LAN") wrap instead of spilling out */
+  overflow-wrap: break-word; /* long titles ("МУЛЬТИПЛЕЕР LAN") wrap between words, not inside one */
+  hyphens: auto;
   line-height: 1.3;
 }
 @media (orientation: landscape) and (max-height: 500px) {
@@ -3239,5 +3240,452 @@ body.reduce-fx *::after {
 @media (min-width: 2400px) and (min-height: 1300px) {
   .screen {
     zoom: 1.8;
+  }
+}
+
+/* ---------------------------------------------------------------- v1.7
+   Every setting and choice: a little moving picture, its name, one line that explains it,
+   and all of its options visible at once (no button that cycles through hidden values). */
+@keyframes ico-bob {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  25% { transform: translateY(-3px) rotate(-6deg); }
+  75% { transform: translateY(1px) rotate(5deg); }
+}
+@keyframes ico-run {
+  0%, 100% { transform: translateX(-3px); }
+  50% { transform: translateX(3px) translateY(-2px); }
+}
+@keyframes ico-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+.info-row {
+  justify-content: flex-start;
+}
+.info-ico,
+.seg-ico,
+.mode-ico,
+.lm-ico,
+.hist-ico {
+  display: inline-block;
+  flex: none;
+  font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  line-height: 1;
+}
+.info-ico {
+  width: 30px;
+  font-size: 20px;
+  text-align: center;
+  animation: ico-bob 3.2s ease-in-out infinite;
+}
+.info-row:nth-child(3n) .info-ico { animation-delay: -1s; }
+.info-row:nth-child(3n + 1) .info-ico { animation-delay: -2.1s; }
+.info-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.info-text b {
+  font-weight: normal;
+}
+.info-text small {
+  color: var(--ink-soft);
+  font-size: 8px;
+  line-height: 1.6;
+}
+.info-row > .val,
+.info-row > button {
+  flex: none;
+}
+.info-row > .danger,
+.info-row > .menu-btn {
+  margin: 0;
+  width: auto;
+  min-width: 96px;
+}
+.val.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.val.switch i {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border: 2px solid var(--line);
+  background: #d9d2c0;
+  transition: background 0.2s;
+}
+.val.switch i::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 8px;
+  height: 8px;
+  background: var(--line);
+  transition: transform 0.2s;
+}
+.val.switch.on i {
+  background: var(--accent);
+}
+.val.switch.on i::after {
+  transform: translateX(12px);
+  background: #fff;
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(59, 51, 38, 0.35);
+}
+.choice-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.seg {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+.seg-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 56px;
+  padding: 8px 4px;
+  border: 2px solid var(--line);
+  background: #fffef7;
+  color: var(--sheet-ink);
+  font-family: var(--font);
+  font-size: 8px;
+  line-height: 1.4;
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: break-word;
+}
+.seg-opt .seg-ico {
+  font-size: 20px;
+}
+.seg-opt.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 2px 2px 0 var(--ink-soft);
+}
+.seg-opt.on .seg-ico,
+.seg-opt.on .style-pic,
+.seg-opt.on .px-pic,
+.seg-opt.on .world-pic,
+.seg-opt.on .trk-pic {
+  animation: ico-pulse 1.4s ease-in-out infinite;
+}
+.seg-opt:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.seg-opt.on:disabled {
+  opacity: 1;
+}
+.seg-help {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 4px solid var(--accent);
+  background: rgba(95, 174, 62, 0.12);
+  line-height: 1.7;
+}
+/* graphic styles drawn as tiny scenes */
+.style-pic {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 24px;
+  background: linear-gradient(#9fdcff 60%, #f2cf94 60%);
+  border: 2px solid transparent;
+}
+.style-pic i {
+  position: absolute;
+  bottom: 6px;
+  width: 6px;
+  background: #5fae3e;
+}
+.style-pic i:nth-child(1) { left: 6px; height: 10px; }
+.style-pic i:nth-child(2) { left: 18px; height: 14px; background: #3a7f2a; }
+.style-pic i:nth-child(3) { left: 30px; height: 8px; }
+.style-pic.style-outline i { outline: 2px solid #000; }
+.style-pic.style-outline { border-color: #000; }
+.style-pic.style-gameboy { background: linear-gradient(#9bbc0f 60%, #8bac0f 60%); }
+.style-pic.style-gameboy i { background: #306230; }
+.style-pic.style-gameboy i:nth-child(2) { background: #0f380f; }
+.style-pic.style-crt {
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(rgba(0, 0, 0, 0.25) 0 1px, transparent 1px 3px),
+    linear-gradient(#9fdcff 60%, #f2cf94 60%);
+}
+.px-pic {
+  display: block;
+  width: 24px;
+  height: 24px;
+  background-color: #5fae3e;
+}
+.px-pic.px0 { background-image: conic-gradient(#3a7f2a 25%, #5fae3e 0 50%, #3a7f2a 0 75%, #5fae3e 0); background-size: 4px 4px; }
+.px-pic.px1 { background-image: conic-gradient(#3a7f2a 25%, #5fae3e 0 50%, #3a7f2a 0 75%, #5fae3e 0); background-size: 8px 8px; }
+.px-pic.px2 { background-image: conic-gradient(#3a7f2a 25%, #5fae3e 0 50%, #3a7f2a 0 75%, #5fae3e 0); background-size: 12px 12px; }
+.world-pic {
+  display: block;
+  width: 34px;
+  height: 22px;
+  border: 2px solid var(--line);
+}
+.world-choice .seg {
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+}
+.trk-pic {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.trk-choice .seg {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+}
+
+/* modes: each card shows its picture next to the name */
+.mode-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mode-ico {
+  font-size: 22px;
+  animation: ico-bob 3s ease-in-out infinite;
+}
+.mode-card:nth-child(2n) .mode-ico { animation-delay: -1.3s; }
+.mode-card:hover .mode-ico,
+.mode-card:focus-visible .mode-ico {
+  animation: ico-run 0.5s ease-in-out infinite;
+}
+.mode-card.has-extra {
+  cursor: default;
+}
+.mode-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.mode-extra .choice {
+  border-bottom: 0;
+  padding: 0;
+}
+.mode-extra .menu-btn {
+  margin: 0;
+  width: 100%;
+  padding: 10px;
+  font-size: 10px;
+}
+.mode-count {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* LAN */
+.lan-hero {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  font-size: 30px;
+  font-family: system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+.lan-hero .lh-dino.a { animation: ico-run 0.6s ease-in-out infinite; }
+.lan-hero .lh-dino.b { animation: ico-run 0.6s ease-in-out -0.3s infinite; }
+.lan-hero .lh-wifi { animation: ico-pulse 1.2s ease-in-out infinite; }
+.lan-modes h3 {
+  margin: 10px 0 6px;
+}
+.lan-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.lan-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  border: 2px solid var(--line);
+  background: #fffef7;
+  color: var(--sheet-ink);
+  font-family: var(--font);
+  font-size: 8px;
+  cursor: pointer;
+}
+.lan-mode b {
+  font-weight: normal;
+  overflow-wrap: anywhere;
+}
+.lan-mode .lm-ico {
+  font-size: 24px;
+}
+.lan-mode.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 2px 2px 0 var(--ink-soft);
+}
+.lan-mode.on .lm-ico { animation: ico-run 0.6s ease-in-out infinite; }
+.lan-mode.lm-coop.on .lm-ico,
+.lan-mode.lm-tournament.on .lm-ico { animation: ico-pulse 1s ease-in-out infinite; }
+.lan-mode.lm-sabotage.on .lm-ico,
+.lan-mode.lm-bosses.on .lm-ico { animation: ico-bob 0.9s ease-in-out infinite; }
+.lan-mode:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.lan-mode.on:disabled {
+  opacity: 1;
+}
+.player.late {
+  opacity: 0.6;
+}
+.player .gift-btn {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 2px solid var(--line);
+  background: #fffef7;
+  font-size: 14px;
+  cursor: pointer;
+}
+.gift-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gift-box .info-ico {
+  animation: ico-pulse 1.6s ease-in-out infinite;
+}
+.join-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+.join-qr canvas {
+  image-rendering: pixelated;
+  background: #fff;
+  padding: 6px;
+  border: 2px solid var(--line);
+  max-width: 200px;
+  height: auto;
+}
+.lan-hist h3 {
+  margin: 14px 0 6px;
+}
+.hist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hist li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(59, 51, 38, 0.35);
+}
+.hist li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.hist li b {
+  font-weight: normal;
+}
+.hist li small {
+  font-size: 8px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.hist-ico {
+  font-size: 16px;
+}
+
+/* fewer effects / reduced motion: the pictures stay still */
+body.reduce-fx .info-ico,
+body.reduce-fx .seg-ico,
+body.reduce-fx .mode-ico,
+body.reduce-fx .lm-ico,
+body.reduce-fx .lan-hero span,
+body.reduce-fx .seg-opt.on > *,
+body.reduce-fx .gift-box .info-ico {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .info-ico,
+  .seg-ico,
+  .mode-ico,
+  .lm-ico,
+  .lan-hero span,
+  .seg-opt.on > *,
+  .gift-box .info-ico {
+    animation: none !important;
+  }
+}
+@media (max-width: 380px) {
+  .seg {
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  }
+  .seg-opt {
+    padding: 6px 2px;
+    font-size: 7px;
+  }
+  /* the text gets the whole width, the switch or button goes under it */
+  .info-row {
+    flex-wrap: wrap;
+  }
+  .info-row > .info-text {
+    flex: 1 1 calc(100% - 44px);
+  }
+  .info-row > .val,
+  .info-row > button {
+    margin-left: 40px;
+  }
+  .lan-mode-grid {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  }
+}
+
+/* small phones (320 px): panel titles fit on one or two lines, and toasts on the menu go to
+   the bottom (two at most), so a pile of medals never covers the menu buttons */
+@media (max-width: 380px) {
+  .panel-head h2 {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .panel-head {
+    gap: 8px;
+  }
+}
+@media (max-width: 420px) {
+  body:not(.playing):not(.panel-open):not(.over) #toasts {
+    top: auto;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    flex-direction: column-reverse;
   }
 }

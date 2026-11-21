@@ -57,6 +57,16 @@ Toată lista din notes/todo-design-gameplay.md (design și gameplay), plus cele 
 9. Setări pe secțiuni și accesibilitate (daltoniști, mai puține efecte, un singur buton)
 10. Echilibrare: stelele și primul boss dau mai mult în lumile de la final, boșii mici dintr-o tură dau tot mai mult
 
+## Gata în v1.7
+
+1. Ștafetă în LAN: când cazi, următorul din echipă continuă de unde ai rămas
+2. Intrare în cameră prin QR (și înapoi în ultima cameră), intrare în timpul cursei, reconectare automată
+3. Trasee din editor jucate în LAN, cu linie de sosire
+4. Cadouri între prieteni în LAN (oase, gustare pentru animăluț), 5 pe zi
+5. Handicap per jucător (lume mai lentă + inimi în plus, puncte corecte)
+6. Istoric LAN: ultimele 10 curse și cine câștigă cel mai des
+7. Fiecare setare, mod și alegere are imagine animată și explicație; nicio opțiune ascunsă după un buton care se rotește
+
 ## Idei noi
 
 - Salvare în cloud, clasament online și publicare pe Google Play (amânate deocamdată, au nevoie de server sau de cont de dezvoltator).

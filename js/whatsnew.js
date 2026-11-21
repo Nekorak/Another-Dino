@@ -3,6 +3,39 @@
 // id не связан с номером сборки (его ставит CI), поэтому окно работает и в браузере, и в приложениях.
 export const NEWS = [
   {
+    id: '2026-11-21-v17',
+    ro: [
+      'LAN: un mod nou, Ştafeta. Când cazi, următorul din echipă pleacă de unde ai rămas.',
+      'LAN: gazda arată un cod QR. Prietenii îl scanează şi intră direct, fără să caute camera.',
+      'LAN: poţi intra şi în timpul unei curse (aştepţi următoarea), iar dacă îţi cade Wi-Fi-ul jocul se reconectează singur.',
+      'LAN: gazda poate alege un traseu din editorul tău. Câştigă cine trece primul linia de sosire.',
+      'LAN: cadouri pentru prieteni (oase sau o gustare pentru animăluţ), până la 5 pe zi.',
+      'LAN: handicap pentru cei mici. Lumea lor merge mai încet şi au inimi în plus, iar punctele se numără corect.',
+      'LAN: ultimele 10 curse şi cine câştigă cel mai des.',
+      'Setările, modurile şi alegerile au acum fiecare o imagine şi o explicaţie, iar toate variantele se văd deodată.',
+    ],
+    ru: [
+      'LAN: новый режим Эстафета. Когда падаешь, следующий из команды бежит с того же места.',
+      'LAN: хост показывает QR-код. Друзья сканируют его и входят сразу, без поиска комнаты.',
+      'LAN: можно войти и во время забега (ждёшь следующий), а если пропал Wi-Fi, игра сама переподключится.',
+      'LAN: хост может выбрать трассу из твоего редактора. Побеждает тот, кто первым пересечёт финиш.',
+      'LAN: подарки друзьям (косточки или угощение для питомца), до 5 в день.',
+      'LAN: фора для малышей. Их мир медленнее и есть лишние сердца, а очки считаются честно.',
+      'LAN: последние 10 забегов и кто побеждает чаще.',
+      'У каждой настройки, режима и выбора теперь есть картинка и объяснение, и все варианты видны сразу.',
+    ],
+    en: [
+      'LAN: a new mode, Relay. When you fall, the next teammate runs on from where you stopped.',
+      'LAN: the host shows a QR code. Friends scan it and join straight away, no searching.',
+      'LAN: you can join during a race (you wait for the next one), and if your Wi-Fi drops the game reconnects by itself.',
+      'LAN: the host can pick a track from your level editor. First across the finish line wins.',
+      'LAN: gifts for friends (bones or a pet snack), up to 5 a day.',
+      'LAN: a handicap for little ones. Their world runs slower with extra hearts, and points still count fairly.',
+      'LAN: the last 10 races and who wins most.',
+      'Every setting, mode and choice now has a picture and an explanation, and all the options show at once.',
+    ],
+  },
+  {
     id: '2026-11-19-v16',
     ro: [
       'Două lumi noi în Aventură: Mlaştina (cu un crocodil) şi Insulele din nori (cu pasărea furtunii), cu muzică nouă.',

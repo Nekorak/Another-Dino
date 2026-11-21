@@ -120,13 +120,18 @@ Prima atingere pe un lucru îl arată pe dino. A doua îl cumpără sau îl îmb
 1. **Numele tău**, cum îl văd ceilalți.
 2. **CREEAZĂ CAMERĂ:** tu ești gazda.
 3. **Camerele găsite** în rețea. Apasă INTRĂ la camera prietenului.
-4. Dacă nu apare nicio cameră, scrie **IP-ul gazdei** și apasă CONECTEAZĂ.
+4. Dacă nu apare nicio cameră, apasă **Scanează QR-ul gazdei** (gazda are codul în cameră) sau scrie **IP-ul gazdei** și apasă CONECTEAZĂ.
+5. **Înapoi în camera lui …** apare dacă ai ieșit sau ți-a căzut Wi-Fi-ul: te întorci în aceeași cameră.
+6. **Handicap**: fiecare își alege singur cât de ușor să-i fie (lume mai lentă și inimi în plus).
+7. **Ultimele 10 curse** și **cine câștigă cel mai des** pe acest dispozitiv.
 
 ![Lobby-ul LAN](img/11-lan-lobby.png)
 
-1. **Modul de joc** (doar gazda îl schimbă): cursă, sabotaj, eliminare, turneu, echipă, echipe sau boși în echipă.
+1. **Modul de joc**: toate cele 8 moduri se văd ca butoane cu imagine, iar sub ele e explicația celui ales. Doar gazda îl schimbă.
 2. **START** pornește cursa pentru toți (e nevoie de cel puțin 2 jucători).
-3. **Jucătorii** din cameră.
+3. **Jucătorii** din cameră, cu echipa și handicapul lor. Butonul 🎁 trimite un cadou.
+4. **Codul QR** al gazdei: prietenii îl scanează ca să intre direct.
+5. **Traseul**: la întâmplare sau unul din editorul tău (la Cursă, Sabotaj, Turneu, Echipă și Echipe).
 
 ### Setări și transferul de progres
 
@@ -223,6 +228,12 @@ Le găsești în meniul **Moduri**. Unele se deschid treptat, pe măsură ce joc
 | Echipă | Toți împotriva traseului, cu 3 inimi comune. La fiecare 2000 de puncte vine un boss de echipă. |
 | Echipe | Echipa A contra echipei B (pe rând, după lista din lobby). Câștigă suma punctelor. |
 | Boși în echipă | Ca Echipa, dar boșii vin unul după altul, la fiecare 700 de puncte. |
+| Ștafetă | Echipa A contra echipei B, dar aleargă câte unul din fiecare echipă. Când cade, următorul din echipă pleacă de unde a rămas, cu aceeași viteză. |
+
+- **Traseu din editor:** gazda poate alege un traseu făcut în editor. Câștigă cine trece primul linia de sosire (+250 de puncte), ceilalți după puncte.
+- **Intrare târzie și reconectare:** poți intra într-o cameră în timpul cursei (aștepți următoarea). Dacă îți cade Wi-Fi-ul, jocul încearcă singur să se reconecteze 15 secunde.
+- **Cadouri:** în lobby, 🎁 lângă un prieten: 25 sau 100 de oase, sau o gustare pentru animăluțul lui. Cel mult 5 pe zi; dacă nu ajunge, oasele se întorc.
+- **Handicap:** Normal, Mai ușor (lumea cu 15% mai încet, +1 inimă) sau Mult mai ușor (30% mai încet, +2 inimi). Punctele se numără ca la ceilalți.
 
 Pe PC, Windows întreabă de firewall la primul multiplayer: permite accesul în rețeaua privată.
 

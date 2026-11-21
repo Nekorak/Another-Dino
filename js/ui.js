@@ -11,14 +11,14 @@ import { encodeProgress, decodeProgress, mergeProgress, QR_LIMIT, qrCanvas, read
 import { save, resetProgress, profile, SETTING_DEFAULTS } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
-import { MAX_PLAYERS, COOP_HEARTS } from './multiplayer.js';
+import { MAX_PLAYERS, COOP_HEARTS, LAN_MODES, TRACK_MODES, TEAM_MODES, HANDICAPS, GIFTS, GIFTS_PER_DAY, isLanJoin, decodeLanJoin, encodeLanJoin } from './multiplayer.js';
 import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS, ensureWeekly, weeklyProgress, weekInfo, WEEKLY_BONUS, rerollMission, REROLL_PRICE } from './missions.js';
 import { MEDALS, MEDAL_REWARD, MEDAL_NAMES, medalOf, medalCount } from './medals.js';
 import { petLevel, petProgress, petPower, PET_MAX, feedPet } from './pets.js';
 import { addPhoto, listPhotos, getPhoto, deletePhoto, toPng, MAX_PHOTOS } from './gallery.js';
-import { isLevel, decodeLevel, storeLevel, levelId, weeklyTrackOpen } from './levels.js';
+import { isLevel, decodeLevel, storeLevel, levelId, weeklyTrackOpen, PIECES, trimmed } from './levels.js';
 import { levelsView, levelEditView, startEdit } from './leveleditor.js';
 import { checkMedals } from './medals.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -42,6 +42,60 @@ function el(tag, attrs = {}, ...children) {
   for (const c of children.flat()) if (c != null) e.append(c);
   return e;
 }
+
+// A setting or choice with its picture and one line that says what it does.
+export function infoRow(icon, label, desc, control) {
+  return el(
+    'div',
+    { class: 'row info-row' },
+    el('span', { class: 'info-ico', 'aria-hidden': 'true', text: icon }),
+    el('span', { class: 'info-text' }, el('b', { text: label }), desc ? el('small', { text: desc }) : null),
+    control || null,
+  );
+}
+// an on/off switch that shows its state with a slider and a word
+export function switchBtn(on, fn, label) {
+  return el('button', { class: 'val switch' + (on ? ' on' : ''), role: 'switch', 'aria-checked': on ? 'true' : 'false', 'aria-label': label, onclick: fn }, el('i', { 'aria-hidden': 'true' }), el('span', { text: on ? t('on') : t('off') }));
+}
+// Every option visible at once (picture + name), never hidden behind one button that cycles;
+// the explanation of the chosen one is written underneath.
+//   options: [{ v, icon | pic, name, desc }]
+export function choiceRow({ icon, label, desc, options, value, pick, disabled, cls }) {
+  const cur = options.find((o) => o.v === value);
+  return el(
+    'div',
+    { class: 'choice' + (cls ? ' ' + cls : '') },
+    label ? el('div', { class: 'choice-head' }, icon ? el('span', { class: 'info-ico', 'aria-hidden': 'true', text: icon }) : null, el('span', { class: 'info-text' }, el('b', { text: label }), desc ? el('small', { text: desc }) : null)) : null,
+    el(
+      'div',
+      { class: 'seg', role: 'radiogroup', 'aria-label': label || '' },
+      options.map((o) =>
+        el(
+          'button',
+          {
+            class: 'seg-opt' + (o.v === value ? ' on' : ''),
+            role: 'radio',
+            'aria-checked': o.v === value ? 'true' : 'false',
+            'aria-label': o.name + (o.desc ? '. ' + o.desc : ''),
+            disabled: !!disabled,
+            onclick: (e) => {
+              e.stopPropagation();
+              if (o.v !== value) pick(o.v);
+            },
+          },
+          o.pic || el('span', { class: 'seg-ico', 'aria-hidden': 'true', text: o.icon || '' }),
+          el('span', { class: 'seg-name', text: o.name }),
+        ),
+      ),
+    ),
+    cur && cur.desc ? el('p', { class: 'seg-help small', text: cur.desc }) : null,
+  );
+}
+// an animated picture for each LAN mode and each game mode
+const LAN_MODE_ICON = { race: '🏃', sabotage: '🪨', elimination: '⚡', tournament: '🏆', coop: '❤️', teams: '🆚', bosses: '🐉', relay: '🏃‍♂️' };
+const MODE_ICON = { mode_adventure: '🗺️', daily: '📅', mode_bossrush: '👹', mode_mutator: '🎲', multiplayer: '📶', mode_season: '🍂', mode_zen: '🧘', mode_hardcore: '💀', mode_bot: '🤖', mode_custom: '✏️', mode_challenge: '📷', mode_local: '🎮' };
+const HC_ICON = ['🦖', '🐢', '🐌'];
+const GIFT_ICON = { b25: '🦴', b100: '🎁', snack: '🍖' };
 
 // Step-by-step unlocks: a new player starts with PLAY, the collection and the settings;
 // the rest opens as they play (players from older versions have it all already)
@@ -539,10 +593,10 @@ export class UI {
     b.disabled = n <= 0;
     b.textContent = t('bombSend') + ' ×' + n;
   }
-  spectate(name) {
+  spectate(name, key = 'spectating') {
     const s = $('spectate');
     s.classList.toggle('hidden', !name);
-    if (name) s.textContent = t('spectating', { name });
+    if (name) s.textContent = t(key, { name });
   }
   showRevive(cost, seconds) {
     $('btn-revive-yes').replaceChildren(document.createTextNode(t('reviveYes') + ' '), bone(), document.createTextNode(' ' + cost));
@@ -848,11 +902,11 @@ export class UI {
     document.body.classList.toggle('paused', !!on);
     $('btn-zen-end').classList.toggle('hidden', mode !== 'zen');
   }
-  showOver({ score, record, coins, missions, lan, xp, local2, daily, bot, mode, challenge, canChallenge, near, mutator, season, rush, team }) {
+  showOver({ score, record, coins, missions, lan, finish, xp, local2, daily, bot, mode, challenge, canChallenge, near, mutator, season, rush, team }) {
     $('btn-replay').classList.toggle('hidden', !!lan || this.g.replay.length < 5);
     $('btn-challenge').classList.toggle('hidden', !canChallenge || score <= 0);
     this.overShownAt = performance.now() / 1000;
-    $('over-title').textContent = mode === 'zen' ? t('zenOver') : 'GAME OVER';
+    $('over-title').textContent = mode === 'zen' ? t('zenOver') : finish ? t('lanFinishTitle') : 'GAME OVER';
     $('over-score').textContent = pad5(score);
     $('over-record').textContent = record ? t('record') : '';
     $('over-xp').textContent = xp ? '+' + xp + ' XP' : '';
@@ -1004,11 +1058,11 @@ export class UI {
       'div',
       { class: 'settings' },
       el('p', { class: 'small muted', text: s.music ? t('jukeHelp') : t('jukeMusicOff') }),
-      this.row(t('jukeAuto'), s.menuSong >= 0 ? t('off') : t('on'), () => {
+      infoRow('🎼', t('jukeAuto'), t('jukeAutoHelp'), switchBtn(s.menuSong < 0, () => {
         s.menuSong = -1;
         save();
         this.renderPanel();
-      }),
+      }, t('jukeAuto'))),
       list,
     );
   }
@@ -1157,7 +1211,8 @@ export class UI {
     const n = el('div', { class: 'toast ' + kind, text });
     if (POWERUP_COLOR[kind]) n.style.setProperty('--c', POWERUP_COLOR[kind]);
     box.append(n);
-    while (box.children.length > 3) box.firstChild.remove();
+    // a small phone shows fewer at once, so a pile of medals does not cover the menu
+    while (box.children.length > (innerWidth <= 420 ? 2 : 3)) box.firstChild.remove();
     setTimeout(() => n.classList.add('out'), life);
     setTimeout(() => n.remove(), life + 500);
   }
@@ -1222,6 +1277,7 @@ export class UI {
     }
     if (was === 'shop' && this.preview.theme !== this.p.theme) this.g.applyTheme(this.p.theme); // only tried on
     if (!silent) this.menuInfo();
+    if (was === 'lan') this.stopScan();
     if (was === 'lan' && !silent) this.g.lanLeave();
     if (was === 'transfer') this.stopTransfer();
     if (was === 'jukebox') this.g.menuMusic(true);
@@ -1512,46 +1568,63 @@ export class UI {
     const g = this.g;
     const d = dailyInfo();
     const s = this.p.settings;
+    // every card has its own little animated picture next to the name and the explanation
+    const head = (key) => el('span', { class: 'mode-head' }, el('span', { class: 'mode-ico', 'aria-hidden': 'true', text: MODE_ICON[key] || '🦖' }), el('b', { text: t(key) }));
     const card = (key, desc, fn, extra) =>
-      el('button', { class: 'mode-card', onclick: fn, 'aria-label': t(key) + '. ' + desc }, el('b', { text: t(key) }), el('span', { class: 'small muted', text: desc }), extra || null);
-    const botBtn = el('button', {
-      class: 'val',
-      text: t('bot_' + s.botLevel),
-      onclick: (e) => {
-        e.stopPropagation();
-        s.botLevel = (s.botLevel + 1) % 3;
-        save();
-        this.renderPanel();
-      },
-    });
-    // versus or co-op (3 shared hearts and a team boss), then how many players
-    const localBtns = el(
-      'span',
-      { class: 'mode-count' },
-      el('button', {
-        class: 'val' + (this.localCoop ? ' on' : ''),
-        text: t(this.localCoop ? 'localCoop' : 'localVs'),
-        onclick: (e) => {
-          e.stopPropagation();
-          this.localCoop = !this.localCoop;
+      el(extra ? 'div' : 'button', { class: 'mode-card' + (extra ? ' has-extra' : ''), onclick: extra ? null : fn, role: extra ? null : 'button', 'aria-label': t(key) + '. ' + desc }, head(key), el('span', { class: 'small muted', text: desc }), extra || null);
+    // the robot's level: all three visible, the chosen one explained
+    const botBtn = el(
+      'div',
+      { class: 'mode-extra' },
+      choiceRow({
+        label: t('botLevelLabel'),
+        options: [0, 1, 2].map((v) => ({ v, icon: ['🐣', '🤖', '🔥'][v], name: t('bot_' + v), desc: t('optDesc_bot_' + v) })),
+        value: s.botLevel,
+        pick: (v) => {
+          s.botLevel = v;
+          save();
           this.renderPanel();
         },
       }),
-      [2, 3, 4].map((n) =>
-        el('button', {
-          class: 'val',
-          text: String(n),
-          onclick: (e) => {
-            e.stopPropagation();
-            g.startMode('local', { count: n, coop: !!this.localCoop });
-          },
-        }),
+      el('button', { class: 'menu-btn primary', text: t('mode_bot') + ' ▶', onclick: () => g.startMode('bot') }),
+    );
+    // versus or co-op (3 shared hearts and a team boss), then how many players
+    const localBtns = el(
+      'div',
+      { class: 'mode-extra' },
+      choiceRow({
+        label: t('localModeLabel'),
+        options: [
+          { v: false, icon: '🆚', name: t('localVs'), desc: t('optDesc_localVs') },
+          { v: true, icon: '🤝', name: t('localCoop'), desc: t('optDesc_localCoop') },
+        ],
+        value: !!this.localCoop,
+        pick: (v) => {
+          this.localCoop = v;
+          this.renderPanel();
+        },
+      }),
+      el('p', { class: 'small muted', text: t('localPlayers') }),
+      el(
+        'span',
+        { class: 'mode-count' },
+        [2, 3, 4].map((n) =>
+          el('button', {
+            class: 'val',
+            text: '👤'.repeat(n) + ' ' + n,
+            'aria-label': String(n),
+            onclick: (e) => {
+              e.stopPropagation();
+              g.startMode('local', { count: n, coop: !!this.localCoop });
+            },
+          }),
+        ),
       ),
     );
     const un = unlocks();
     const st = this.badgeState();
     // a mode that opens later: shown greyed out, with what it takes to open it
-    const locked = (key, need) => el('div', { class: 'mode-card locked' }, el('b', { text: '🔒 ' + t(key) }), el('span', { class: 'small muted', text: need }));
+    const locked = (key, need) => el('div', { class: 'mode-card locked' }, el('span', { class: 'mode-head' }, el('span', { class: 'mode-ico', 'aria-hidden': 'true', text: '🔒' }), el('b', { text: t(key) })), el('span', { class: 'small muted', text: need }));
     const mu = todayMutator();
     const withBadge = (c, on) => (on && c.classList.add('badge'), c);
     return el(
@@ -1576,7 +1649,7 @@ export class UI {
         this.xferTab = 'scan';
         this.openPanel('transfer', 'modes');
       }),
-      un.lan ? el('div', { class: 'mode-card' }, el('b', { text: t('mode_local') }), el('span', { class: 'small muted', text: t('modeDesc_local') }), localBtns) : locked('mode_local', t('unlockAfter', { n: 5 })),
+      un.lan ? card('mode_local', t('modeDesc_local'), null, localBtns) : locked('mode_local', t('unlockAfter', { n: 5 })),
     );
   }
 
@@ -1619,12 +1692,11 @@ export class UI {
       ? el(
           'div',
           {},
-          this.row(t('advPlus'), advHardOn() ? t('on') : t('off'), () => {
+          infoRow('👑', t('advPlus'), t('advPlusHelp', { n: Object.keys(this.p.advCrowns).length, max: ADV_ORDER.length * ADV_LEVELS }), switchBtn(advHardOn(), () => {
             this.p.advHard = !this.p.advHard;
             save();
             this.renderPanel();
-          }),
-          el('p', { class: 'small muted', text: t('advPlusHelp', { n: Object.keys(this.p.advCrowns).length, max: ADV_ORDER.length * ADV_LEVELS }) }),
+          }, t('advPlus'))),
         )
       : null;
     return el('div', { class: advHardOn() ? 'adv-hard' : '' }, el('p', { class: 'small muted', text: t('advHelp') }), plus, el('div', { class: 'adv-map' }, worlds));
@@ -1924,6 +1996,7 @@ export class UI {
   }
 
   askImport(text) {
+    if (isLanJoin(text)) return this.joinFromQr(text);
     if (isChallenge(text)) return this.askChallenge(text);
     if (isLevel(text)) return this.askLevel(text);
     let data;
@@ -2125,16 +2198,28 @@ export class UI {
       save();
       this.g.applySettings();
     };
+    // every setting: a picture, its name, one line on what it does, and its control
+    const SET_ICON = {
+      lang: '🌐', ghost: '👻', seasons: '🎃', autoPause: '⏸️', fullscreen: '🖥️', music: '🎵', musicVol: '🔊', sfx: '🔔', sfxVol: '🔉', menuMusic: '🎼',
+      keyJump: '⬆️', keyDuck: '⬇️', controls: '👆', lefty: '🤚', vibration: '📳', quality: '✨', style: '🎨', pixel: '🔲', shake: '💥', showFps: '⏱️',
+      bigText: '🔠', highlight: '🟥', colorblind: '👁️', reduceFx: '🌙', oneButton: '1️⃣', transfer: '📲', news: '📰', update: '⬇️', about: 'ℹ️', defaults: '↩️', reset: '🗑️',
+    };
+    const desc = (key) => t('setDesc_' + key);
+    const sw = switchBtn;
     const toggle = (key) =>
-      this.row(t('set_' + key), s[key] ? t('on') : t('off'), () => {
+      infoRow(SET_ICON[key], t('set_' + key), desc(key), sw(s[key], () => {
         s[key] = !s[key];
         apply();
-      });
-    const cycle = (key, values, label) =>
-      this.row(t('set_' + key), label(s[key]), () => {
-        s[key] = values[(values.indexOf(s[key]) + 1) % values.length];
-        apply();
-      });
+        this.renderPanel();
+      }, t('set_' + key)));
+    const pickOf = (key) => (v) => {
+      s[key] = v;
+      apply();
+      this.renderPanel();
+    };
+    const choice = (key, options) => choiceRow({ icon: SET_ICON[key], label: t('set_' + key), desc: desc(key), options, value: s[key], pick: pickOf(key) });
+    const open = (key, label, fn) => infoRow(SET_ICON[key], label, desc(key), el('button', { class: 'val', text: t('open'), onclick: fn }));
+    const vol = (key) => choice(key, [0, 25, 50, 75, 100].map((v) => ({ v, icon: ['🔇', '🔈', '🔉', '🔊', '📢'][v / 25], name: v + '%' })));
     const reset = el('button', { class: 'danger', text: t('set_reset') });
     reset.addEventListener('click', () => {
       if (reset.dataset.armed) {
@@ -2160,44 +2245,50 @@ export class UI {
         this.renderPanel();
       },
     });
+    // a small picture of each graphic style
+    const stylePic = (v) => el('span', { class: 'style-pic style-' + v, 'aria-hidden': 'true' }, el('i'), el('i'), el('i'));
+    const LANG_FLAG = { auto: '🌐', ro: '🇷🇴', ru: '🇷🇺', en: '🇬🇧' };
+    const LANG_NAME = { ro: 'Română', ru: 'Русский', en: 'English' };
     return el(
       'div',
       { class: 'settings' },
       head('setSec_game'),
-      cycle('lang', LANGS, (v) => (v === 'auto' ? t('lang_auto') : v.toUpperCase())),
+      choice('lang', LANGS.map((v) => ({ v, icon: LANG_FLAG[v], name: v === 'auto' ? t('lang_auto') : LANG_NAME[v], desc: v === 'auto' ? t('optDesc_lang_auto') : '' }))),
       toggle('ghost'),
       toggle('seasons'),
       toggle('autoPause'),
-      this.g.isTouch ? null : this.row(t('set_fullscreen'), document.fullscreenElement ? t('on') : t('off'), () => this.toggleFullscreen()),
+      this.g.isTouch ? null : infoRow(SET_ICON.fullscreen, t('set_fullscreen'), desc('fullscreen'), sw(!!document.fullscreenElement, () => this.toggleFullscreen(), t('set_fullscreen'))),
       head('setSec_sound'),
       toggle('music'),
-      cycle('musicVol', [0, 25, 50, 75, 100], (v) => v + '%'),
+      vol('musicVol'),
       toggle('sfx'),
-      cycle('sfxVol', [0, 25, 50, 75, 100], (v) => v + '%'),
-      this.row(t('set_menuMusic'), s.menuMusic ? t('on') : t('off'), () => {
+      vol('sfxVol'),
+      infoRow(SET_ICON.menuMusic, t('set_menuMusic'), desc('menuMusic'), sw(s.menuMusic, () => {
         s.menuMusic = !s.menuMusic;
         save();
         this.g.menuMusic();
         this.renderPanel();
-      }),
+      }, t('set_menuMusic'))),
       head('setSec_controls'),
       this.g.isTouch ? null : this.keyRow('keyJump'),
       this.g.isTouch ? null : this.keyRow('keyDuck'),
       this.g.isTouch
-        ? this.row(t('set_controls'), t(s.controls.mode === 'buttons' ? 'ctlModeButtons' : 'ctlModeZones'), () => {
+        ? infoRow(SET_ICON.controls, t('set_controls'), desc('controls'), el('button', { class: 'val', text: t(s.controls.mode === 'buttons' ? 'ctlModeButtons' : 'ctlModeZones'), onclick: () => {
             this.closePanel(true);
             $('menu').classList.add('hidden');
             openControlsEditor(() => {
               this.openPanel('settings');
             });
-          })
+          } }))
         : null,
       toggle('lefty'),
       toggle('vibration'),
+      // every key and button of the game in one place (the LAN ones were only in the help texts)
+      infoRow('⌨️', t('keysTitle'), t('keysList'), null),
       head('setSec_graphics'),
-      cycle('quality', ['auto', 'high', 'medium', 'low'], (v) => t('q_' + v)),
-      cycle('style', ['normal', 'outline', 'gameboy', 'crt'], (v) => t('style_' + v)),
-      cycle('pixel', [0, 1, 2], (v) => 'PX' + (v + 1)),
+      choice('quality', ['auto', 'high', 'medium', 'low'].map((v) => ({ v, icon: { auto: '🪄', high: '🌟', medium: '⭐', low: '▫️' }[v], name: t('q_' + v), desc: t('optDesc_q_' + v) }))),
+      choice('style', ['normal', 'outline', 'gameboy', 'crt'].map((v) => ({ v, pic: stylePic(v), name: t('style_' + v), desc: t('optDesc_style_' + v) }))),
+      choice('pixel', [0, 1, 2].map((v) => ({ v, pic: el('span', { class: 'px-pic px' + v, 'aria-hidden': 'true' }), name: 'PX' + (v + 1) }))),
       toggle('shake'),
       toggle('showFps'),
       head('setSec_access'),
@@ -2206,14 +2297,13 @@ export class UI {
       toggle('colorblind'),
       toggle('reduceFx'),
       toggle('oneButton'),
-      el('p', { class: 'small muted', text: t('setAccessHelp') }),
       head('setSec_data'),
-      this.row(t('transfer'), t('open'), () => this.openPanel('transfer')),
-      this.row(t('set_news'), t('open'), () => this.showNews()),
+      open('transfer', t('transfer'), () => this.openPanel('transfer')),
+      open('news', t('set_news'), () => this.showNews()),
       this.g.isApp ? this.updateRow() : null,
-      this.row(t('set_about'), t('open'), () => this.toast(t('aboutText'), 'gold')),
-      defaults,
-      reset,
+      open('about', t('set_about'), () => this.toast(t('aboutText'), 'gold')),
+      infoRow(SET_ICON.defaults, t('set_defaults'), desc('defaults'), defaults),
+      infoRow(SET_ICON.reset, t('set_reset'), desc('reset'), reset),
     );
   }
   toggleFullscreen() {
@@ -2224,10 +2314,10 @@ export class UI {
   }
   keyRow(key) {
     const label = this.capturing === key ? t('pressKey') : keyName(this.p.settings[key]);
-    return this.row(t('set_' + key), label, () => {
+    return infoRow(key === 'keyJump' ? '⬆️' : '⬇️', t('set_' + key), t('setDesc_' + key), el('button', { class: 'val', text: label, onclick: () => {
       this.capturing = key;
       this.renderPanel();
-    });
+    } }));
   }
   capturingKey() {
     return !!this.capturing;
@@ -2241,7 +2331,7 @@ export class UI {
     this.renderPanel();
   }
   updateRow() {
-    const row = this.row(t('set_version', { v: this.version || '…' }), this.updating ? '…' : t('updateCheck'), () => this.checkUpdates(true));
+    const row = infoRow('⬇️', t('set_version', { v: this.version || '…' }), t('setDesc_update'), el('button', { class: 'val', text: this.updating ? '…' : t('updateCheck'), onclick: () => this.checkUpdates(true) }));
     row.querySelector('.val').id = 'upd-btn';
     if (!this.version) this.currentVersion().then(() => this.panel === 'settings' && this.renderPanel());
     return row;
@@ -2273,20 +2363,41 @@ export class UI {
       el(
         'div',
         { class: 'room' },
-        el('span', { text: `${r.name} (${r.n}/${MAX_PLAYERS})` }),
-        r.st === 'race' || r.n >= MAX_PLAYERS
-          ? el('span', { class: 'muted', text: r.st === 'race' ? t('mpRacing') : t('mpFull') })
+        el('span', { text: `📶 ${r.name} (${r.n}/${MAX_PLAYERS})` }),
+        r.old || r.n >= MAX_PLAYERS
+          ? el('span', { class: 'muted small', text: r.old ? t('mpOldVersion') : t('mpFull') })
           : el('button', {
-              text: t('mpJoin'),
-              onclick: () => {
-                this.lanView = 'lobby';
-                this.lanIsHost = false;
-                this.g.lanJoin(r);
-                this.renderPanel();
-              },
+              // a room in the middle of a race: you wait inside and join the next one
+              text: r.st === 'race' ? t('mpJoinNext') : t('mpJoin'),
+              onclick: () => this.joinRoom(r.addr, r.port, r.name),
             }),
       ),
     );
+  }
+  joinRoom(addr, port, name) {
+    this.stopScan();
+    const field = $('lan-name');
+    if (field) this.g.lanSetName(field.value);
+    this.lanView = 'lobby';
+    this.lanIsHost = false;
+    this.g.lanJoinIp(addr, port, name);
+    this.renderPanel();
+  }
+  // a LAN room's QR code (from the host's lobby): tries every address it lists
+  joinFromQr(text) {
+    const j = decodeLanJoin(text);
+    if (!j) return this.toast(t('mpQrNotLan'), 'red');
+    if (this.panel !== 'lan') {
+      this.openPanel('lan', 'modes');
+      return setTimeout(() => this.joinFromQr(text), 400);
+    }
+    this.joinRoom(j.ips[0], j.port, j.name);
+    // a phone can have several addresses (Wi-Fi and hotspot): knock on the others too
+    for (const ip of j.ips.slice(1)) setTimeout(() => this.g.lan && this.g.lan.role === 'client' && !this.g.lan.lobby.length && this.g.lanJoinIp(ip, j.port, j.name), 1500);
+  }
+  stopScan() {
+    if (this.lanScanner) this.lanScanner.stop();
+    this.lanScanner = null;
   }
   mpLobby(players, isHost, myId, mode) {
     this.lobby = players;
@@ -2296,8 +2407,9 @@ export class UI {
     if (this.lanView === 'home' && !isHost) this.lanView = 'lobby';
     if (this.panel === 'lan' && this.lanView === 'lobby') this.renderPanel();
   }
-  mpResults(results, myId, tour) {
+  mpResults(results, myId, tour, mode) {
     this.results = results;
+    this.resultsMode = mode || this.lanMode;
     this.tour = tour || null;
     this.myId = myId;
     this.lanView = 'results';
@@ -2334,9 +2446,38 @@ export class UI {
     const name = el('input', { id: 'lan-name', maxlength: 12, value: this.p.name || '', autocomplete: 'off' });
     name.addEventListener('change', () => this.g.lanSetName(name.value));
     const ip = el('input', { id: 'lan-ip', placeholder: '192.168.43.1', inputmode: 'decimal', autocomplete: 'off' });
+    // scanning the host's QR: the quickest way in, and it works where searching does not
+    const video = el('video', { class: 'scan-video', playsinline: true, muted: true, autoplay: true });
+    const scanBtn = el('button', {
+      class: 'menu-btn',
+      text: '📷 ' + t('mpScanJoin'),
+      onclick: () => {
+        this.stopScan();
+        video.classList.add('on');
+        this.lanScanner = new CameraScanner(
+          video,
+          (text) => {
+            video.classList.remove('on');
+            if (isLanJoin(text)) this.joinFromQr(text);
+            else this.toast(t('mpQrNotLan'), 'red');
+          },
+          (key) => {
+            video.classList.remove('on');
+            this.toast(t(key), 'red');
+          },
+        );
+        this.lanScanner.start();
+      },
+    });
+    const last = this.p.lanLast;
+    const rejoin =
+      last && last.addr && Date.now() - (last.at || 0) < 6 * 3600 * 1000
+        ? infoRow('🔁', t('mpRejoin', { name: last.name || last.addr }), t('mpRejoinHelp'), el('button', { class: 'val', text: t('mpJoin'), onclick: () => this.joinRoom(last.addr, last.port || undefined, last.name) }))
+        : null;
     return el(
       'div',
       { class: 'lan' },
+      el('div', { class: 'lan-hero', 'aria-hidden': 'true' }, el('span', { class: 'lh-dino a', text: '🦖' }), el('span', { class: 'lh-wifi', text: '📶' }), el('span', { class: 'lh-dino b', text: '🦕' })),
       el('p', { class: 'small', text: t('mpIntro') }),
       el('label', { class: 'field' }, el('span', { text: t('mpName') }), name),
       el('button', {
@@ -2350,6 +2491,10 @@ export class UI {
         },
       }),
       el('div', { id: 'lan-rooms', class: 'rooms' }, this.roomEls()),
+      rejoin,
+      scanBtn,
+      el('p', { class: 'muted small', text: t('mpScanHelp') }),
+      video,
       el(
         'div',
         { class: 'field inline' },
@@ -2359,54 +2504,194 @@ export class UI {
           text: t('mpConnect'),
           onclick: () => {
             if (!ip.value.trim()) return;
-            this.g.lanSetName(name.value);
-            this.lanView = 'lobby';
-            this.g.lanJoinIp(ip.value);
-            this.renderPanel();
+            this.joinRoom(ip.value.trim(), undefined, ip.value.trim());
           },
         }),
       ),
       this.myIp ? el('p', { class: 'muted small', text: t('mpYourIp', { ip: this.myIp }) }) : null,
       el('p', { class: 'muted small', text: t('mpHotspotTip') }),
+      this.hcEl(),
+      this.lanHistEl(),
       this.coopTopEl(),
     );
   }
+  // handicap: each player picks their own, everybody sees it next to the name
+  hcEl() {
+    return choiceRow({
+      icon: '🐢',
+      label: t('hcLabel'),
+      options: HANDICAPS.map((h, v) => ({ v, icon: HC_ICON[v], name: t('hc_' + v), desc: t('hcDesc_' + v) })),
+      value: this.p.lanHc | 0,
+      pick: (v) => {
+        this.g.lanSetHandicap(v);
+        this.renderPanel();
+      },
+    });
+  }
+  // the mode picker: all 8 modes visible, each with a moving picture and its rules
+  lanModesEl() {
+    const cur = this.lanMode || 'race';
+    return el(
+      'div',
+      { class: 'lan-modes' },
+      el('h3', { text: t('mpModesTitle') }),
+      this.lanIsHost ? null : el('p', { class: 'muted small', text: t('mpModeHostOnly') }),
+      el(
+        'div',
+        { class: 'lan-mode-grid', role: 'radiogroup', 'aria-label': t('lanModeLabel') },
+        LAN_MODES.map((m) =>
+          el(
+            'button',
+            {
+              class: 'lan-mode lm-' + m + (m === cur ? ' on' : ''),
+              role: 'radio',
+              'aria-checked': m === cur ? 'true' : 'false',
+              'aria-label': t('lanMode_' + m) + '. ' + t('lanModeHelp_' + m),
+              disabled: !this.lanIsHost && m !== cur,
+              onclick: () => this.lanIsHost && m !== cur && this.g.lanSetMode(m),
+            },
+            el('span', { class: 'lm-ico', 'aria-hidden': 'true', text: LAN_MODE_ICON[m] }),
+            el('b', { text: t('lanMode_' + m) }),
+          ),
+        ),
+      ),
+      el('p', { class: 'seg-help small', text: LAN_MODE_ICON[cur] + ' ' + t('lanModeHelp_' + cur) }),
+    );
+  }
+  // a track from the level editor, for the modes that can use one
+  trackEl() {
+    const lan = this.g.lan;
+    const mode = this.lanMode || 'race';
+    const cur = lan && lan.track;
+    const pic = (lv) => el('span', { class: 'trk-pic', 'aria-hidden': 'true', text: [...trimmed(lv)].filter((c) => c !== '.').slice(0, 8).map((c) => PIECES[c]).join('') || '·' });
+    if (!TRACK_MODES.includes(mode)) return infoRow('🛤️', t('trkLabel'), t('trkNotInMode'), null);
+    if (!this.lanIsHost) return infoRow('🛤️', t('trkLabel') + ': ' + (cur ? cur.name || t('lvUntitled') : t('trkRandom')), cur ? t('trkDesc') : t('trkRandomDesc'), cur ? pic(cur) : null);
+    const levels = this.p.levels || [];
+    const idOf = (lv) => (lv ? levelId(lv) : '');
+    return el(
+      'div',
+      {},
+      choiceRow({
+        icon: '🛤️',
+        label: t('trkLabel'),
+        cls: 'trk-choice',
+        options: [{ v: '', icon: '🎲', name: t('trkRandom'), desc: t('trkRandomDesc') }].concat(levels.map((lv) => ({ v: idOf(lv), pic: pic(lv), name: lv.name || t('lvUntitled'), desc: t('trkDesc') }))),
+        value: idOf(cur),
+        pick: (v) => {
+          this.g.lanSetTrack(levels.find((lv) => idOf(lv) === v) || null);
+          this.renderPanel();
+        },
+      }),
+      levels.length ? null : el('p', { class: 'muted small', text: t('trkNone') }),
+    );
+  }
+  // gifts for a friend in the room: what each costs and what it does, all on one card
+  giftEl(to) {
+    const p = this.lobby.find((x) => x.id === to);
+    if (!p) return null;
+    const gd = this.p.giftDay || {};
+    const left = gd.d === new Date().toISOString().slice(0, 10) ? Math.max(0, GIFTS_PER_DAY - gd.n) : GIFTS_PER_DAY;
+    return el(
+      'div',
+      { class: 'gift-box' },
+      el('h3', { text: '🎁 ' + t('giftTitle', { name: p.name }) }),
+      Object.keys(GIFTS).map((k) =>
+        infoRow(
+          GIFT_ICON[k],
+          t('giftKind_' + k),
+          t('giftDesc_' + k),
+          el('button', {
+            class: 'val',
+            text: '🦴 ' + GIFTS[k],
+            disabled: left <= 0 || this.p.coins < GIFTS[k],
+            onclick: () => {
+              if (this.g.lanGift(to, k)) {
+                this.giftTo = null;
+                this.renderPanel();
+              }
+            },
+          }),
+        ),
+      ),
+      el('p', { class: 'muted small', text: t('giftLeft', { n: left }) }),
+      el('button', { class: 'menu-btn', text: t('back'), onclick: () => ((this.giftTo = null), this.renderPanel()) }),
+    );
+  }
+  // the host's QR code: friends scan it and are in
+  joinQrEl() {
+    if (!this.lanIsHost || !this.myIp) return null;
+    const ips = this.myIp.split(',').map((x) => x.trim()).filter(Boolean);
+    let qr = null;
+    try {
+      qr = qrCanvas(encodeLanJoin(ips, this.p.name), 3);
+    } catch {
+      return null;
+    }
+    return el('div', { class: 'join-qr' }, qr, el('p', { class: 'muted small', text: t('mpJoinQr') }));
+  }
   lobbyEl() {
+    if (this.giftTo) {
+      const box = this.giftEl(this.giftTo);
+      if (box) return el('div', { class: 'lan' }, box);
+      this.giftTo = null;
+    }
+    const lan = this.g.lan;
+    const mode = this.lanMode || 'race';
+    const team = TEAM_MODES.includes(mode);
     const players = this.lobby.map((p, i) =>
       el(
         'div',
-        { class: 'player' },
+        { class: 'player' + (p.late ? ' late' : '') },
         dinoIcon(SKINS[p.skin] ? p.skin : 'classic'),
         el('span', { text: p.name }),
-        el('span', { class: 'muted', text: [i === 0 ? t('mpHostTag') : '', p.id === this.myId ? t('mpYou') : ''].filter(Boolean).join(' · ') }),
+        el('span', {
+          class: 'muted small',
+          text: [
+            team ? t(i % 2 ? 'teamB' : 'teamA') : '',
+            p.hc ? HC_ICON[p.hc] + ' ' + t('hc_' + p.hc) : '',
+            i === 0 ? t('mpHostTag') : '',
+            p.id === this.myId ? t('mpYou') : '',
+            p.late ? '⏳' : '',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        }),
+        p.id !== this.myId ? el('button', { class: 'val gift-btn', text: '🎁', title: t('giftBtn'), 'aria-label': t('giftBtn') + ' ' + p.name, onclick: () => ((this.giftTo = p.id), this.renderPanel()) }) : null,
       ),
     );
     const canStart = this.lobby.length >= 2;
-    const MODES = ['race', 'sabotage', 'elimination', 'tournament', 'coop', 'teams', 'bosses'];
-    const modeRow = this.lanIsHost
-      ? this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => this.g.lanSetMode(MODES[(MODES.indexOf(this.lanMode || 'race') + 1) % MODES.length]))
-      : this.row(t('lanModeLabel'), t('lanMode_' + (this.lanMode || 'race')), () => {});
+    // someone who came in during a race waits for the next one
+    const waiting = !this.lanIsHost && lan && lan.lobbySt === 'race' && lan.state !== 'race';
     return el(
       'div',
       { class: 'lan' },
       el('h3', { text: t('mpPlayers', { n: this.lobby.length }) }),
-      modeRow,
-      el('p', { class: 'muted small', text: t('lanModeHelp_' + (this.lanMode || 'race')) }),
       el('div', { class: 'players' }, players.length ? players : el('p', { class: 'muted', text: '…' })),
-      this.myIp ? el('p', { class: 'muted small', text: t('mpYourIp', { ip: this.myIp }) }) : null,
+      waiting ? el('p', { class: 'blink', text: '⏳ ' + t('mpLateWait') }) : null,
       this.lanIsHost
         ? el('button', { class: 'menu-btn primary', text: t('mpStart'), disabled: !canStart, onclick: () => this.g.lanStart() })
-        : el('p', { class: 'blink', text: t('mpWaitHost') }),
+        : waiting
+          ? null
+          : el('p', { class: 'blink', text: t('mpWaitHost') }),
       this.lanIsHost && !canStart ? el('p', { class: 'muted small', text: t('mpNeed2') }) : null,
+      this.joinQrEl(),
+      this.lanModesEl(),
+      this.trackEl(),
+      this.hcEl(),
+      this.myIp ? el('p', { class: 'muted small', text: t('mpYourIp', { ip: this.myIp }) }) : null,
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
     );
   }
   resultsEl() {
     const r = this.results || [];
     const winner = r[0];
-    const coop = this.lanMode === 'coop' || this.lanMode === 'bosses';
-    // teams: A and B alternate in lobby order, a team scores the sum of its runners
-    if (this.lanMode === 'teams' && winner) {
+    const mode = this.resultsMode || this.lanMode;
+    const coop = mode === 'coop' || mode === 'bosses';
+    const timeOf = (p) => (p.ft ? ' · 🏁 ' + p.ft.toFixed(1) + 's' : '') + (p.hc ? ' · ' + HC_ICON[p.hc] : '');
+    const again = (label) =>
+      this.lanIsHost ? el('button', { class: 'menu-btn primary', text: label, disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() }) : el('p', { class: 'blink', text: t('mpWaitHost') });
+    // teams and relay: A and B, a team scores the sum of its runners
+    if (TEAM_MODES.includes(mode) && winner) {
       const tt = this.g.teamTotals(r, this.lobby);
       const name = (i) => t(i ? 'teamB' : 'teamA');
       const mine = tt.of.get(this.myId);
@@ -2414,13 +2699,12 @@ export class UI {
       return el(
         'div',
         { class: 'lan' },
-        el('h3', { class: 'winner', text: headT }),
+        el('h3', { class: 'winner', text: LAN_MODE_ICON[mode] + ' ' + headT }),
         el('p', { text: `${name(0)} ${pad5(tt.sum[0])}   ${name(1)} ${pad5(tt.sum[1])}` }),
-        el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: `${p.name} · ${name(tt.of.get(p.id) ?? 0)}` })))),
-        this.lanIsHost
-          ? el('button', { class: 'menu-btn primary', text: t('again'), disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
-          : el('p', { class: 'blink', text: t('mpWaitHost') }),
+        el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: `${p.name} · ${name(tt.of.get(p.id) ?? 0)}${timeOf(p)}` })))),
+        again(t('again')),
         el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
+        this.lanHistEl(),
       );
     }
     const head = coop && winner ? t('coopResult', { n: Math.max(...r.map((p) => p.sc)) }) : winner ? (winner.id === this.myId && r.length > 1 ? t('mpYouWon') : t('mpWinner', { name: winner.name })) : '';
@@ -2433,18 +2717,51 @@ export class UI {
           el('p', { class: 'muted small', text: t('tourThisRace') }),
         ]
       : [];
-    const again = tour ? (tour.done ? t('tourNew') : t('tourNext')) : t('again');
     return el(
       'div',
       { class: 'lan' },
-      tour && !tour.done ? null : el('h3', { class: 'winner', text: head }),
+      tour && !tour.done ? null : el('h3', { class: 'winner', text: (LAN_MODE_ICON[mode] || '') + ' ' + head }),
       tourEls,
-      el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: p.name })))),
+      el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: p.name + timeOf(p) })))),
       coop ? this.coopTopEl() : null,
-      this.lanIsHost
-        ? el('button', { class: 'menu-btn primary', text: again, disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() })
-        : el('p', { class: 'blink', text: t('mpWaitHost') }),
+      again(tour ? (tour.done ? t('tourNew') : t('tourNext')) : t('again')),
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
+      this.lanHistEl(),
+    );
+  }
+  // the last 10 LAN races on this device, and who wins most often
+  lanHistEl() {
+    const h = this.p.lanHistory || [];
+    const wins = Object.entries(this.p.lanWins || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    const when = (d) => new Date(d).toLocaleString(undefined, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const line = (e) => {
+      const coop = e.m === 'coop' || e.m === 'bosses';
+      const team = TEAM_MODES.includes(e.m);
+      const res = coop
+        ? t('lanHistCoop', { n: Math.max(0, ...e.r.map((x) => x.s)) })
+        : team
+          ? e.w
+            ? t('lanHistTeam', { team: t(e.w === 'B' ? 'teamB' : 'teamA') })
+            : t('lanHistDraw')
+          : '🏆 ' + (e.w || '-');
+      const me = e.r.find((x) => x.me);
+      const place = me && !coop && !team ? ' · #' + (e.r.indexOf(me) + 1) : '';
+      return el(
+        'li',
+        {},
+        el('span', { class: 'hist-ico', 'aria-hidden': 'true', text: LAN_MODE_ICON[e.m] || '🏃' }),
+        el('span', {}, el('b', { text: t('lanMode_' + e.m) + ' · ' + res + place }), el('small', { class: 'muted', text: when(e.d) + ' · ' + e.r.map((x) => x.n + ' ' + x.s).join(', ') })),
+      );
+    };
+    return el(
+      'div',
+      { class: 'lan-hist' },
+      el('h3', { text: '📜 ' + t('lanHistTitle') }),
+      h.length ? el('ol', { class: 'hist' }, h.map(line)) : el('p', { class: 'muted small', text: t('lanHistEmpty') }),
+      wins.length ? el('h3', { text: '🏅 ' + t('lanWinsTitle') }) : null,
+      wins.length ? el('ol', { class: 'top' }, wins.map(([n, k]) => el('li', {}, el('b', { text: '×' + k }), el('span', { text: n })))) : null,
     );
   }
   // co-op: the best teams that played on this device
@@ -2459,6 +2776,8 @@ export class UI {
     );
   }
   leaveLanToMenu() {
+    this.stopScan();
+    this.giftTo = null;
     this.lanView = 'home';
     this.g.toMenu();
   }

@@ -116,7 +116,14 @@ function defaults() {
     advTimes: {}, // best time per level ("3-1", and "3-1h" in Adventure+)
     bossKills: {}, // bestiary: boss kind -> times beaten
     obsBiome: {}, // bestiary: world -> obstacles passed there
-    dailyShop: { date: '', bought: [] }, // the offers of the day already bought // the season run: best score of this season (key: year + season)
+    dailyShop: { date: '', bought: [] },
+    // v1.7: LAN
+    lanId: '', // the same id in every room, so a player who drops out can come back
+    lanHc: 0, // handicap in LAN races: 0 none, 1 a bit slower + 1 heart, 2 slower + 2 hearts
+    lanHistory: [], // the last 10 LAN races { d, m, w, r: [{ n, s, me, tm, ft }] }
+    lanWins: {}, // name -> LAN wins seen on this device
+    lanLast: {}, // the last room joined { addr, port, name, at }
+    giftDay: { d: '', n: 0 }, // gifts sent today // the offers of the day already bought // the season run: best score of this season (key: year + season)
   };
 }
 

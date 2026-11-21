@@ -119,6 +119,16 @@ Pentru o lume nouă: o intrare în `BIOMES`, obstacole în `OBSTACLE_GEN`, decor
 - în co-op, o lovitură trimite `hit` cu o cheie unică (de 3 ori). Gazda numără fiecare cheie o singură dată, iar cifra ei e cea finală;
 - când nu mai e nimeni în viață, gazda calculează rezultatele și trimite `end`. Ultimul rezultat se repetă și în lobby, pentru cine a pierdut pachetul.
 
+Din v1.7 protocolul are versiunea 2 (`PROTO`): camerele vechi apar în listă ca „altă versiune” și nu se pot alege.
+
+- fiecare jucător are un id fix (`profile.lanId`), așa că după o cădere de Wi-Fi gazda îl primește înapoi în aceeași cameră (și în cursa curentă, dacă era în ea). Clientul care nu mai aude gazda trimite `join` încă 15 secunde înainte să renunțe;
+- cine intră în timpul cursei apare în lobby cu `late` și pornește la cursa următoare (`raceIds` ține cine aleargă acum);
+- `go` și `all` duc și ordinea jucătorilor (`ord`, pentru echipe și ștafetă) și traseul din editor (`trk`), dacă gazda a ales unul;
+- ștafeta: cine așteaptă trimite `w: 1`; când starea colegului dinainte devine `a: 0`, pornește de la scorul (`sc`) și viteza (`v`) lui;
+- pe un traseu, cine trece linia de sosire trimite timpul (`ft`); rezultatele îi pun întâi pe cei care au terminat, după timp;
+- cadourile (`gift`) au o cheie și se retrimit până vine confirmarea (`gack`); gazda le dă mai departe după câmpul `to`;
+- handicapul (`hc`) se aplică doar pe dispozitivul jucătorului: lumea lui merge mai încet, dar scorul crește în același ritm.
+
 Protocolul suportă pachete pierdute, dublate și întârziate. Testul cu 3 jucători și 20% pierderi dă aceleași rezultate pe toate ecranele.
 
 ## Release și actualizări
