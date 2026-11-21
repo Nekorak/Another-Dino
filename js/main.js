@@ -26,7 +26,7 @@ import { profile, save, loadGhost, saveGhost } from './save.js';
 import { t, setLang } from './i18n.js';
 import { ensureMissions, checkMissions, checkAchievements, ACHIEVEMENT_REWARD, ensureWeekly, checkWeekly } from './missions.js';
 import { checkMedals, MEDAL_NAMES } from './medals.js';
-import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
+import { powerTimeK, doubleBoneChance, powerGapK, upgradeLevel, xpK, reviveCost, addXp, dailyInfo, completeDaily, recordDaily, levelOf } from './progress.js';
 import { createTransport } from './net.js';
 import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked, SEASON_W, seasonRunKey, ADV_ORDER, levelKey, advHardOn } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
@@ -38,8 +38,9 @@ import { addPassXp } from './rewards.js';
 import { controlAt } from './controls.js';
 import { encodeChallenge } from './transfer.js';
 import { petPower, growPet, petLevel, PET_MAX } from './pets.js';
-import { SPEEDS, trimmed, levelId, saveLevelStars, finishWeeklyTrack } from './levels.js';
+import { SPEEDS, trimmed, levelId, saveLevelStars, finishWeeklyTrack, storeLevel } from './levels.js';
 import { createBoss } from './bosses.js';
+import { masteryK, checkEarnedTitles, TITLES } from './longterm.js';
 
 setCustomSkin(profile.customSkin); // the dino painted in the skin editor
 const recorder = new Recorder(); // the last 10 seconds, for the replay after a game over
@@ -70,7 +71,6 @@ const BASE_POWER_TIME = { shield: 15, magnet: 10, slow: 6, double: 12, rocket: 5
 const GHOST_STEP = 0.05;
 const RIVAL_LANES = [-2.4, -4.8, -7.2, -9.6, -12, -14.4, -16.8]; // up to 7 other players in a LAN race
 const LANES = [0, -3.2, -6.4, -9.6]; // lanes for local multiplayer and the robot rival
-const REVIVE_COST = 50;
 const REVIVE_TIME = 5;
 // how long events last, in points of distance (not seconds: a shared track must stay the
 // same for a player who slowed time down)
@@ -1354,18 +1354,18 @@ function zenBump(p, o) {
 }
 
 function canRevive() {
-  return rules().revive && !player.revived && profile.coins >= REVIVE_COST;
+  return rules().revive && !player.revived && profile.coins >= reviveCost();
 }
 
 function offerRevive() {
   state = 'revive';
   reviveTimer = REVIVE_TIME;
-  ui.showRevive(REVIVE_COST, REVIVE_TIME);
+  ui.showRevive(reviveCost(), REVIVE_TIME);
 }
 
 function acceptRevive() {
-  if (state !== 'revive' || profile.coins < REVIVE_COST) return;
-  profile.coins -= REVIVE_COST;
+  if (state !== 'revive' || profile.coins < reviveCost()) return;
+  profile.coins -= reviveCost();
   profile.stats.revives++;
   save();
   const p = player;
@@ -1417,7 +1417,7 @@ function recordRun(pts) {
   if (mode === 'daily') recordDaily(s);
   run.score = s;
   const missionsDone = R2.missions ? checkMissions(run) : [];
-  const xp = addXp((s / 10 + run.coins * 2 + missionsDone.length * 20) * (mode === 'zen' ? 0.5 : 1));
+  const xp = addXp((s / 10 + run.coins * 2 + missionsDone.length * 20) * (mode === 'zen' ? 0.5 : 1) * xpK());
   addPassXp(xp.gained); // the same XP fills the season pass
   // the pet grows with the distance run together (not in local multiplayer, where it isn't yours alone)
   const petGrew = mode === 'local' ? 0 : growPet(score);
@@ -2236,6 +2236,7 @@ function updateCamera(dt) {
       fz = best.lane;
     }
     if (relayWait) ui.spectate(relayWait.name, 'relayWaiting');
+    else if (lanWatching && best) ui.spectate(best.name, 'specWatching');
     else if (best) ui.spectate(best.name);
   }
   camFocus.x += (fx - camFocus.x) * Math.min(1, dt * 3);
@@ -2753,7 +2754,8 @@ function hitCheck(p) {
 }
 
 function giveBone(p, value = 1) {
-  let n = value * (Math.random() < doubleBoneChance() ? 2 : 1) * rules().bones;
+  // skin mastery: +5% bones per rank of the skin you wear
+  let n = value * (Math.random() < doubleBoneChance() ? 2 : 1) * rules().bones * (p === player ? masteryK() : 1);
   n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); // zen counts a quarter of the bones
   if (p === player || isLocal()) {
     run.coins += n;
@@ -2989,6 +2991,7 @@ const EMOTES = ['😂', '🔥', '👋', '😱'];
 let lanHandiK = 1;
 let relayWait = null; // relay: { prev, name } = the teammate whose baton we wait for
 let relayV = 0; // relay: the speed when this runner fell (the next one starts with it)
+let lanWatching = false; // this device only watches the race (spectator, or out of the cup)
 
 function myLanInfo() {
   if (!profile.name) profile.name = 'Dino-' + Math.floor(1000 + Math.random() * 9000);
@@ -2997,7 +3000,7 @@ function myLanInfo() {
   if (!profile.lanId) profile.lanId = Math.random().toString(36).slice(2, 10);
   save();
   const id = profile.lanId + (transport && transport.kind === 'test' ? '-' + Math.random().toString(36).slice(2, 5) : '');
-  return { id, name: profile.name, skin: profile.skin, hat: profile.hat, hc: profile.lanHc | 0 };
+  return { id, name: profile.name, skin: profile.skin, hat: profile.hat, hc: profile.lanHc | 0, ti: profile.title || '', spec: profile.lanSpec ? 1 : 0 };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -3052,6 +3055,8 @@ function sendGift(to, kind) {
   if (!lan.gift(to, kind)) return false;
   profile.coins -= cost;
   profile.giftDay.n++;
+  profile.stats.giftsSent = (profile.stats.giftsSent || 0) + 1;
+  lanRewards();
   save();
   ui.setCoins();
   ui.toast(t('giftSending', { name: lan.nameOf(to) }), 'gold');
@@ -3064,6 +3069,7 @@ function lanFinish() {
   const p = player;
   p.finishT = Math.max(0.1, runTime);
   p.points += 250;
+  profile.stats.lanFinishes = (profile.stats.lanFinishes || 0) + 1;
   p.alive = false;
   p.final = score;
   p.finalPts = p.points;
@@ -3107,6 +3113,35 @@ function startRelayLeg(from) {
   vibrate([60, 40, 60]);
 }
 
+// achievements, medals and earned titles after something happened in LAN
+function lanRewards() {
+  for (const a of checkAchievements()) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
+  celebrateMedals(checkMedals());
+  for (const id of checkEarnedTitles()) ui.toast(t('titleGot', { name: TITLES[id].icon + ' ' + t('title_' + id) }), 'gold');
+}
+// tracks a friend sent: kept in the level editor list (the same track is kept once)
+function receivePack(from, list) {
+  let n = 0;
+  for (const lv of list) {
+    if (!lv || !lv.t || profile.levels.some((x) => levelId(x) === levelId(lv))) continue;
+    storeLevel({ ...lv, name: lv.name || t('lvUntitled') }, 'lan');
+    n++;
+  }
+  sfx.reward();
+  ui.toast(n ? t('packGot', { name: lan ? lan.nameOf(from) : '?', n }) : t('packHadAll', { name: lan ? lan.nameOf(from) : '?' }), 'gold');
+  ui.lanRefresh && ui.lanRefresh();
+}
+// quick messages: the last few, shown in the room
+const quickLog = [];
+function receiveQuick(id, i) {
+  const name = lan ? (id === lan.me.id ? lan.me.name : lan.nameOf(id)) : '?';
+  quickLog.unshift({ name, i, me: lan && id === lan.me.id, at: Date.now() });
+  quickLog.length = Math.min(quickLog.length, 6);
+  if (!lan || id !== lan.me.id) showEmote(id, '💬'), sfx.beep();
+  ui.toast(name + ': ' + t('qm_' + i), 'biome');
+  ui.quickLog && ui.quickLog(quickLog);
+}
+
 async function openLan() {
   if (!transport) return false;
   if (lan) return true;
@@ -3114,10 +3149,29 @@ async function openLan() {
     rooms: (list) => ui.mpRooms(list),
     lobby: (list, isHost) => ui.mpLobby(list, isHost, session.me.id, session.mode),
     start: (seed, m, x) => beginCountdown(seed, m, x),
-    end: (results, tour, endMode) => {
+    end: (results, tour, endMode, cup) => {
       const st = profile.stats;
+      const em = endMode || session.mode;
+      if (em === 'bracket' && cup && cup.done && cup.champ && cup.champ.id === session.me.id) {
+        st.brackets = (st.brackets || 0) + 1;
+        profile.coins += 150;
+        ui.toast(t('cupBonus', { n: 150 }), 'gold');
+      }
+      if (em === 'relay') {
+        const tt = teamTotals(results, session.lobby);
+        if (tt.winner != null && tt.of.get(session.me.id) === tt.winner) st.relayWins = (st.relayWins || 0) + 1;
+      }
       rememberLanRace(results, endMode || session.mode, session.me.id);
       relayWait = null;
+      // only watched this one: nothing to count, just the results
+      if (!results.some((r) => r.id === session.me.id)) {
+        save();
+        if (state === 'spectate') state = 'over';
+        lanWatching = false;
+        ui.spectate(null);
+        music.stop(0.3);
+        return ui.mpResults(results, session.me.id, tour, em, cup);
+      }
       if (tour && tour.done && tour.table.length > 1 && tour.table[0].id === session.me.id) {
         st.tournaments = (st.tournaments || 0) + 1;
         profile.coins += 150;
@@ -3160,13 +3214,13 @@ async function openLan() {
         profile.coins += 100;
         ui.toast(t('elimBonus', { n: 100 }), 'gold');
       }
-      for (const a of checkAchievements()) ui.toast(t('achievementDone', { name: t('a_' + a.id), n: ACHIEVEMENT_REWARD }), 'gold');
-      celebrateMedals(checkMedals());
+      lanRewards();
       save();
       if (state === 'spectate') state = 'over';
+      lanWatching = false;
       ui.spectate(null);
       music.stop(0.3);
-      ui.mpResults(results, session.me.id, tour, endMode || session.mode);
+      ui.mpResults(results, session.me.id, tour, em, cup);
     },
     attack: (by) => {
       if (state !== 'running' || mode !== 'lan') return;
@@ -3177,6 +3231,9 @@ async function openLan() {
     emote: (id, e) => showEmote(id, e),
     reconnect: (on) => ui.toast(t(on ? 'mpReconnecting' : 'mpReconnected'), on ? 'red' : 'gold'),
     gift: receiveGift,
+    pack: receivePack,
+    packDone: (id, ok) => ui.toast(t(ok ? 'packArrived' : 'packFailed', { name: session.nameOf(id) }), ok ? 'gold' : 'red'),
+    quick: receiveQuick,
     giftDone: (g, ok) => {
       if (ok) return ui.toast(t('giftArrived', { name: session.nameOf(g.to) }), 'gold');
       // it never arrived: the bones go back
@@ -3248,6 +3305,8 @@ function beginCountdown(seed, m, x = {}) {
   resetRun(seed);
   player.spare = hc.hearts;
   relayV = 0;
+  // a spectator (or someone out of the cup) only watches this race
+  lanWatching = Array.isArray(x.ord) && !x.ord.includes(lan.me.id);
   // relay: the first runner of each team starts, the others wait for their teammate
   relayWait = null;
   if (lanMode === 'relay' && Array.isArray(x.ord)) {
@@ -3265,6 +3324,7 @@ function beginCountdown(seed, m, x = {}) {
   let lane = 0;
   for (const p of lan.lobby) {
     if (p.id === lan.me.id || lane >= RIVAL_LANES.length) continue;
+    if (Array.isArray(x.ord) && !x.ord.includes(p.id)) continue; // spectators are not on the track
     const d = createDino(SKINS[p.skin] && p.skin !== 'custom' ? p.skin : 'classic', HATS[p.hat] ? p.hat : 'none');
     const label = makeLabel(p.name);
     d.root.position.z = RIVAL_LANES[lane];
@@ -3280,6 +3340,7 @@ function beginCountdown(seed, m, x = {}) {
   ui.toast(t('lanMode_' + lanMode), 'gold');
   if (adv) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
   if (relayWait) ui.toast(t('relayYouWait', { name: relayWait.name }), 'gold');
+  if (lanWatching) ui.toast(t('specYouWatch'), 'gold');
   if (hc.hearts) ui.toast(t('hcStart', { n: hc.hearts }), 'gold');
   sfx.beep();
 }
@@ -3318,11 +3379,11 @@ function updateRivals(dt) {
   const mine = meAlive ? score : player.final;
   const myPts = meAlive ? player.points : player.finalPts;
   // the scoreboard shows points (with combos); positions on the track use distance
-  const list = [{ id: lan.me.id, name: lan.me.name, sc: Math.floor(myPts), a: meAlive }];
+  const list = lanWatching ? [] : [{ id: lan.me.id, name: lan.me.name, sc: Math.floor(myPts), a: meAlive }];
   for (const s of states.values()) list.push({ id: s.id, name: lan.nameOf(s.id), sc: s.pt ?? s.sc, a: !!s.a && !s.w });
   ui.mpHud(list.sort((a, b) => b.sc - a.sc), lan.me.id);
   if (player.alive) relayV = speed;
-  if (['countdown', 'running', 'over', 'dying', 'spectate'].includes(state)) {
+  if (['countdown', 'running', 'over', 'dying', 'spectate'].includes(state) && !lanWatching) {
     if (relayWait) lan.sendState({ sc: 0, pt: 0, y: 0, d: 0, a: 1, w: 1 });
     else lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive, v: lanMode === 'relay' ? relayV : 0, ft: player.finishT, hc: lan.me.hc | 0 });
   }
@@ -3529,7 +3590,7 @@ function update(rawDt) {
       music.biome = songOf(BIOMES[env.biome].id);
       music.start();
       sfx.beep(true);
-      if (relayWait) waitForBaton();
+      if (relayWait || lanWatching) waitForBaton();
     } else if (String(Math.ceil(left)) !== ui.countdownText()) {
       ui.countdown(String(Math.ceil(left)));
       sfx.beep();
@@ -3844,8 +3905,24 @@ const game = {
     save();
     if (lan) lan.setMe({ name: profile.name });
   },
+  lanSetSpectator(on) {
+    profile.lanSpec = !!on;
+    save();
+    if (lan) lan.setMe({ spec: on ? 1 : 0 });
+  },
+  lanSendPack: () => (lan ? lan.sendPack(profile.levels) : 0),
+  lanQuick(i) {
+    if (!lan) return;
+    lan.quick(i);
+    profile.stats.quickMsgs = (profile.stats.quickMsgs || 0) + 1;
+    lanRewards();
+    save();
+  },
+  get quickLog() {
+    return quickLog;
+  },
   lanSetLook() {
-    if (lan) lan.setMe({ skin: profile.skin, hat: profile.hat });
+    if (lan) lan.setMe({ skin: profile.skin, hat: profile.hat, ti: profile.title || '' });
   },
   get lan() {
     return lan;

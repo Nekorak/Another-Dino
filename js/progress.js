@@ -6,11 +6,18 @@ import { SKINS, HATS, PETS } from './models.js';
 // ------------------------------------------------------------------ upgrades
 // cost of each next level; the array length is the max level
 export const UPGRADES = {
-  duration: { cost: [100, 250, 450, 800, 1300] }, // power-ups last +15% per level
+  duration: { cost: [100, 250, 450, 800, 1300, 2000, 3000, 4500] }, // power-ups last +15% per level
   shieldStart: { cost: [800] }, // every run starts with a shield
-  bones: { cost: [150, 350, 650, 1000, 1600] }, // +10% chance per level that a bone counts double
-  luck: { cost: [200, 450, 900] }, // power-ups show up more often
+  bones: { cost: [150, 350, 650, 1000, 1600, 2400, 3500, 5000] }, // +10% chance per level that a bone counts double
+  luck: { cost: [200, 450, 900, 1800, 3000] }, // power-ups show up more often
+  // v1.8: more to save up for
+  xp: { cost: [500, 1000, 2000, 3500, 5000] }, // +10% XP per level
+  revive: { cost: [600, 1500, 3000] }, // the second chance costs 10 bones less per level
+  chest: { cost: [800, 2000, 4000] }, // the daily chest gives +25% bones per level
 };
+export const xpK = () => 1 + 0.1 * upgradeLevel('xp');
+export const reviveCost = () => 50 - 10 * upgradeLevel('revive');
+export const chestK = () => 1 + 0.25 * upgradeLevel('chest');
 
 export const upgradeLevel = (id) => profile.upgrades[id] || 0;
 export const powerTimeK = () => 1 + 0.15 * upgradeLevel('duration');

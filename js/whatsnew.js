@@ -3,6 +3,36 @@
 // id не связан с номером сборки (его ставит CI), поэтому окно работает и в браузере, и в приложениях.
 export const NEWS = [
   {
+    id: '2026-11-21-v18',
+    ro: [
+      'LAN: un mod nou, Cupa 1 la 1. Tablou cu eliminare: câștigi duelul și treci în runda următoare, până la campion.',
+      'LAN: „Doar mă uit”. Stai în cameră ca spectator și vezi cursa fără să alergi.',
+      'LAN: gazda trimite toate traseele din editor tuturor din cameră, dintr-o atingere.',
+      'LAN: mesaje rapide („Încă una!”, „Bravo!”, „GG”…) pe care le văd toți din cameră.',
+      'LAN: realizări și medalii noi (ștafete, cupe, cadouri, sosiri pe trasee).',
+      'Magazin: titluri lângă numele tău, un album de 48 de abțibilduri cu sclipici pentru dubluri, și măiestria skin-urilor (3 stele, +5% oase fiecare).',
+      'Magazin: îmbunătățiri noi (experiență, reînviere ieftină, cufăr mai bogat) și mai multe niveluri pentru cele vechi.',
+    ],
+    ru: [
+      'LAN: новый режим Кубок 1 на 1. Сетка на выбывание: выиграл дуэль, прошёл в следующий раунд, и так до чемпиона.',
+      'LAN: «Только смотрю». Оставайся в комнате зрителем и смотри гонку, не участвуя.',
+      'LAN: хост одним касанием отправляет все трассы из редактора всем в комнате.',
+      'LAN: быстрые сообщения («Ещё разок!», «Молодец!», «GG»…), которые видят все в комнате.',
+      'LAN: новые достижения и медали (эстафеты, кубки, подарки, финиши на трассах).',
+      'Магазин: титулы рядом с именем, альбом из 48 наклеек с блёстками за повторки и мастерство скинов (3 звезды, +5% косточек каждая).',
+      'Магазин: новые улучшения (опыт, дешёвое возрождение, богатый сундук) и больше уровней для старых.',
+    ],
+    en: [
+      'LAN: a new mode, the 1v1 Cup. A knockout bracket: win your duel and go to the next round, all the way to champion.',
+      'LAN: "Just watching". Stay in the room as a spectator and watch the race without running.',
+      'LAN: the host sends all their editor tracks to everyone in the room with one tap.',
+      'LAN: quick messages ("One more!", "Well done!", "GG"…) that everyone in the room sees.',
+      'LAN: new achievements and medals (relays, cups, gifts, track finishes).',
+      'Shop: titles next to your name, a 48-sticker album with glitter for doubles, and skin mastery (3 stars, +5% bones each).',
+      'Shop: new upgrades (experience, cheap revive, richer chest) and more levels for the old ones.',
+    ],
+  },
+  {
     id: '2026-11-21-v17',
     ro: [
       'LAN: un mod nou, Ştafeta. Când cazi, următorul din echipă pleacă de unde ai rămas.',

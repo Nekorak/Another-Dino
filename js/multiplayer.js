@@ -13,9 +13,9 @@ export const COOP_HEARTS = 3;
 const TIMEOUT = 4500; // players send something at least every second (heartbeat)
 const RECONNECT = 15000; // a client that lost the host keeps knocking this long before giving up
 // every LAN mode, in the order of the mode picker
-export const LAN_MODES = ['race', 'sabotage', 'elimination', 'tournament', 'coop', 'teams', 'bosses', 'relay'];
+export const LAN_MODES = ['race', 'sabotage', 'elimination', 'tournament', 'bracket', 'coop', 'teams', 'bosses', 'relay'];
 // modes that can run on a track from the level editor instead of a random one
-export const TRACK_MODES = ['race', 'sabotage', 'tournament', 'coop', 'teams'];
+export const TRACK_MODES = ['race', 'sabotage', 'tournament', 'bracket', 'coop', 'teams'];
 // modes played as two teams, A and B, alternating in lobby order
 export const TEAM_MODES = ['teams', 'relay'];
 // handicap: a slower world (the score still counts at full speed) and spare hearts
@@ -27,6 +27,16 @@ export const HANDICAPS = [
 // gifts between friends in a room: what they cost the sender
 export const GIFTS = { b25: 25, b100: 100, snack: 60 };
 export const GIFTS_PER_DAY = 5;
+// quick messages in the room: ready-made phrases (i18n keys qm_0 .. qm_7)
+export const QUICK_MSGS = 8;
+function shuffle(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 // the QR code a host shows so friends can join without searching
 const JOIN_HEADER = 'ANOTHERDINO-LAN';
 export const isLanJoin = (text) => String(text || '').trim().startsWith(JOIN_HEADER + ';');
@@ -48,7 +58,7 @@ const cleanTrack = (trk) =>
 export class LanSession {
   constructor(transport, me, on) {
     this.t = transport;
-    this.me = me; // { id, name, skin, hat, hc }
+    this.me = me; // { id, name, skin, hat, hc, ti (title), spec (only watches) }
     this.on = on; // { rooms, lobby, start, end, error, closed, attack, emote, reconnect, gift, giftDone }
     this.role = 'idle';
     this.rooms = new Map();
@@ -67,8 +77,10 @@ export class LanSession {
     this.raceIds = new Set(); // host: who runs in this race (a late joiner waits for the next one)
     this.lobbySt = 'lobby'; // client: what the host is doing (a late joiner sees 'race')
     this.reconnecting = 0; // client: when the host went quiet
-    this.gifts = new Map(); // gifts on their way: key -> { to, kind, tries }
+    this.gifts = new Map(); // gifts and track packs on their way: key -> { to, m, tries, done }
     this.giftsSeen = new Set();
+    this.bracket = null; // host: the knockout cup { round, alive: [ids], rounds: [...], done, champ }
+    this.cup = null; // the cup as everyone sees it (from the lobby)
   }
 
   async open() {
@@ -126,8 +138,8 @@ export class LanSession {
   }
 
   sendJoin() {
-    const { name, skin, hat, hc } = this.me;
-    this.toHost({ t: 'join', name, skin, hat, hc });
+    const { name, skin, hat, hc, ti, spec } = this.me;
+    this.toHost({ t: 'join', name, skin, hat, hc, ti, spec: spec ? 1 : 0 });
   }
 
   setMe(fields) {
@@ -174,10 +186,11 @@ export class LanSession {
   }
 
   publishLobby() {
-    this.lobby = [...this.players.values()].map(({ id, name, skin, hat, hc }) => ({ id, name, skin, hat, hc: hc | 0, late: this.state === 'race' && !this.raceIds.has(id) ? 1 : 0 }));
+    this.lobby = [...this.players.values()].map(({ id, name, skin, hat, hc, ti, spec }) => ({ id, name, skin, hat, hc: hc | 0, ti: ti || '', spec: spec ? 1 : 0, late: this.state === 'race' && !this.raceIds.has(id) ? 1 : 0 }));
+    this.cup = this.cupInfo();
     const tour = this.tour ? { race: this.tour.race, total: this.tour.total } : null;
     this.lobbySt = this.state;
-    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode, tour, last: this.lastEnd || null, trk: this.trackFor() });
+    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode, tour, last: this.lastEnd || null, trk: this.trackFor(), cup: this.cup });
     this.on.lobby(this.lobby, true);
   }
 
@@ -206,7 +219,13 @@ export class LanSession {
     this.hearts = COOP_HEARTS;
     this.hitsSeen.clear();
     this.peerStates.clear();
-    this.order = [...this.players.keys()];
+    // who runs: everyone but the spectators (and, in the cup, only those still in it)
+    const runners = [...this.players.values()].filter((p) => !p.spec).map((p) => p.id);
+    if (this.mode === 'bracket') {
+      if (!this.bracket || this.bracket.done) this.bracket = { round: 0, alive: shuffle(runners), rounds: [], done: false, champ: null };
+      this.bracket.alive = this.bracket.alive.filter((id) => this.players.has(id));
+      this.order = this.bracket.alive.slice();
+    } else this.order = runners;
     this.raceIds = new Set(this.order);
     const x = this.raceExtra();
     // relay: only the first runner of each team starts, the others wait for the baton
@@ -216,6 +235,20 @@ export class LanSession {
     this.publishLobby();
     // the seed rides along, so a player who lost every 'go' packet still finds the race
     this.relay = setInterval(() => this.toPeers({ t: 'all', s: [...this.peerStates.values()], seed: this.raceSeed, mode: this.mode, h: this.hearts, ...x }), 66);
+  }
+
+  // players who can run (spectators only watch)
+  runners() {
+    return this.lobby.filter((p) => !p.spec);
+  }
+  // the cup as shown in every lobby: this round's pairs and who is still in
+  cupInfo() {
+    const b = this.bracket;
+    if (!b || this.mode !== 'bracket') return null;
+    const name = (id) => (this.players.get(id) || {}).name || '?';
+    const pairs = [];
+    for (let i = 0; i < b.alive.length; i += 2) pairs.push([name(b.alive[i]), b.alive[i + 1] ? name(b.alive[i + 1]) : null]);
+    return { round: b.round, left: b.alive.length, pairs, rounds: b.rounds, done: b.done, champ: b.champ };
   }
 
   raceExtra() {
@@ -278,11 +311,36 @@ export class LanSession {
           .sort((a, b) => b.pts - a.pts);
         tour = { race: tr.race, total: tr.total, table, done: tr.race >= tr.total };
       }
-      const end = { t: 'end', r: results, seed: this.raceSeed, tour, mode: this.mode };
+      // the cup: in every pair the one with more points goes on; an odd one out goes on free
+      let cup = null;
+      if (this.mode === 'bracket' && this.bracket) {
+        const b = this.bracket;
+        const rank = new Map(results.map((r, i) => [r.id, i]));
+        const name = (id) => (this.players.get(id) || {}).name || '?';
+        const next = [];
+        const pairs = [];
+        for (let i = 0; i < b.alive.length; i += 2) {
+          const a = b.alive[i];
+          const c = b.alive[i + 1];
+          let w = a;
+          if (c != null) w = (rank.get(a) ?? 99) <= (rank.get(c) ?? 99) ? a : c;
+          next.push(w);
+          pairs.push({ a: name(a), b: c != null ? name(c) : null, w: name(w) });
+        }
+        b.rounds.push(pairs);
+        b.round++;
+        b.alive = next;
+        if (next.length <= 1) {
+          b.done = true;
+          b.champ = next[0] ? { id: next[0], name: name(next[0]) } : null;
+        }
+        cup = { round: b.round, pairs, left: next.length, done: b.done, champ: b.champ };
+      }
+      const end = { t: 'end', r: results, seed: this.raceSeed, tour, mode: this.mode, cup };
       this.lastEnd = end; // repeated in every lobby message for anyone who missed it
       this.toPeers(end);
       for (let i = 1; i < 3; i++) setTimeout(() => this.toPeers(end), i * 150);
-      this.on.end(results, tour, this.mode);
+      this.on.end(results, tour, this.mode, cup);
       this.publishLobby();
     }
   }
@@ -291,6 +349,7 @@ export class LanSession {
     if (this.role !== 'host' || this.state === 'race') return; // never in the middle of a race
     this.mode = mode;
     this.tour = null;
+    this.bracket = null;
     this.publishLobby();
   }
 
@@ -310,17 +369,30 @@ export class LanSession {
   }
   // sent again until the friend says it arrived; returns false if the friend is not here
   gift(to, kind) {
-    if (!this.lobby.some((p) => p.id === to) || !(kind in GIFTS)) return false;
+    if (!(kind in GIFTS)) return false;
+    return this.reliable(to, { t: 'gift', kind }, (ok) => this.on.giftDone({ to, kind }, ok));
+  }
+  // the host shares its tracks from the level editor with everyone in the room
+  sendPack(levels) {
+    const lv = (levels || []).map(cleanTrack).filter(Boolean).slice(0, 20);
+    if (!lv.length) return 0;
+    let n = 0;
+    for (const p of this.lobby) if (p.id !== this.me.id && this.reliable(p.id, { t: 'pack', lv }, (ok) => this.on.packDone(p.id, ok))) n++;
+    return n;
+  }
+  // sent again every 0.7 s until the friend says it arrived (10 tries)
+  reliable(to, m, done) {
+    if (!this.lobby.some((p) => p.id === to)) return false;
     const k = Math.random().toString(36).slice(2, 10);
-    this.gifts.set(k, { to, kind, tries: 0 });
-    this.sendTo(to, { t: 'gift', kind, k });
+    this.gifts.set(k, { to, m: { ...m, k }, tries: 0, done });
+    this.sendTo(to, { ...m, k });
     if (!this.giftTimer)
       this.giftTimer = setInterval(() => {
         for (const [key, g] of this.gifts) {
           if (++g.tries > 10) {
             this.gifts.delete(key);
-            this.on.giftDone(g, false);
-          } else this.sendTo(g.to, { t: 'gift', kind: g.kind, k: key });
+            g.done(false);
+          } else this.sendTo(g.to, g.m);
         }
         if (!this.gifts.size) {
           clearInterval(this.giftTimer);
@@ -331,18 +403,27 @@ export class LanSession {
   }
   // gifts and their receipts, wherever they came from
   direct(m) {
-    if (m.t === 'gift' && m.kind in GIFTS) {
+    if ((m.t === 'gift' && m.kind in GIFTS) || (m.t === 'pack' && Array.isArray(m.lv))) {
       this.sendTo(m.from, { t: 'gack', k: m.k });
       const key = m.from + ':' + m.k;
-      if (this.giftsSeen.has(key)) return; // a repeat of a gift we already have
+      if (this.giftsSeen.has(key)) return; // a repeat of something we already have
       this.giftsSeen.add(key);
-      this.on.gift(m.from, m.kind);
+      if (m.t === 'gift') this.on.gift(m.from, m.kind);
+      else this.on.pack(m.from, m.lv.map(cleanTrack).filter(Boolean).slice(0, 20));
     } else if (m.t === 'gack') {
       const g = this.gifts.get(m.k);
       if (!g) return;
       this.gifts.delete(m.k);
-      this.on.giftDone(g, true);
+      g.done(true);
     }
+  }
+
+  // a quick message (one of the ready-made phrases) to everyone in the room
+  quick(i) {
+    i = Math.max(0, Math.min(QUICK_MSGS - 1, i | 0));
+    this.on.quick(this.me.id, i);
+    if (this.role === 'host') this.toPeers({ t: 'qm', by: this.me.id, i });
+    else this.toHost({ t: 'qm', i });
   }
 
   emote(e) {
@@ -377,7 +458,7 @@ export class LanSession {
       return;
     }
     if (m.p !== PROTO) return;
-    if (m.t === 'gift' || m.t === 'gack') {
+    if (m.t === 'gift' || m.t === 'gack' || m.t === 'pack') {
       // the host passes on what is meant for someone else
       if (this.role === 'host' && m.to && m.to !== this.me.id) {
         const p = this.players.get(m.to);
@@ -403,7 +484,7 @@ export class LanSession {
           this.players.set(m.from, p);
           if (this.state === 'race' && this.raceIds.has(m.from) && !this.peerStates.has(m.from)) this.peerStates.set(m.from, { id: m.from, sc: 0, y: 0, d: 0, a: 1 });
         }
-        Object.assign(p, { name: String(m.name).slice(0, 12), skin: m.skin, hat: m.hat, hc: Math.max(0, Math.min(HANDICAPS.length - 1, m.hc | 0)), addr: address, port, seen: Date.now() });
+        Object.assign(p, { name: String(m.name).slice(0, 12), skin: m.skin, hat: m.hat, hc: Math.max(0, Math.min(HANDICAPS.length - 1, m.hc | 0)), ti: String(m.ti || '').slice(0, 12), spec: m.spec ? 1 : 0, addr: address, port, seen: Date.now() });
         this.publishLobby();
       } else if (m.t === 'hb' && this.players.has(m.from)) {
         this.players.get(m.from).seen = Date.now();
@@ -423,6 +504,10 @@ export class LanSession {
         const e = String(m.e).slice(0, 8);
         this.relayFrom({ t: 'emo', e }, m.from);
         this.on.emote(m.from, e);
+      } else if (m.t === 'qm' && this.players.has(m.from)) {
+        const i = Math.max(0, Math.min(QUICK_MSGS - 1, m.i | 0));
+        this.relayFrom({ t: 'qm', i }, m.from);
+        this.on.quick(m.from, i);
       } else if (m.t === 'bye') {
         this.players.delete(m.from);
         this.peerStates.delete(m.from);
@@ -443,11 +528,12 @@ export class LanSession {
           this.mode = m.mode || 'race';
           this.lobbySt = m.st;
           this.track = cleanTrack(m.trk);
+          this.cup = m.cup || null;
           // the race of ours ended but the 'end' packets were all lost: the lobby brings the results
           if (m.last && m.last.seed === this.raceSeed && this.endedSeed !== m.last.seed) {
             this.endedSeed = m.last.seed;
             this.state = 'lobby';
-            this.on.end(m.last.r, m.last.tour || null, m.last.mode || this.mode);
+            this.on.end(m.last.r, m.last.tour || null, m.last.mode || this.mode, m.last.cup || null);
           }
           if (m.st === 'lobby' && this.state === 'race') this.state = 'lobby';
           this.on.lobby(m.players, false);
@@ -467,7 +553,7 @@ export class LanSession {
           if (this.endedSeed !== m.seed && m.seed === this.raceSeed) {
             this.endedSeed = m.seed;
             this.state = 'lobby';
-            this.on.end(m.r, m.tour || null, m.mode || this.mode);
+            this.on.end(m.r, m.tour || null, m.mode || this.mode, m.cup || null);
           }
           break;
         case 'atk':
@@ -475,6 +561,9 @@ export class LanSession {
           break;
         case 'emo':
           if (m.by !== this.me.id) this.on.emote(m.by, String(m.e).slice(0, 8));
+          break;
+        case 'qm':
+          if (m.by !== this.me.id) this.on.quick(m.by, Math.max(0, Math.min(QUICK_MSGS - 1, m.i | 0)));
           break;
         case 'close':
           this.role = 'idle';

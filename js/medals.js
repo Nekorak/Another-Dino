@@ -37,6 +37,12 @@ export const MEDALS = {
   // v1.6
   teamBosses: [1, 10, 30],
   seasonRuns: [5, 25, 100],
+  // v1.8
+  relayWins: [1, 10, 40],
+  giftsSent: [5, 25, 100],
+  brackets: [1, 5, 20],
+  lanFinishes: [1, 10, 50],
+  packs: [5, 25, 100],
 };
 export const MEDAL_REWARD = [0, 25, 75, 200]; // bones for bronze, silver, gold
 export const MEDAL_NAMES = ['', 'bronze', 'silver', 'gold'];
