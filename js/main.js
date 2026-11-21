@@ -31,7 +31,7 @@ import { createTransport } from './net.js';
 import { levelDef, scoreLevel, saveLevel, BotBrain, todayMutator, unlocked as advUnlocked, SEASON_W, seasonRunKey, ADV_ORDER, levelKey, advHardOn } from './modes.js';
 import { Fireflies, platformGeometry, PLATFORM_W, GOLD_BONE_VALUE, goldMaterial, fishGeometry, FISH_BOX } from './extras.js';
 import { Trail, Fireworks, fossilGeometry, missingFossil, addFossil, currentSeason, giveSeasonGift, seasonPropGeometry } from './collection.js';
-import { LanSession, COOP_HEARTS } from './multiplayer.js';
+import { LanSession, COOP_HEARTS, HANDICAPS, GIFTS, GIFTS_PER_DAY, TEAM_MODES } from './multiplayer.js';
 import { UI } from './ui.js';
 import { Recorder } from './replay.js';
 import { addPassXp } from './rewards.js';
@@ -1104,6 +1104,8 @@ function resetPlayer(p) {
     finalPts: 0,
     revived: false,
     bombs: 0,
+    spare: 0, // LAN handicap: hits forgiven before the run ends
+    finishT: 0, // LAN on a track: the time this dino crossed the finish line
     points: 0,
     chain: 0,
     slip: 0,
@@ -1286,6 +1288,8 @@ const teamPlay = () => isCoop() || (isLocal() && localCoop);
 // final: the team is out of hearts (co-op), so this hit really ends the run
 function killPlayer(p, o, final = false) {
   if (rules().noDeath) return zenBump(p, o);
+  // LAN handicap: a spare heart of this player's own comes before the team's
+  if (mode === 'lan' && p === player && !final && p.spare > 0) return coopRescue(p, o, null, --p.spare);
   if (isCoop() && p === player && !final && lan.coopHit() > 0) return coopRescue(p, o, lan.hearts);
   if (isLocal() && localCoop && !final && !p.brain) {
     localHearts = Math.max(0, localHearts - 1);
@@ -1317,7 +1321,7 @@ function killPlayer(p, o, final = false) {
 }
 
 // co-op: a hit costs the team a heart, and the dino carries on after a short blink
-function coopRescue(p, o, hearts) {
+function coopRescue(p, o, hearts, spare = null) {
   if (o) breakObstacle(o, p.index);
   if (p.y < 0 || p.inPit) {
     p.y = 0;
@@ -1330,6 +1334,7 @@ function coopRescue(p, o, hearts) {
   sfx.shieldBreak();
   vibrate([40, 30, 40]);
   shake = 0.25;
+  if (spare != null) return ui.toast(t('hcHeartLost', { n: spare }), 'red');
   ui.coopHearts(hearts);
   ui.toast(t('coopHeartLost', { n: hearts }), 'red');
 }
@@ -1529,6 +1534,7 @@ function finishRun() {
     coins: run.coins,
     missions: res.missionsDone,
     lan: mode === 'lan',
+    finish: mode === 'lan' && player.finishT ? player.finishT : 0,
     xp: Math.floor(res.xp.gained),
     local2: isLocal() ? players.map((q) => ({ name: 'P' + (q.index + 1), sc: Math.floor(q.alive ? q.points : q.finalPts) })) : null,
     daily: mode === 'daily' ? dailyInfo() : null,
@@ -1540,6 +1546,8 @@ function finishRun() {
     rush: rushResult,
     team: isLocal() && localCoop,
   });
+  // the LAN results came in while this dino was still falling: they stay on top, alone
+  if (mode === 'lan' && ui.panelOpen() === 'lan' && ui.lanView === 'results') ui.hideOver();
   celebrate(res);
   // a new record: the dino pulls itself together and dances
   if (res.isRecord && res.s > 0 && mode !== 'lan' && !isLocal()) {
@@ -1548,7 +1556,8 @@ function finishRun() {
     startDance();
   }
   // in a LAN race, keep watching the others until everyone is out
-  if (mode === 'lan' && lan && lan.others().some((r) => r.a)) {
+  // (only while the race runs: the results may already be here if the 'end' came during the fall)
+  if (mode === 'lan' && lan && lan.state === 'race' && lan.others().some((r) => r.a)) {
     state = 'spectate';
     music.start();
     setTimeout(() => state === 'spectate' && ui.hideOver(), 2500); // then just watch
@@ -1572,7 +1581,9 @@ function giveBossHat(worldId) {
 // LAN teams: players alternate between team A and B in lobby order; a team scores the
 // sum of its runners
 function teamTotals(results, lobby) {
+  // the host puts each runner's team in the results; older results go by lobby order
   const of = new Map(lobby.map((p, i) => [p.id, i % 2]));
+  for (const r of results) if (r.tm === 0 || r.tm === 1) of.set(r.id, r.tm);
   const sum = [0, 0];
   for (const r of results) if (of.has(r.id)) sum[of.get(r.id)] += r.sc || 0;
   return { of, sum, winner: sum[0] === sum[1] ? null : sum[0] > sum[1] ? 0 : 1 };
@@ -2216,12 +2227,16 @@ function updateCamera(dt) {
   let fz = 0;
   if (state === 'spectate') {
     let best = null;
-    for (const r of rivals.values()) if (r.alive && (!best || r.x > best.x)) best = r;
+    // relay: a waiting player watches the teammate who carries the baton
+    const prev = relayWait && rivals.get(relayWait.prev);
+    if (prev && prev.alive) best = prev;
+    else for (const r of rivals.values()) if (r.alive && (!best || r.x > best.x)) best = r;
     if (best) {
       fx = best.x;
       fz = best.lane;
-      ui.spectate(best.name);
     }
+    if (relayWait) ui.spectate(relayWait.name, 'relayWaiting');
+    else if (best) ui.spectate(best.name);
   }
   camFocus.x += (fx - camFocus.x) * Math.min(1, dt * 3);
   camFocus.z += (fz - camFocus.z) * Math.min(1, dt * 3);
@@ -2641,7 +2656,8 @@ function updateObstacles(dt, v) {
     }
     syncViews(o);
     if (o.kind === 'finish' && adv && o.x < 0.4 && player.alive && state === 'running') {
-      winLevel();
+      if (mode === 'lan') lanFinish();
+      else winLevel();
       return;
     }
     // track how close each dino gets while passing the obstacle
@@ -2969,10 +2985,126 @@ let lan = null;
 const transport = createTransport();
 const EMOTES = ['😂', '🔥', '👋', '😱'];
 
+// handicap and relay of the current LAN race
+let lanHandiK = 1;
+let relayWait = null; // relay: { prev, name } = the teammate whose baton we wait for
+let relayV = 0; // relay: the speed when this runner fell (the next one starts with it)
+
 function myLanInfo() {
   if (!profile.name) profile.name = 'Dino-' + Math.floor(1000 + Math.random() * 9000);
+  // the same id every time, so a player who drops out can come back to the same room
+  // (the test transport runs several tabs on one profile: each tab needs its own)
+  if (!profile.lanId) profile.lanId = Math.random().toString(36).slice(2, 10);
   save();
-  return { id: Math.random().toString(36).slice(2, 10), name: profile.name, skin: profile.skin, hat: profile.hat };
+  const id = profile.lanId + (transport && transport.kind === 'test' ? '-' + Math.random().toString(36).slice(2, 5) : '');
+  return { id, name: profile.name, skin: profile.skin, hat: profile.hat, hc: profile.lanHc | 0 };
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+// the last 10 LAN races on this device, and how many times each name won
+function rememberLanRace(results, mode, myId) {
+  const team = TEAM_MODES.includes(mode);
+  const coop = mode === 'coop' || mode === 'bosses';
+  let winner = null;
+  if (team) {
+    const tt = teamTotals(results, lan ? lan.lobby : []);
+    winner = tt.winner == null ? null : tt.winner ? 'B' : 'A';
+  } else if (!coop && results.length > 1) winner = results[0].name;
+  const entry = {
+    d: Date.now(),
+    m: mode,
+    w: winner,
+    r: results.slice(0, 8).map((r) => ({ n: r.name, s: Math.floor(r.sc || 0), me: r.id === myId ? 1 : 0, tm: r.tm ?? 0, ...(r.ft ? { ft: r.ft } : {}) })),
+  };
+  profile.lanHistory.unshift(entry);
+  profile.lanHistory.length = Math.min(profile.lanHistory.length, 10);
+  if (!team && !coop && results.length > 1) profile.lanWins[winner] = (profile.lanWins[winner] || 0) + 1;
+  if (team && winner) for (const r of results) if ((r.tm ?? 0) === (winner === 'B' ? 1 : 0)) profile.lanWins[r.name] = (profile.lanWins[r.name] || 0) + 1;
+}
+
+// gifts: what a friend's gift gives us
+function receiveGift(from, kind) {
+  const name = lan ? lan.nameOf(from) : '?';
+  let what;
+  if (kind === 'snack' && profile.pet && profile.pet !== 'none' && petLevel(profile.pet) < PET_MAX) {
+    const before = petLevel(profile.pet);
+    profile.petXp[profile.pet] = (profile.petXp[profile.pet] || 0) + GIFT_SNACK_XP;
+    what = t('giftWhat_snack');
+    if (petLevel(profile.pet) > before) setTimeout(() => ui.toast(t('petGrew', { name: t('pet_' + profile.pet), n: petLevel(profile.pet) }), 'gold'), 1500);
+  } else {
+    const n = kind === 'snack' ? GIFTS.snack : GIFTS[kind];
+    profile.coins += n;
+    what = t('giftWhat_bones', { n });
+  }
+  profile.stats.giftsGot = (profile.stats.giftsGot || 0) + 1;
+  save();
+  ui.setCoins();
+  sfx.reward();
+  ui.toast(t('giftGot', { name, what }), 'gold');
+}
+// sends a gift; the bones come back if it never arrives
+function sendGift(to, kind) {
+  if (!lan || !(kind in GIFTS)) return false;
+  if (profile.giftDay.d !== today()) profile.giftDay = { d: today(), n: 0 };
+  if (profile.giftDay.n >= GIFTS_PER_DAY) return ui.toast(t('giftLimit', { n: GIFTS_PER_DAY }), 'red'), false;
+  const cost = GIFTS[kind];
+  if (profile.coins < cost) return ui.toast(t('notEnough'), 'red'), false;
+  if (!lan.gift(to, kind)) return false;
+  profile.coins -= cost;
+  profile.giftDay.n++;
+  save();
+  ui.setCoins();
+  ui.toast(t('giftSending', { name: lan.nameOf(to) }), 'gold');
+  return true;
+}
+const GIFT_SNACK_XP = 750;
+
+// a track's finish line in a LAN race: the time counts, plus a bonus for getting there
+function lanFinish() {
+  const p = player;
+  p.finishT = Math.max(0.1, runTime);
+  p.points += 250;
+  p.alive = false;
+  p.final = score;
+  p.finalPts = p.points;
+  relayV = speed;
+  sfx.reward();
+  music.stop(0.3);
+  music.jingle('victory', 0.15);
+  ui.toast(t('lanFinished', { time: p.finishT.toFixed(1) }), 'gold');
+  state = 'dying';
+  deathTimer = 0.6;
+}
+
+// relay: after the countdown this runner waits, unseen, until the teammate before them falls
+function waitForBaton() {
+  state = 'spectate';
+  player.alive = false;
+  player.dino.root.visible = false;
+  player.shield.visible = false;
+  music.start();
+}
+function startRelayLeg(from) {
+  relayWait = null;
+  clearTrack();
+  const offset = from ? from.sc || 0 : score;
+  // the team's distance carries on from where the teammate fell, at their speed
+  score = offset;
+  speed = from && from.v ? Math.min(MAX_SPEED, from.v) : startSpeed();
+  gapLeft = 14;
+  lastMilestone = Math.floor(offset / 100);
+  lastNight = Math.floor(offset / NIGHT_EVERY);
+  nextPowerAt = offset + (250 + IR() * 150) * powerGapK();
+  nextEventAt = offset + 600 + Math.random() * 600;
+  resetPlayer(player);
+  player.spare = (HANDICAPS[lan ? lan.me.hc | 0 : 0] || HANDICAPS[0]).hearts;
+  runTime = 0;
+  state = 'running';
+  ui.spectate(null);
+  ui.hideOver();
+  ui.toast(t('relayGo'), 'gold');
+  sfx.beep(true);
+  vibrate([60, 40, 60]);
 }
 
 async function openLan() {
@@ -2981,9 +3113,11 @@ async function openLan() {
   const session = new LanSession(transport, myLanInfo(), {
     rooms: (list) => ui.mpRooms(list),
     lobby: (list, isHost) => ui.mpLobby(list, isHost, session.me.id, session.mode),
-    start: (seed, m) => beginCountdown(seed, m),
-    end: (results, tour) => {
+    start: (seed, m, x) => beginCountdown(seed, m, x),
+    end: (results, tour, endMode) => {
       const st = profile.stats;
+      rememberLanRace(results, endMode || session.mode, session.me.id);
+      relayWait = null;
       if (tour && tour.done && tour.table.length > 1 && tour.table[0].id === session.me.id) {
         st.tournaments = (st.tournaments || 0) + 1;
         profile.coins += 150;
@@ -3014,7 +3148,7 @@ async function openLan() {
           ui.toast(t('coopBonus', { n: bonus }), 'gold');
         }
       }
-      if (session.mode === 'teams') {
+      if (TEAM_MODES.includes(endMode || session.mode)) {
         const team = teamTotals(results, session.lobby);
         const mine = team.of.get(session.me.id);
         if (team.winner != null && mine === team.winner) {
@@ -3032,7 +3166,7 @@ async function openLan() {
       if (state === 'spectate') state = 'over';
       ui.spectate(null);
       music.stop(0.3);
-      ui.mpResults(results, session.me.id, tour);
+      ui.mpResults(results, session.me.id, tour, endMode || session.mode);
     },
     attack: (by) => {
       if (state !== 'running' || mode !== 'lan') return;
@@ -3041,6 +3175,17 @@ async function openLan() {
       sfx.boom();
     },
     emote: (id, e) => showEmote(id, e),
+    reconnect: (on) => ui.toast(t(on ? 'mpReconnecting' : 'mpReconnected'), on ? 'red' : 'gold'),
+    gift: receiveGift,
+    giftDone: (g, ok) => {
+      if (ok) return ui.toast(t('giftArrived', { name: session.nameOf(g.to) }), 'gold');
+      // it never arrived: the bones go back
+      profile.coins += GIFTS[g.kind] || 0;
+      if (profile.giftDay.n > 0) profile.giftDay.n--;
+      save();
+      ui.setCoins();
+      ui.toast(t('giftFailed'), 'red');
+    },
     error: (code) => {
       ui.toast(t(code === 'hostLost' ? 'mpHostLost' : code), 'red');
       toMenu();
@@ -3060,7 +3205,16 @@ async function openLan() {
   return true;
 }
 
+// joins a room and remembers it, so the player can come back to it later
+function lanJoinAt(addr, port, name) {
+  if (!lan || !addr) return;
+  lan.join(addr, port || undefined);
+  profile.lanLast = { addr, port: port || 0, name: name || '', at: Date.now() };
+  save();
+}
+
 function leaveLan() {
+  relayWait = null;
   if (!lan) return;
   const l = lan;
   lan = null;
@@ -3081,13 +3235,28 @@ function lanEmote(e) {
   lan.emote(e);
 }
 
-function beginCountdown(seed, m) {
+function beginCountdown(seed, m, x = {}) {
   mode = 'lan';
   lanMode = m || 'race';
   daily = null;
+  // a track from the level editor: everyone runs it to the finish line
+  adv = x.trk ? customAdv(x.trk) : null;
+  const hc = HANDICAPS[lan.me.hc | 0] || HANDICAPS[0];
+  lanHandiK = hc.k;
   sfx.unlock();
   setPlayerCount(1);
   resetRun(seed);
+  player.spare = hc.hearts;
+  relayV = 0;
+  // relay: the first runner of each team starts, the others wait for their teammate
+  relayWait = null;
+  if (lanMode === 'relay' && Array.isArray(x.ord)) {
+    const i = x.ord.indexOf(lan.me.id);
+    if (i >= 2) {
+      const prev = x.ord[i - 2];
+      relayWait = { prev, name: lan.nameOf(prev) };
+    }
+  }
   clearRivals();
   if (ghostDino) {
     scene.remove(ghostDino.root);
@@ -3109,6 +3278,9 @@ function beginCountdown(seed, m) {
   ui.setPlaying(true, 'lan', lanMode);
   ui.countdown('3');
   ui.toast(t('lanMode_' + lanMode), 'gold');
+  if (adv) ui.toast(adv.custom.lv.name || t('lvUntitled'), 'biome');
+  if (relayWait) ui.toast(t('relayYouWait', { name: relayWait.name }), 'gold');
+  if (hc.hearts) ui.toast(t('hcStart', { n: hc.hearts }), 'gold');
   sfx.beep();
 }
 
@@ -3119,11 +3291,18 @@ function updateRivals(dt) {
     // a teammate lost the last heart: everybody's run ends together
     if (lan.hearts <= 0 && player.alive && state === 'running') killPlayer(player, null, true);
   }
+  // relay: the teammate before us fell (or left): our turn
+  if (relayWait && state === 'spectate') {
+    const s = lan.peerStates.get(relayWait.prev);
+    const gone = !lan.lobby.some((p) => p.id === relayWait.prev);
+    if ((s && !s.a && !s.w) || gone) startRelayLeg(s);
+  }
   const states = new Map(lan.others().map((s) => [s.id, s]));
   for (const [id, r] of rivals) {
     const s = states.get(id);
     if (!s) continue;
-    r.alive = !!s.a;
+    r.alive = !!s.a && !s.w;
+    r.dino.root.visible = !s.w; // a relay runner who waits is not on the track yet
     const tx = clamp((s.sc - score) / 0.75, -30, 40);
     r.x += (tx - r.x) * Math.min(1, dt * 8);
     const ny = r.p.y + (s.y - r.p.y) * Math.min(1, dt * 18);
@@ -3140,9 +3319,13 @@ function updateRivals(dt) {
   const myPts = meAlive ? player.points : player.finalPts;
   // the scoreboard shows points (with combos); positions on the track use distance
   const list = [{ id: lan.me.id, name: lan.me.name, sc: Math.floor(myPts), a: meAlive }];
-  for (const s of states.values()) list.push({ id: s.id, name: lan.nameOf(s.id), sc: s.pt ?? s.sc, a: !!s.a });
+  for (const s of states.values()) list.push({ id: s.id, name: lan.nameOf(s.id), sc: s.pt ?? s.sc, a: !!s.a && !s.w });
   ui.mpHud(list.sort((a, b) => b.sc - a.sc), lan.me.id);
-  if (['countdown', 'running', 'over', 'dying', 'spectate'].includes(state)) lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive });
+  if (player.alive) relayV = speed;
+  if (['countdown', 'running', 'over', 'dying', 'spectate'].includes(state)) {
+    if (relayWait) lan.sendState({ sc: 0, pt: 0, y: 0, d: 0, a: 1, w: 1 });
+    else lan.sendState({ sc: mine, pt: myPts, y: player.alive ? player.y : 0, d: player.ducking, a: meAlive, v: lanMode === 'relay' ? relayV : 0, ft: player.finishT, hc: lan.me.hc | 0 });
+  }
   // my own dino stays where it fell while the camera follows the others
   if (!player.alive) player.dino.root.position.x = clamp((player.final - score) / 0.75, -30, 40);
 }
@@ -3258,10 +3441,12 @@ function update(rawDt) {
     if (storm > 0.5) note('weatherWind');
     if (feat.swim > 0.5 && state === 'running') note('swimHint');
     const gust = 1 + storm * 0.14 * Math.sin(time * 1.7);
-    v = speed * slowK * speedBoost * gust * (1 - 0.2 * feat.swim); // water slows everything down
+    // LAN handicap: a slower world for this player, but the score counts at full speed
+    const hk = mode === 'lan' ? lanHandiK : 1;
+    v = speed * slowK * speedBoost * gust * (1 - 0.2 * feat.swim) * hk; // water slows everything down
     worldV = v;
     runTime += dt;
-    const ds = v * dt * 0.75;
+    const ds = (v * dt * 0.75) / hk;
     score += ds;
     for (const p of players) if (p.alive) p.points += ds * comboMult(p);
     if (player.alive) run.score = player.points;
@@ -3344,6 +3529,7 @@ function update(rawDt) {
       music.biome = songOf(BIOMES[env.biome].id);
       music.start();
       sfx.beep(true);
+      if (relayWait) waitForBaton();
     } else if (String(Math.ceil(left)) !== ui.countdownText()) {
       ui.countdown(String(Math.ceil(left)));
       sfx.beep();
@@ -3638,8 +3824,15 @@ const game = {
   lanOpen: openLan,
   lanHost: () => lan && lan.host(),
   lanBrowse: () => lan && lan.browse(),
-  lanJoin: (room) => lan && lan.join(room.addr, room.port),
-  lanJoinIp: (ip) => lan && lan.join(ip.trim()),
+  lanJoin: (room) => lanJoinAt(room.addr, room.port, room.name),
+  lanJoinIp: (ip, port, name) => lanJoinAt(ip.trim(), port, name),
+  lanSetTrack: (lv) => lan && lan.setTrack(lv),
+  lanGift: sendGift,
+  lanSetHandicap(hc) {
+    profile.lanHc = Math.max(0, Math.min(HANDICAPS.length - 1, hc | 0));
+    save();
+    if (lan) lan.setMe({ hc: profile.lanHc });
+  },
   lanStart: () => lan && lan.startRace(),
   lanSetMode: (m) => lan && lan.setMode(m),
   lanAttack,

@@ -4,6 +4,7 @@ import { BIOMES } from './biomes.js';
 import { profile, save } from './save.js';
 import { PIECES, SPEEDS, MAX_SLOTS, newLevel, encodeLevel, storeLevel, deleteLevel, levelId, pieceCount, trimmed, weeklyTrack, WEEKLY_TRACK_REWARD } from './levels.js';
 import { qrCanvas } from './transfer.js';
+import { choiceRow } from './ui.js';
 
 export const PIECE_NAMES = { '.': 'empty', c: 'cactus', C: 'bigCactus', l: 'birdLow', m: 'birdHigh', z: 'zig', r: 'boulder', p: 'pit', f: 'platform', o: 'bones', u: 'power' };
 const COLS = 10;
@@ -174,15 +175,29 @@ export function levelEditView(ui) {
     'div',
     { class: 'lv-editor' },
     h('label', { class: 'field' }, h('span', { text: t('lvName') }), name),
-    ui.row(t('lvWorld'), t('biome_' + BIOMES[lv.w].id), () => {
-      lv.w = (lv.w + 1) % BIOMES.length;
-      lv.dirty = true;
-      ui.renderPanel();
+    // every world visible as a little piece of its sky and ground, not hidden behind one button
+    choiceRow({
+      icon: '🌍',
+      label: t('lvWorld'),
+      cls: 'world-choice',
+      options: BIOMES.map((b, v) => ({ v, pic: h('span', { class: 'world-pic', style: `background:linear-gradient(${b.sky} 55%, ${b.ground} 55%)`, 'aria-hidden': 'true' }), name: t('biome_' + b.id) })),
+      value: lv.w,
+      pick: (v) => {
+        lv.w = v;
+        lv.dirty = true;
+        ui.renderPanel();
+      },
     }),
-    ui.row(t('lvSpeedLabel'), t('lvSpeed_' + lv.s), () => {
-      lv.s = (lv.s + 1) % SPEEDS.length;
-      lv.dirty = true;
-      ui.renderPanel();
+    choiceRow({
+      icon: '💨',
+      label: t('lvSpeedLabel'),
+      options: SPEEDS.map((_, v) => ({ v, icon: ['🐢', '🦖', '🐆'][v], name: t('lvSpeed_' + v) })),
+      value: lv.s,
+      pick: (v) => {
+        lv.s = v;
+        lv.dirty = true;
+        ui.renderPanel();
+      },
     }),
     h('p', { class: 'small muted', text: t('lvEditHelp') }),
     palette,

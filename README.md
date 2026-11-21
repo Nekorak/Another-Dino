@@ -120,6 +120,10 @@ Gazda alege și **modul**:
 - **Turneu**: 5 curse la rând, cu puncte pentru fiecare loc (10, 8, 6, 5…) și clasament după fiecare cursă; campionul primește 150 de oase.
 - **Echipă (co-op)**: toți pe același traseu, cu o **viață comună** de 3 inimi. Orice lovitură a oricui costă o inimă (dinozaurul lovit clipește și merge mai departe); când nu mai sunt inimi, tura se termină pentru toți. Echipa primește oase după distanța atinsă.
 
+- **Echipe**, **Boși în echipă** și **Ștafetă** (când cade un alergător, următorul din echipă continuă de unde a rămas).
+
+În plus (v1.7): intrare prin **cod QR**, intrare în timpul cursei și **reconectare automată**, **trasee din editor** cu linie de sosire, **cadouri** între prieteni (5 pe zi), **handicap** pentru fiecare jucător și **istoricul ultimelor 10 curse**.
+
 În cursă poți trimite **emoticoane** (butoanele 😂 🔥 👋 😱 sau tastele `1`–`4`). După ce ieși din cursă, camera îi urmărește pe cei rămași.
 
 Merge între telefoane Android și PC-uri (Windows/macOS/Linux) amestecate. Funcționează doar în aplicații, nu în browser. Pe Windows, la prima cursă, permite accesul prin firewall în rețeaua privată. Comunicarea e directă, prin UDP pe portul **47777** (transferul de progres folosește portul **47778**).
