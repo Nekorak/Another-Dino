@@ -195,6 +195,16 @@ export const ACHIEVEMENTS = [
   { id: 'goldBones25', test: (s) => (s.goldBones || 0) >= 25 },
   { id: 'rushAll', test: (s) => (s.rushes || 0) >= 1 },
   { id: 'crowns10', test: () => Object.keys(profile.advCrowns || {}).length >= 10 },
+  // v1.8: LAN and the long-term shop
+  { id: 'lanFinish', test: (s) => (s.lanFinishes || 0) >= 1 },
+  { id: 'relayWin', test: (s) => (s.relayWins || 0) >= 1 },
+  { id: 'giftGiver', test: (s) => (s.giftsSent || 0) >= 5 },
+  { id: 'bracketWin', test: (s) => (s.brackets || 0) >= 1 },
+  { id: 'chatty', test: (s) => (s.quickMsgs || 0) >= 10 },
+  { id: 'lan25', test: (s) => s.mpGames >= 25 },
+  { id: 'stickers24', test: () => Object.keys(profile.stickers || {}).length >= 24 },
+  { id: 'mastery1', test: () => Object.values(profile.mastery || {}).some((r) => r >= 1) },
+  { id: 'titled', test: () => (profile.titles || []).length >= 3 },
 ];
 // the boss level of a world, as saved in profile.adventure ("11-2")
 const advBoss = (id) => `${BIOMES.findIndex((b) => b.id === id)}-2`;

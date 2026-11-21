@@ -1,6 +1,6 @@
 // Daily chest (a present every day you play, bigger on a streak) and the free season pass.
 import { profile, save } from './save.js';
-import { addXp, today } from './progress.js';
+import { addXp, today, chestK } from './progress.js';
 
 const dayNum = (s) => Math.floor(new Date(s + 'T12:00:00').getTime() / 86400000);
 
@@ -14,7 +14,7 @@ export function chestInfo() {
   // the streak goes on if the chest was opened yesterday; after day 7 it starts over
   const goesOn = c.last && dayNum(c.last) === dayNum(t) - 1;
   const day = goesOn ? (c.streak % CHEST_DAYS.length) + 1 : 1;
-  return { available: true, day, bones: CHEST_DAYS[day - 1], xp: day * 15 };
+  return { available: true, day, bones: Math.round(CHEST_DAYS[day - 1] * chestK()), xp: day * 15 };
 }
 
 export function openChest() {

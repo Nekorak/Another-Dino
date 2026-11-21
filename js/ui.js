@@ -11,7 +11,7 @@ import { encodeProgress, decodeProgress, mergeProgress, QR_LIMIT, qrCanvas, read
 import { save, resetProgress, profile, SETTING_DEFAULTS } from './save.js';
 import { DANCES, THEMES, EDITOR_GRID, editorCell } from './custom.js';
 import { skinEditorView } from './editor.js';
-import { MAX_PLAYERS, COOP_HEARTS, LAN_MODES, TRACK_MODES, TEAM_MODES, HANDICAPS, GIFTS, GIFTS_PER_DAY, isLanJoin, decodeLanJoin, encodeLanJoin } from './multiplayer.js';
+import { MAX_PLAYERS, COOP_HEARTS, LAN_MODES, TRACK_MODES, TEAM_MODES, HANDICAPS, GIFTS, GIFTS_PER_DAY, QUICK_MSGS, isLanJoin, decodeLanJoin, encodeLanJoin } from './multiplayer.js';
 import { layoutButtons, openControlsEditor } from './controls.js';
 import { chestInfo, openChest, CHEST_DAYS, passState, passReward, claimTier, PASS_TIERS, PASS_XP, PASS_SPECIAL } from './rewards.js';
 import { missionProgress, ACHIEVEMENTS, ensureWeekly, weeklyProgress, weekInfo, WEEKLY_BONUS, rerollMission, REROLL_PRICE } from './missions.js';
@@ -20,6 +20,7 @@ import { petLevel, petProgress, petPower, PET_MAX, feedPet } from './pets.js';
 import { addPhoto, listPhotos, getPhoto, deletePhoto, toPng, MAX_PHOTOS } from './gallery.js';
 import { isLevel, decodeLevel, storeLevel, levelId, weeklyTrackOpen, PIECES, trimmed } from './levels.js';
 import { levelsView, levelEditView, startEdit } from './leveleditor.js';
+import { TITLES, buyTitle, checkEarnedTitles, PAGES, STICKERS, PACK_PRICE, PACK_SIZE, GLITTER_COST, PAGE_REWARD, openPack, craftSticker, stickerCount, pageDone, MASTERY, MASTERY_BONUS, masteryOf, masteryCost, buyMastery, stars } from './longterm.js';
 import { checkMedals } from './medals.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -92,7 +93,7 @@ export function choiceRow({ icon, label, desc, options, value, pick, disabled, c
   );
 }
 // an animated picture for each LAN mode and each game mode
-const LAN_MODE_ICON = { race: '🏃', sabotage: '🪨', elimination: '⚡', tournament: '🏆', coop: '❤️', teams: '🆚', bosses: '🐉', relay: '🏃‍♂️' };
+const LAN_MODE_ICON = { race: '🏃', sabotage: '🪨', elimination: '⚡', tournament: '🏆', coop: '❤️', teams: '🆚', bosses: '🐉', relay: '🏃‍♂️', bracket: '🥊' };
 const MODE_ICON = { mode_adventure: '🗺️', daily: '📅', mode_bossrush: '👹', mode_mutator: '🎲', multiplayer: '📶', mode_season: '🍂', mode_zen: '🧘', mode_hardcore: '💀', mode_bot: '🤖', mode_custom: '✏️', mode_challenge: '📷', mode_local: '🎮' };
 const HC_ICON = ['🦖', '🐢', '🐌'];
 const GIFT_ICON = { b25: '🦴', b100: '🎁', snack: '🍖' };
@@ -1325,7 +1326,7 @@ export class UI {
   // ------------------------------------------------------------ shop
   shopView() {
     const p = this.p;
-    const TABS = { skin: 'shopSkins', hat: 'shopHats', pet: 'shopPets', trail: 'shopTrails', dance: 'shopDances', theme: 'shopThemes', upgrade: 'shopUpgrades' };
+    const TABS = { skin: 'shopSkins', hat: 'shopHats', pet: 'shopPets', trail: 'shopTrails', dance: 'shopDances', theme: 'shopThemes', upgrade: 'shopUpgrades', title: 'shopTitles', album: 'shopAlbum', mastery: 'shopMastery' };
     const tabs = el(
       'div',
       { class: 'tabs' },
@@ -1341,6 +1342,9 @@ export class UI {
       ),
     );
     if (this.shopTab === 'upgrade') return el('div', {}, tabs, this.upgradesView());
+    if (this.shopTab === 'title') return el('div', {}, tabs, this.titlesView());
+    if (this.shopTab === 'album') return el('div', {}, tabs, this.stickersView());
+    if (this.shopTab === 'mastery') return el('div', {}, tabs, this.masteryView());
     const kind = this.shopTab;
     const list = { skin: SKINS, hat: HATS, pet: PETS, trail: TRAILS, dance: DANCES, theme: THEMES }[kind];
     const owned = p.owned[kind];
@@ -1505,6 +1509,143 @@ export class UI {
       this.renderPanel();
     }, 1300);
   }
+  // ------------------------------------------------------------ v1.8: the long-term shop
+  // what each tab is for, with its picture, at the top of the tab
+  shopHelp(icon, key, vars) {
+    return infoRow(icon, t(key + 'Title'), t(key, vars), null);
+  }
+  // after anything that could earn a title
+  earnedTitles() {
+    for (const id of checkEarnedTitles()) this.toast(t('titleGot', { name: TITLES[id].icon + ' ' + t('title_' + id) }), 'gold');
+  }
+  titlesView() {
+    const p = this.p;
+    const grid = el('div', { class: 'cards titles' });
+    for (const [id, tt] of Object.entries(TITLES)) {
+      const have = p.titles.includes(id);
+      const worn = p.title === id;
+      const tag = worn ? t('titleWorn') : have ? t('titleWear') : null;
+      const price = tt.price ? el('span', { class: 'card-price' }, bone(), ' ' + tt.price) : el('span', { class: 'card-price small', text: t('titleHow_' + tt.earn) });
+      grid.append(
+        el(
+          'button',
+          {
+            class: 'card' + (worn ? ' sel' : '') + (have ? '' : ' locked'),
+            onclick: () => {
+              if (have) p.title = worn ? '' : id;
+              else if (!tt.price) return this.toast(t('titleHow_' + tt.earn), 'gold');
+              else if (!buyTitle(id)) return this.toast(t('notEnough'), 'red');
+              else {
+                this.g.sfx.reward();
+                this.toast(t('bought'), 'gold');
+              }
+              save();
+              this.g.lanSetLook?.();
+              this.renderPanel();
+            },
+          },
+          el('span', { class: 'title-ico', 'aria-hidden': 'true', text: tt.icon }),
+          el('span', { class: 'card-name', text: t('title_' + id) }),
+          tag ? el('span', { class: 'card-tag', text: tag }) : price,
+        ),
+      );
+    }
+    return el('div', {}, this.shopHelp('🏷️', 'titlesHelp'), grid);
+  }
+  stickersView() {
+    const p = this.p;
+    const last = this.lastPack;
+    const openBtn = el('button', {
+      class: 'menu-btn primary',
+      onclick: () => {
+        const r = openPack();
+        if (!r) return this.toast(t('notEnough'), 'red');
+        this.g.sfx.reward();
+        this.lastPack = r.stickers;
+        for (const n of r.pages) this.toast(t('albumPageDone', { name: t('albumPage_' + PAGES[n].id), n: PAGE_REWARD }), 'gold');
+        this.earnedTitles();
+        this.renderPanel();
+      },
+    });
+    openBtn.append('🎴 ' + t('albumOpen', { n: PACK_SIZE }) + ' · ', bone(), ' ' + PACK_PRICE);
+    const pages = PAGES.map((pg, n) =>
+      el(
+        'div',
+        { class: 'album-page' + (pageDone(n) ? ' done' : '') },
+        el('h3', { text: (pageDone(n) ? '✅ ' : '') + t('albumPage_' + pg.id) }),
+        el(
+          'div',
+          { class: 'stickers' },
+          STICKERS.filter((s) => s.page === n).map((s) => {
+            const have = p.stickers[s.id] || 0;
+            const cost = GLITTER_COST[s.r];
+            return el(
+              'button',
+              {
+                class: `sticker r-${s.r}` + (have ? ' have' : ''),
+                title: t('rarity_' + s.r),
+                'aria-label': (have ? s.e : '?') + ' · ' + t('rarity_' + s.r) + (have ? '' : ' · ✨' + cost),
+                onclick: () => {
+                  if (have) return this.toast(s.e + ' ×' + have + ' · ' + t('rarity_' + s.r), 'gold');
+                  if (p.glitter < cost) return this.toast(t('albumNeedGlitter', { n: cost }), 'red');
+                  const r = craftSticker(s.id);
+                  if (!r) return;
+                  this.g.sfx.reward();
+                  for (const k of r.pages) this.toast(t('albumPageDone', { name: t('albumPage_' + PAGES[k].id), n: PAGE_REWARD }), 'gold');
+                  this.earnedTitles();
+                  this.renderPanel();
+                },
+              },
+              el('span', { class: 'st-e', 'aria-hidden': 'true', text: have ? s.e : '?' }),
+              have > 1 ? el('i', { text: '×' + have }) : have ? null : el('i', { text: '✨' + cost }),
+            );
+          }),
+        ),
+      ),
+    );
+    return el(
+      'div',
+      { class: 'album' },
+      this.shopHelp('📒', 'stkHelp', { n: PAGE_REWARD }),
+      el('p', { class: 'album-count', text: t('albumCount', { n: stickerCount(), max: STICKERS.length }) + ' · ✨ ' + t('glitter', { n: p.glitter }) }),
+      openBtn,
+      last ? el('div', { class: 'pack-open' }, last.map((s, i) => el('span', { class: `sticker big r-${s.r}`, style: `animation-delay:${i * 0.15}s` }, el('span', { class: 'st-e', text: s.e }), el('i', { text: s.dup ? t('albumDup') : t('albumNew') })))) : null,
+      el('p', { class: 'muted small', text: t('albumRarity') }),
+      pages,
+    );
+  }
+  masteryView() {
+    const p = this.p;
+    const rows = p.owned.skin
+      .filter((id) => SKINS[id] && !SKINS[id].hidden)
+      .map((id) => {
+        const r = masteryOf(id);
+        const cost = masteryCost(id);
+        const btn =
+          cost == null
+            ? el('span', { class: 'card-tag', text: t('maxed') })
+            : el('button', {
+                class: 'val',
+                onclick: () => {
+                  if (!buyMastery(id)) return this.toast(t('notEnough'), 'red');
+                  this.g.sfx.reward();
+                  this.toast(t('masteryUp', { name: t('skin_' + id), n: masteryOf(id) }), 'gold');
+                  this.earnedTitles();
+                  this.renderPanel();
+                },
+              });
+        if (cost != null) btn.append(bone(), ' ' + cost);
+        return el(
+          'div',
+          { class: 'upgrade mastery' + (p.skin === id ? ' worn' : '') },
+          dinoIcon(id),
+          el('div', {}, el('p', { text: t('skin_' + id) + (p.skin === id ? ' · ' + t('equipped') : '') }), el('p', { class: 'stars', text: stars(r) }), el('p', { class: 'muted small', text: t('masteryBonus', { n: Math.round(r * MASTERY_BONUS * 100) }) })),
+          btn,
+        );
+      });
+    return el('div', { class: 'upgrades' }, this.shopHelp('⭐', 'masteryHelp', { n: Math.round(MASTERY_BONUS * 100), a: MASTERY[0], b: MASTERY[1], c: MASTERY[2] }), rows);
+  }
+
   upgradesView() {
     const rows = Object.keys(UPGRADES).map((id) => {
       const lvl = upgradeLevel(id);
@@ -2407,8 +2548,9 @@ export class UI {
     if (this.lanView === 'home' && !isHost) this.lanView = 'lobby';
     if (this.panel === 'lan' && this.lanView === 'lobby') this.renderPanel();
   }
-  mpResults(results, myId, tour, mode) {
+  mpResults(results, myId, tour, mode, cup) {
     this.results = results;
+    this.resultsCup = cup || null;
     this.resultsMode = mode || this.lanMode;
     this.tour = tour || null;
     this.myId = myId;
@@ -2430,6 +2572,96 @@ export class UI {
     $('mp-hud').replaceChildren(
       ...list.map((p, i) => el('div', { class: 'mp-row' + (p.id === myId ? ' me' : '') + (p.a ? '' : ' dead') }, el('span', { text: `${i + 1}. ${p.name}` }), el('b', { text: pad5(p.sc) }))),
     );
+  }
+
+  // something arrived (a pack of tracks): show it if the room is open
+  lanRefresh() {
+    if (this.panel === 'lan' && this.lanView !== 'home' && !this.giftTo) this.renderPanel();
+  }
+  quickLog(log) {
+    const box = $('quick-log');
+    if (box) box.replaceChildren(...this.quickLines(log));
+  }
+  quickLines(log = this.g.quickLog || []) {
+    if (!log.length) return [el('p', { class: 'muted small', text: t('qmEmpty') })];
+    return log.map((q) => el('p', { class: 'qm-line' + (q.me ? ' me' : '') }, el('b', { text: q.name + ': ' }), el('span', { text: t('qm_' + q.i) })));
+  }
+  // quick messages: 8 ready-made phrases, one tap sends to everyone in the room
+  quickEl() {
+    return el(
+      'div',
+      { class: 'quick-box' },
+      el('h3', { text: '💬 ' + t('qmTitle') }),
+      el('p', { class: 'muted small', text: t('qmHelp') }),
+      el(
+        'div',
+        { class: 'qm-grid' },
+        Array.from({ length: QUICK_MSGS }, (_, i) =>
+          el('button', {
+            class: 'qm-btn',
+            text: t('qm_' + i),
+            onclick: (e) => {
+              const b = e.currentTarget;
+              b.disabled = true;
+              setTimeout(() => (b.disabled = false), 1200); // no flooding the room
+              this.g.lanQuick(i);
+            },
+          }),
+        ),
+      ),
+      el('div', { id: 'quick-log', class: 'quick-log', 'aria-live': 'polite' }, this.quickLines()),
+    );
+  }
+  // spectator: in the room, but only watching the races
+  specEl() {
+    const on = !!this.p.lanSpec;
+    return infoRow(
+      '👁️',
+      t('specLabel'),
+      t('specHelp'),
+      switchBtn(on, () => {
+        this.g.lanSetSpectator(!on);
+        this.renderPanel();
+      }, t('specLabel')),
+    );
+  }
+  // the host shares all their tracks from the level editor with the room
+  packEl() {
+    if (!this.lanIsHost) return null;
+    const n = (this.p.levels || []).length;
+    return infoRow(
+      '📦',
+      t('packLabel', { n }),
+      t(n ? 'packHelp' : 'packNone'),
+      el('button', {
+        class: 'val',
+        text: t('packSend'),
+        disabled: !n || this.lobby.length < 2,
+        onclick: () => {
+          const k = this.g.lanSendPack();
+          if (k) this.toast(t('packSending', { n: k }), 'gold');
+        },
+      }),
+    );
+  }
+  // the knockout cup: this round's duels, the earlier rounds and the champion
+  cupEl(cup) {
+    if (!cup) return null;
+    const duel = (a, b, w) =>
+      el(
+        'div',
+        { class: 'cup-duel' },
+        el('span', { class: w && w === a ? 'win' : w ? 'lose' : '', text: a }),
+        el('i', { text: b ? 'VS' : '' }),
+        el('span', { class: !b ? 'muted' : w && w === b ? 'win' : w ? 'lose' : '', text: b || t('cupBye') }),
+      );
+    const rounds = (cup.rounds || []).map((pairs, i) => el('div', { class: 'cup-round done' }, el('small', { class: 'muted', text: t('cupRound', { n: i + 1 }) }), pairs.map((p) => duel(p.a, p.b, p.w))));
+    const now = cup.done
+      ? el('p', { class: 'winner', text: '🏆 ' + t('cupChamp', { name: cup.champ ? cup.champ.name : '-' }) })
+      : cup.pairs && cup.pairs.length && Array.isArray(cup.pairs[0])
+        ? el('div', { class: 'cup-round now' }, el('small', { text: t('cupRound', { n: (cup.round || 0) + 1 }) + ' · ' + t('cupNext') }), cup.pairs.map(([a, b]) => duel(a, b, null)))
+        : null;
+    return el('div', { class: 'cup' }, el('h3', { text: '🥊 ' + t('cupTitle') }), rounds, now, el('p', { class: 'muted small', text: t('cupHelp') }));
   }
 
   lanViewEl() {
@@ -2511,6 +2743,7 @@ export class UI {
       this.myIp ? el('p', { class: 'muted small', text: t('mpYourIp', { ip: this.myIp }) }) : null,
       el('p', { class: 'muted small', text: t('mpHotspotTip') }),
       this.hcEl(),
+      this.specEl(),
       this.lanHistEl(),
       this.coopTopEl(),
     );
@@ -2644,6 +2877,7 @@ export class UI {
         { class: 'player' + (p.late ? ' late' : '') },
         dinoIcon(SKINS[p.skin] ? p.skin : 'classic'),
         el('span', { text: p.name }),
+        TITLES[p.ti] ? el('span', { class: 'title-tag small', text: TITLES[p.ti].icon + ' ' + t('title_' + p.ti) }) : null,
         el('span', {
           class: 'muted small',
           text: [
@@ -2652,6 +2886,7 @@ export class UI {
             i === 0 ? t('mpHostTag') : '',
             p.id === this.myId ? t('mpYou') : '',
             p.late ? '⏳' : '',
+            p.spec ? '👁️ ' + t('specTag') : '',
           ]
             .filter(Boolean)
             .join(' · '),
@@ -2659,7 +2894,7 @@ export class UI {
         p.id !== this.myId ? el('button', { class: 'val gift-btn', text: '🎁', title: t('giftBtn'), 'aria-label': t('giftBtn') + ' ' + p.name, onclick: () => ((this.giftTo = p.id), this.renderPanel()) }) : null,
       ),
     );
-    const canStart = this.lobby.length >= 2;
+    const canStart = this.lobby.filter((p) => !p.spec).length >= 2;
     // someone who came in during a race waits for the next one
     const waiting = !this.lanIsHost && lan && lan.lobbySt === 'race' && lan.state !== 'race';
     return el(
@@ -2675,9 +2910,13 @@ export class UI {
           : el('p', { class: 'blink', text: t('mpWaitHost') }),
       this.lanIsHost && !canStart ? el('p', { class: 'muted small', text: t('mpNeed2') }) : null,
       this.joinQrEl(),
+      mode === 'bracket' ? this.cupEl(lan && lan.cup) : null,
+      this.quickEl(),
       this.lanModesEl(),
       this.trackEl(),
+      this.packEl(),
       this.hcEl(),
+      this.specEl(),
       this.myIp ? el('p', { class: 'muted small', text: t('mpYourIp', { ip: this.myIp }) }) : null,
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
     );
@@ -2689,7 +2928,7 @@ export class UI {
     const coop = mode === 'coop' || mode === 'bosses';
     const timeOf = (p) => (p.ft ? ' · 🏁 ' + p.ft.toFixed(1) + 's' : '') + (p.hc ? ' · ' + HC_ICON[p.hc] : '');
     const again = (label) =>
-      this.lanIsHost ? el('button', { class: 'menu-btn primary', text: label, disabled: this.lobby.length < 2, onclick: () => this.g.lanStart() }) : el('p', { class: 'blink', text: t('mpWaitHost') });
+      this.lanIsHost ? el('button', { class: 'menu-btn primary', text: label, disabled: this.lobby.filter((p) => !p.spec).length < 2, onclick: () => this.g.lanStart() }) : el('p', { class: 'blink', text: t('mpWaitHost') });
     // teams and relay: A and B, a team scores the sum of its runners
     if (TEAM_MODES.includes(mode) && winner) {
       const tt = this.g.teamTotals(r, this.lobby);
@@ -2703,6 +2942,23 @@ export class UI {
         el('p', { text: `${name(0)} ${pad5(tt.sum[0])}   ${name(1)} ${pad5(tt.sum[1])}` }),
         el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: `${p.name} · ${name(tt.of.get(p.id) ?? 0)}${timeOf(p)}` })))),
         again(t('again')),
+        this.quickEl(),
+        el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
+        this.lanHistEl(),
+      );
+    }
+    // the cup: the duels of this round, then the next round (or the champion)
+    if (mode === 'bracket' && this.resultsCup) {
+      const cup = this.resultsCup;
+      const live = this.g.lan && this.g.lan.cup;
+      return el(
+        'div',
+        { class: 'lan' },
+        el('h3', { class: 'winner', text: '🥊 ' + (cup.done ? (cup.champ && cup.champ.id === this.myId ? t('cupYouChamp') : t('cupChamp', { name: cup.champ ? cup.champ.name : '-' })) : t('cupRoundDone', { n: cup.round, left: cup.left })) }),
+        this.cupEl(cup.done ? { ...cup, rounds: (live && live.rounds) || [cup.pairs] } : live || cup),
+        el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: p.name + timeOf(p) })))),
+        again(cup.done ? t('cupNew') : t('cupNextBtn')),
+        this.quickEl(),
         el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
         this.lanHistEl(),
       );
@@ -2725,6 +2981,7 @@ export class UI {
       el('ol', { class: 'top' }, r.map((p) => el('li', { class: p.id === this.myId ? 'me' : '' }, el('b', { text: pad5(p.sc) }), el('span', { text: p.name + timeOf(p) })))),
       coop ? this.coopTopEl() : null,
       again(tour ? (tour.done ? t('tourNew') : t('tourNext')) : t('again')),
+      this.quickEl(),
       el('button', { class: 'menu-btn', text: t('mpLeave'), onclick: () => this.leaveLanToMenu() }),
       this.lanHistEl(),
     );

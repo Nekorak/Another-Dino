@@ -12,6 +12,7 @@ import { UPGRADES } from './progress.js';
 import { MEDALS } from './medals.js';
 import { levelId, MAX_LEVELS, MAX_SLOTS, PIECES, SPEEDS } from './levels.js';
 import { BIOMES } from './biomes.js';
+import { TITLES, STICKERS, MASTERY, PAGES } from './longterm.js';
 import qrcode from 'qrcode';
 
 const HEADER = 'ANOTHERDINO';
@@ -24,6 +25,8 @@ const STAT_KEYS = [
   'coopGames', 'coopBest', 'levelsWon', 'levelsMade', 'photos', 'weeklies',
   // v1.6
   'teamBosses', 'seasonRuns', 'seasonBest', 'rushes',
+  // v1.7 / v1.8: LAN and the long-term shop
+  'giftsGot', 'giftsSent', 'relayWins', 'brackets', 'lanFinishes', 'packs', 'quickMsgs',
 ];
 
 function fnv(str) {
@@ -152,6 +155,13 @@ export function encodeProgress({ levels = true } = {}) {
   if (p.bossRush && p.bossRush.best) fields.push(['rush', `${p.bossRush.best},${p.bossRush.time || 0}`]);
   if (p.seasonRun && p.seasonRun.key && p.seasonRun.best) fields.push(['srun', `${p.seasonRun.key},${Math.floor(p.seasonRun.best)}`]);
   if (p.mutator && p.mutator.date && p.mutator.best) fields.push(['mut', `${p.mutator.date},${Math.floor(p.mutator.best)}`]);
+  // v1.8: titles, the sticker album and skin mastery (bought with bones, so they must travel)
+  if (p.titles.length) fields.push(['titles', [p.title || '-', ...p.titles].join(',')]);
+  const stk = Object.entries(p.stickers).filter(([, n]) => n > 0);
+  if (stk.length || p.glitter) fields.push(['stk', [Math.floor(p.glitter), ...stk.map(([k, n]) => `${k}:${n}`)].join(',')]);
+  if (p.pagesDone.length) fields.push(['pages', p.pagesDone.join(',')]);
+  const mast = Object.entries(p.mastery).filter(([, r]) => r > 0);
+  if (mast.length) fields.push(['mast', mast.map(([k, r]) => `${k}:${r}`).join(',')]);
   if (levels && p.levels && p.levels.length) fields.push(['levels', levelsToText(p.levels)]);
   // the co-op leaderboard (best 5 teams) travels with the tracks: both stay out of a too-big QR
   if (levels && p.coopTop && p.coopTop.length) fields.push(['coop', p.coopTop.slice(0, 5).map((e) => `${Math.floor(e.s) || 0}~${String(e.names || '').replace(/[;=,|~]/g, '').slice(0, 60)}`).join('|')]);
@@ -226,6 +236,23 @@ export function decodeProgress(text) {
         .map(([k, v]) => [k, Math.min(3, num(v))]),
     ),
     levels: textToLevels(vars.levels),
+    titles: list('titles').slice(1).filter((id) => TITLES[id]),
+    title: TITLES[list('titles')[0]] ? list('titles')[0] : '',
+    glitter: num(list('stk')[0]),
+    stickers: Object.fromEntries(
+      list('stk')
+        .slice(1)
+        .map((e) => e.split(':'))
+        .filter(([k]) => STICKERS.some((s) => s.id === k))
+        .map(([k, v]) => [k, Math.min(99, num(v))]),
+    ),
+    pagesDone: list('pages').map(Number).filter((n) => n >= 0 && n < PAGES.length),
+    mastery: Object.fromEntries(
+      list('mast')
+        .map((e) => e.split(':'))
+        .filter(([k]) => SKINS[k])
+        .map(([k, v]) => [k, Math.min(MASTERY.length, num(v))]),
+    ),
     storySeen: list('story').filter((k) => /^[a-z0-9]{1,8}$/i.test(k)).map((k) => (/^\d+$/.test(k) ? Number(k) : k)),
     weeklyTrack: /^[\w-]{1,16}$/.test(vars.wtrack || '') ? vars.wtrack : '',
     mutator: (() => {
@@ -346,6 +373,13 @@ export function mergeProgress(d) {
   }
   p.coopTop.sort((a, b) => b.s - a.s);
   p.coopTop.length = Math.min(p.coopTop.length, 10);
+  // v1.8: titles, stickers and mastery: everything bought on either device stays
+  for (const id of d.titles || []) if (!p.titles.includes(id)) p.titles.push(id);
+  if (d.title && !p.title) p.title = d.title;
+  for (const [k, v] of Object.entries(d.stickers || {})) p.stickers[k] = Math.max(p.stickers[k] || 0, v);
+  p.glitter = Math.max(p.glitter || 0, d.glitter || 0);
+  for (const n of d.pagesDone || []) if (!p.pagesDone.includes(n)) p.pagesDone.push(n);
+  for (const [k, v] of Object.entries(d.mastery || {})) p.mastery[k] = Math.max(p.mastery[k] || 0, v);
   if (!p.name && d.name) p.name = d.name;
   save();
 }

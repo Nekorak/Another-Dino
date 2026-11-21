@@ -123,7 +123,15 @@ function defaults() {
     lanHistory: [], // the last 10 LAN races { d, m, w, r: [{ n, s, me, tm, ft }] }
     lanWins: {}, // name -> LAN wins seen on this device
     lanLast: {}, // the last room joined { addr, port, name, at }
-    giftDay: { d: '', n: 0 }, // gifts sent today // the offers of the day already bought // the season run: best score of this season (key: year + season)
+    giftDay: { d: '', n: 0 }, // gifts sent today
+    lanSpec: false, // in LAN rooms: only watch the races
+    // v1.8: the long-term shop
+    titles: [], // titles owned
+    title: '', // the title worn
+    stickers: {}, // sticker id -> how many
+    glitter: 0, // from double stickers; buys missing ones
+    pagesDone: [], // album pages already rewarded
+    mastery: {}, // skin -> rank 1..3
   };
 }
 

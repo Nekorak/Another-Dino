@@ -67,6 +67,15 @@ Toată lista din notes/todo-design-gameplay.md (design și gameplay), plus cele 
 6. Istoric LAN: ultimele 10 curse și cine câștigă cel mai des
 7. Fiecare setare, mod și alegere are imagine animată și explicație; nicio opțiune ascunsă după un buton care se rotește
 
+## Gata în v1.8
+
+1. Cupa 1 la 1 în LAN: tablou cu eliminare, runde până la campion (+150 oase, titlu „Campion de cupă”)
+2. Spectator: „Doar mă uit” în cameră; cei eliminați din cupă se uită și ei
+3. Pachet de trasee prin LAN: gazda trimite toate traseele din editor tuturor
+4. Mesaje rapide în cameră (8 fraze)
+5. Realizări și medalii noi pentru LAN (ștafete, cupe, cadouri, sosiri, mesaje)
+6. Magazin pe termen lung: 20 de titluri, album de 48 de abțibilduri cu sclipici, măiestria skin-urilor (3 stele), îmbunătățiri noi (experiență, reînviere, cufăr) și mai multe niveluri pentru cele vechi. Peste 200 000 de oase de cheltuit în total.
+
 ## Idei noi
 
 - Salvare în cloud, clasament online și publicare pe Google Play (amânate deocamdată, au nevoie de server sau de cont de dezvoltator).

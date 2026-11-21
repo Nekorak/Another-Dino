@@ -128,6 +128,11 @@ Din v1.7 protocolul are versiunea 2 (`PROTO`): camerele vechi apar în listă ca
 - pe un traseu, cine trece linia de sosire trimite timpul (`ft`); rezultatele îi pun întâi pe cei care au terminat, după timp;
 - cadourile (`gift`) au o cheie și se retrimit până vine confirmarea (`gack`); gazda le dă mai departe după câmpul `to`;
 - handicapul (`hc`) se aplică doar pe dispozitivul jucătorului: lumea lui merge mai încet, dar scorul crește în același ritm.
+- v1.8: spectatorii (`spec: 1` în `join`) nu intră în `ord`; orice dispozitiv care nu e în `ord` doar privește cursa și nu trimite stare;
+- cupa (`bracket`): gazda ține perechile; după fiecare cursă `end` duce `cup` (perechi, câștigători, campion), iar lobby-ul duce tabloul curent. Cei eliminați nu mai sunt în `ord`;
+- pachetul de trasee (`pack`) merge ca un cadou: cheie, retrimitere până la `gack`, maximum 20 de trasee;
+- mesajele rapide (`qm`) duc doar numărul frazei (0–7), textul e tradus pe fiecare dispozitiv;
+- titlul purtat (`ti`) merge în `join` și în lobby.
 
 Protocolul suportă pachete pierdute, dublate și întârziate. Testul cu 3 jucători și 20% pierderi dă aceleași rezultate pe toate ecranele.
 

@@ -31,6 +31,7 @@ const ASSETS = [
   './js/medals.js',
   './js/gallery.js',
   './js/levels.js',
+  './js/longterm.js',
   './js/leveleditor.js',
   './js/bosses.js',
   './js/whatsnew.js',
