@@ -25,8 +25,10 @@ export function petProgress(id) {
 
 // What each pet does at a level (0 = no such pet). Every pet at level 5 also starts the run with a shield.
 export function petPower(id = profile.pet, level = petLevel(id)) {
-  const out = { bones100: 0, reach: 0, tongue: 0, powerK: 1, shield: level >= PET_MAX, scale: 1 + 0.12 * Math.max(0, level - 1) };
+  const out = { bones100: 0, reach: 0, tongue: 0, powerK: 1, shield: level >= PET_MAX, scale: 1 + 0.12 * Math.max(0, level - 1), saves: 0 };
   if (!level) return out;
+  // v1.9: from level 2 the pet jumps in and takes a hit for you once a run (twice from level 4)
+  out.saves = level >= 4 ? 2 : level >= 2 ? 1 : 0;
   if (id === 'turtle') out.bones100 = 1 + Math.floor((level - 1) / 2); // a bone every 100 points: 1, 1, 2, 2, 3
   if (id === 'ptera') out.reach = 1.2 + 0.2 * level; // catches bones higher up: 1.4 .. 2.2
   if (id === 'frog') out.tongue = 1.6 + 0.7 * level; // licks bones from this far ahead

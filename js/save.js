@@ -132,6 +132,10 @@ function defaults() {
     glitter: 0, // from double stickers; buys missing ones
     pagesDone: [], // album pages already rewarded
     mastery: {}, // skin -> rank 1..3
+    // v1.9
+    house: { owned: [], slots: {}, wall: 'cream', floor: 'wood', styles: [] }, // the dino's house
+    league: { wk: '', pts: {}, champs: [] }, // friends' league: this week's points by name, past champions
+    act2: false, // story act 2 finished (Adventure+)
   };
 }
 

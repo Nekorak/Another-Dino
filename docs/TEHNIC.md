@@ -134,6 +134,12 @@ Din v1.7 protocolul are versiunea 2 (`PROTO`): camerele vechi apar în listă ca
 - mesajele rapide (`qm`) duc doar numărul frazei (0–7), textul e tradus pe fiecare dispozitiv;
 - titlul purtat (`ti`) merge în `join` și în lobby.
 
+Din v1.9 protocolul are versiunea 3:
+- trofeele (`tr`, listă de id-uri) merg în `join` și în lobby;
+- raid: fiecare trimite în stare loviturile lui (`dm`); fiecare dispozitiv adună loviturile tuturor și scade din viața boss-ului (30 × alergători);
+- constructor: gazda alege constructorul pe rând și îl trimite în `go`/`all` (`bld`); obstacolele merg ca `atk` cu tipul piesei (`k`);
+- liga și trofeele se calculează pe fiecare dispozitiv, din rezultatele curselor.
+
 Protocolul suportă pachete pierdute, dublate și întârziate. Testul cu 3 jucători și 20% pierderi dă aceleași rezultate pe toate ecranele.
 
 ## Release și actualizări

@@ -43,6 +43,9 @@ export const MEDALS = {
   brackets: [1, 5, 20],
   lanFinishes: [1, 10, 50],
   packs: [5, 25, 100],
+  // v1.9
+  raids: [1, 10, 40],
+  builderWins: [1, 10, 40],
 };
 export const MEDAL_REWARD = [0, 25, 75, 200]; // bones for bronze, silver, gold
 export const MEDAL_NAMES = ['', 'bronze', 'silver', 'gold'];
