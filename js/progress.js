@@ -42,9 +42,13 @@ export function buyUpgrade(id) {
 // total XP needed to reach a level: 0, 100, 300, 600, 1000, ...
 export const xpForLevel = (l) => 50 * l * (l - 1);
 
+// the inverse of xpForLevel (a loop would hang on a huge XP from a damaged or forged save)
+export const MAX_XP = 1e9;
 export function levelOf(xp = profile.xp) {
-  let l = 1;
-  while (xpForLevel(l + 1) <= xp) l++;
+  const x = Math.min(MAX_XP, Math.max(0, Number(xp) || 0));
+  let l = Math.max(1, Math.floor((1 + Math.sqrt(1 + x / 12.5)) / 2));
+  while (l > 1 && xpForLevel(l) > x) l--; // float rounding
+  while (xpForLevel(l + 1) <= x) l++;
   return l;
 }
 
@@ -58,7 +62,7 @@ export function levelProgress(xp = profile.xp) {
 // returns { gained, levelUps: [levels], unlocked: [skin ids] }
 export function addXp(amount) {
   const before = levelOf();
-  profile.xp += Math.max(0, Math.floor(amount));
+  profile.xp = Math.min(MAX_XP, profile.xp + Math.max(0, Math.floor(amount) || 0));
   const after = levelOf();
   const levelUps = [];
   const unlocked = [];
@@ -80,8 +84,7 @@ export function addXp(amount) {
 }
 
 // ------------------------------------------------------------------ daily challenge
-export function today() {
-  const d = new Date();
+export function today(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
@@ -89,8 +92,7 @@ function dayNumber(date) {
   return Math.floor(new Date(date + 'T12:00:00').getTime() / 86400000);
 }
 
-export function dailyInfo() {
-  const date = today();
+export function dailyInfo(date = today()) {
   // v1.9: the world and the goal come from the day of the month (31 hand-made challenges)
   const ch = dayChallenge(new Date(date + 'T12:00:00'));
   const n = dayNumber(date);
@@ -100,7 +102,8 @@ export function dailyInfo() {
     d.best = 0;
   }
   // the streak survives only if yesterday (or today) was completed
-  const streakAlive = d.done && dayNumber(d.done) >= n - 1;
+  // (a done day in the future means the clock went back: no streak from that)
+  const streakAlive = d.done && dayNumber(d.done) >= n - 1 && dayNumber(d.done) <= n;
   return {
     date,
     seed: (n * 2654435761) >>> 0,
@@ -115,8 +118,9 @@ export function dailyInfo() {
 }
 
 // call when a daily run reaches its target; returns the bones awarded (0 if already done today)
-export function completeDaily() {
-  const info = dailyInfo();
+// date: the day the run started on (a run that crosses midnight still counts for that day)
+export function completeDaily(date) {
+  const info = dailyInfo(date || today());
   if (info.done) return 0;
   const d = profile.daily;
   d.streak = info.streak + 1;

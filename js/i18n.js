@@ -3178,7 +3178,7 @@ const MORE19 = {
     eventDesc_harvest: "Золотые листья и богатый урожай. Скин Осенний лист продаётся только сейчас.",
     eventNow: "{name}: ещё {n} дн.",
     eventNext: "Следующее: {name}, через {n} дн.",
-    eventStart: "{name} началось! Ещё {n} дн.: косточки +20% и скин только сейчас.",
+    eventStart: "Событие «{name}» началось! Ещё {n} дн.: косточки +20% и скин только сейчас.",
     eventsTitle: "Сезонные события",
     events: "СОБЫТИЯ",
     eventsHelp: "Несколько раз в год, по календарю телефона: косточки стоят +{n}%, а в магазине появляется скин, который продаётся только тогда. Купленный остаётся навсегда.",
@@ -3483,7 +3483,7 @@ const A11Y = {
 export const getLang = () => lang;
 
 export function t(key, vars) {
-  let s = STR[lang][key] ?? STR.en[key] ?? key;
+  let s = String(STR[lang][key] ?? STR.en[key] ?? key ?? '');
   if (vars) s = s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
   // the pixel font has ş/Ş (cedilla) but not ș/Ș (comma below)
   if (lang === 'ro') {

@@ -404,6 +404,7 @@ export class UI {
     for (const [id, key] of [['btn-resume', 'resumeBtn'], ['btn-photo', 'photo'], ['btn-pause-menu', 'menu'], ['btn-zen-end', 'zenEnd'], ['btn-photo-back', 'back'], ['btn-photo-save', 'photoSave'], ['btn-photo-share', 'share'], ['btn-win-next', 'advNext'], ['btn-win-map', 'advMap'], ['btn-win-retry', 'again']]) $(id).textContent = t(key);
     $('photo-hint').textContent = t('photoHint');
     this.setCoins();
+    this.setHi(this.p.stats.best); // the menu's "Best" label follows the language too
     this.menuInfo();
     if (this.panel) this.renderPanel();
   }
@@ -1468,6 +1469,7 @@ export class UI {
   closePanel(silent) {
     if (!this.panel) return;
     const was = this.panel;
+    this.capturing = null; // a key being set in the settings is forgotten when the panel closes
     // leaving the editor goes back to the list of tracks, not to the menu
     if (was === 'leveledit' && !silent) return this.openPanel('levels');
     this.panel = null;
@@ -1491,6 +1493,7 @@ export class UI {
     }
   }
   renderPanel() {
+    if (!this.panel) return; // no panel open (a late refresh after it closed)
     const titles = { bestiary: 'bestiary', collection: 'collection', progress: 'progress', shop: 'shop', missions: 'missions', stats: 'stats', settings: 'settings', lan: 'mpTitle', modes: 'modes', adventure: 'adventure', album: 'album', transfer: 'transfer', editor: 'edTitle', challenge: 'chTitle', pass: 'passTitle', levels: 'lvTitle', leveledit: 'lvEditTitle', jukebox: 'jukebox', house: 'house', events: 'events' };
     $('panel-title').textContent = t(titles[this.panel]);
     this.setCoins();
@@ -1521,6 +1524,7 @@ export class UI {
           this.openPanel('shop');
         }),
     }[this.panel];
+    if (!render) return; // no panel open (a late refresh after it closed)
     const scroll = body.scrollTop;
     body.replaceChildren(render());
     body.scrollTop = scroll;
@@ -2701,7 +2705,7 @@ export class UI {
       save();
     }
     this.capturing = null;
-    this.renderPanel();
+    if (this.panel === 'settings') this.renderPanel();
   }
   updateRow() {
     const row = infoRow('⬇️', t('set_version', { v: this.version || '…' }), t('setDesc_update'), el('button', { class: 'val', text: this.updating ? '…' : t('updateCheck'), onclick: () => this.checkUpdates(true) }));
@@ -3324,7 +3328,10 @@ export class UI {
       } else if (Capacitor.getPlatform() === 'android') {
         await Share.shareImage({ data: data.split(',')[1], text, mime });
       } else {
-        const blob = await (await fetch(data)).blob();
+        // a data URL turned into a file by hand: the page's security policy does not let fetch() read data: URLs
+        const [head, b64] = data.split(',');
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: (head.match(/data:([^;]+)/) || [])[1] || mime });
         const file = new File([blob], mime === 'image/jpeg' ? 'another-dino.jpg' : 'another-dino.png', { type: mime });
         if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], text });
         else if (navigator.clipboard && window.ClipboardItem) {

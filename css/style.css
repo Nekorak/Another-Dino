@@ -3304,6 +3304,10 @@ body.reduce-fx *::after {
   margin: 0;
   width: auto;
   min-width: 96px;
+  /* a long label ("Настройки по умолчанию") wraps instead of leaving the panel */
+  max-width: 45%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .val.switch {
   display: inline-flex;

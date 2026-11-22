@@ -8,11 +8,21 @@ import { SKINS, HATS, PETS } from './models.js';
 import { TRAILS, allFossils } from './collection.js';
 import { ACHIEVEMENTS } from './missions.js';
 import { DANCES, THEMES, EDITOR_GRID, EDITOR_PALETTE } from './custom.js';
-import { UPGRADES } from './progress.js';
+import { UPGRADES, MAX_XP } from './progress.js';
 import { MEDALS } from './medals.js';
 import { levelId, MAX_LEVELS, MAX_SLOTS, PIECES, SPEEDS } from './levels.js';
 import { BIOMES } from './biomes.js';
 import { TITLES, STICKERS, MASTERY, PAGES } from './longterm.js';
+
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const MAX_NUM = 1e9; // bones, stats, scores: far above anything a real player reaches
+const NAME_MAX = 12; // like the name field
+const ADV_LEVELS_N = 3; // levels per world (modes.js ADV_LEVELS)
+// adventure keys "world-level" (and "3-1h" is not stored here) must name a real level
+const validLevelKey = (k) => {
+  const m = /^(\d+)-(\d+)$/.exec(k);
+  return !!m && +m[1] < BIOMES.length && +m[2] < ADV_LEVELS_N;
+};
 import { FURNITURE, WALLS, FLOORS } from './house.js';
 import qrcode from 'qrcode';
 
@@ -184,13 +194,17 @@ export function decodeProgress(text) {
   if (!clean.startsWith(HEADER + ';')) throw new Error('xferBadCode');
   const i = clean.lastIndexOf(';sum=');
   if (i < 0 || fnv(clean.slice(0, i)) !== clean.slice(i + 5)) throw new Error('xferBadSum');
-  const vars = {};
+  const vars = Object.create(null);
   for (const part of clean.slice(HEADER.length + 1, i).split(';')) {
     const eq = part.indexOf('=');
     if (eq > 0) vars[part.slice(0, eq)] = part.slice(eq + 1);
   }
   const list = (k) => (vars[k] ? vars[k].split(',').filter(Boolean) : []);
-  const num = (v) => Math.max(0, Math.floor(Number(v) || 0));
+  // finite, not negative, and capped (Infinity would be saved as null and wipe the progress)
+  const num = (v, max = MAX_NUM) => {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? Math.min(max, Math.max(0, n)) : 0;
+  };
   const stats = {};
   list('stats').forEach((v, k) => STAT_KEYS[k] && (stats[STAT_KEYS[k]] = num(v)));
   const up = {};
@@ -201,18 +215,18 @@ export function decodeProgress(text) {
   const adventure = {};
   for (const e of list('adv')) {
     const [k, v] = e.split(':');
-    if (/^\d+-\d+$/.test(k)) adventure[k] = Math.min(3, num(v));
+    if (validLevelKey(k)) adventure[k] = Math.min(3, num(v));
   }
   const [streak, done] = (vars.daily || '0,').split(',');
   const wear = list('wear');
   return {
-    name: vars.name || '',
+    name: (vars.name || '').slice(0, NAME_MAX),
     bones: num(vars.bones),
-    xp: num(vars.xp),
-    skins: list('skins').filter((id) => SKINS[id]),
-    hats: list('hats').filter((id) => HATS[id]),
-    pets: list('pets').filter((id) => PETS[id]),
-    trails: list('trails').filter((id) => TRAILS[id]),
+    xp: num(vars.xp, MAX_XP),
+    skins: list('skins').filter((id) => own(SKINS, id)),
+    hats: list('hats').filter((id) => own(HATS, id)),
+    pets: list('pets').filter((id) => own(PETS, id)),
+    trails: list('trails').filter((id) => own(TRAILS, id)),
     wear: { skin: wear[0], hat: wear[1], pet: wear[2], trail: wear[3] },
     upgrades: up,
     stats,
@@ -222,20 +236,20 @@ export function decodeProgress(text) {
     daily: { streak: num(streak), done: done || '' },
     missions: num(vars.missions),
     tutorial: vars.tut === '1',
-    dances: list('dances').filter((id) => DANCES[id]),
-    themes: list('themes').filter((id) => THEMES[id]),
+    dances: list('dances').filter((id) => own(DANCES, id)),
+    themes: list('themes').filter((id) => own(THEMES, id)),
     wear2: { dance: list('wear2')[0], theme: list('wear2')[1] },
     custom: textToCustom(vars.custom),
     petXp: Object.fromEntries(
       list('petxp')
         .map((e) => e.split(':'))
-        .filter(([k]) => PETS[k])
+        .filter(([k]) => own(PETS, k))
         .map(([k, v]) => [k, num(v)]),
     ),
     medals: Object.fromEntries(
       list('medals')
         .map((e) => e.split(':'))
-        .filter(([k]) => MEDALS[k])
+        .filter(([k]) => own(MEDALS, k))
         .map(([k, v]) => [k, Math.min(3, num(v))]),
     ),
     levelStars: Object.fromEntries(
@@ -259,7 +273,7 @@ export function decodeProgress(text) {
     mastery: Object.fromEntries(
       list('mast')
         .map((e) => e.split(':'))
-        .filter(([k]) => SKINS[k])
+        .filter(([k]) => own(SKINS, k))
         .map(([k, v]) => [k, Math.min(MASTERY.length, num(v))]),
     ),
     house: vars.house
@@ -281,10 +295,10 @@ export function decodeProgress(text) {
       const [date, best] = (vars.mut || '').split(',');
       return /^\d{4}-\d{1,2}-\d{1,2}$/.test(date || '') ? { date, best: num(best) } : null;
     })(),
-    crowns: list('crowns').filter((k) => /^\d+-\d+$/.test(k)),
+    crowns: list('crowns').filter(validLevelKey),
     bossRush: (() => {
       const [best, time] = (vars.rush || '').split(',');
-      return { best: num(best), time: Number(time) || 0 };
+      return { best: num(best, BIOMES.length), time: num(time, 99999) };
     })(),
     seasonRun: (() => {
       const [key, best] = (vars.srun || '').split(',');
@@ -294,7 +308,7 @@ export function decodeProgress(text) {
       .split('|')
       .map((e) => e.split('~'))
       .filter(([sc, names]) => names && num(sc) > 0)
-      .map(([sc, names]) => ({ s: num(sc), names, d: 0 }))
+      .map(([sc, names]) => ({ s: num(sc), names: names.slice(0, 60), d: 0 }))
       .slice(0, 10),
     pass: (() => {
       const [season, xp, claimed] = (vars.pass || '').split(',');
@@ -318,14 +332,16 @@ export function decodeChallenge(text) {
   if (!isChallenge(clean)) throw new Error('xferBadCode');
   const i = clean.lastIndexOf(';sum=');
   if (i < 0 || fnv(clean.slice(0, i)) !== clean.slice(i + 5)) throw new Error('xferBadSum');
-  const vars = {};
+  const vars = Object.create(null);
   for (const part of clean.slice(CH_HEADER.length + 1, i).split(';')) {
     const eq = part.indexOf('=');
     if (eq > 0) vars[part.slice(0, eq)] = part.slice(eq + 1);
   }
   const seed = Number(vars.seed);
   if (!Number.isFinite(seed)) throw new Error('xferBadCode');
-  return { seed: seed >>> 0, score: Math.max(0, Math.floor(Number(vars.score) || 0)), name: vars.name || '?', skin: SKINS[vars.skin] ? vars.skin : 'classic' };
+  const sc = Math.floor(Number(vars.score));
+  const score = Number.isFinite(sc) ? Math.min(MAX_NUM, Math.max(0, sc)) : 0;
+  return { seed: seed >>> 0, score, name: (vars.name || '?').slice(0, 16), skin: own(SKINS, vars.skin) ? vars.skin : 'classic' };
 }
 
 // Merge never loses anything: numbers take the larger value, collections are joined.

@@ -39,6 +39,14 @@ export const HOUSE_MAX_BONUS = 0.1;
 
 const ensure = () => {
   const h = profile.house;
+  // drop anything that is not (or no longer) a piece of furniture, a wallpaper or a floor
+  h.owned = h.owned.filter((id, i, a) => FURNITURE[id] && a.indexOf(id) === i);
+  for (const k of Object.keys(h.slots)) if (!/^(wall|floor|table)\d$/.test(k) || +k.slice(-1) >= SLOTS[k.replace(/\d$/, '')] || (h.slots[k] && (!FURNITURE[h.slots[k]] || !h.owned.includes(h.slots[k]) || !k.startsWith(FURNITURE[h.slots[k]].slot)))) {
+    if (/^(wall|floor|table)\d$/.test(k) && +k.slice(-1) < SLOTS[k.replace(/\d$/, '')]) h.slots[k] = '';
+    else delete h.slots[k];
+  }
+  if (!WALLS[h.wall]) h.wall = 'cream';
+  if (!FLOORS[h.floor]) h.floor = 'wood';
   for (const [s, n] of Object.entries(SLOTS)) for (let i = 0; i < n; i++) if (!(s + i in h.slots)) h.slots[s + i] = '';
   return h;
 };
@@ -124,7 +132,7 @@ export function leagueRoll(d = new Date()) {
   const wk = weekKey(d);
   if (L.wk === wk) return null;
   let done = null;
-  const top = Object.entries(L.pts).sort((a, b) => b[1] - a[1])[0];
+  const top = Object.entries(L.pts).filter(([, p]) => Number.isFinite(p)).sort((a, b) => b[1] - a[1])[0];
   if (L.wk && top) {
     done = { wk: L.wk, name: top[0], pts: top[1], me: top[0] === profile.name };
     L.champs.unshift(done);
@@ -145,6 +153,7 @@ export function leagueRace(results) {
 }
 export const leagueTable = () =>
   Object.entries(profile.league.pts)
+    .filter(([, pts]) => Number.isFinite(pts))
     .map(([name, pts]) => ({ name, pts }))
     .sort((a, b) => b.pts - a.pts);
 // days left in this week's season (today counts)
