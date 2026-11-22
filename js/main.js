@@ -2150,8 +2150,11 @@ addEventListener('keyup', (e) => {
   else duckUp(tgt[0]);
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) setPaused(true); // the app in the background always pauses
+  if (!document.hidden) return;
+  setPaused(true); // the app in the background always pauses
+  save(); // and keeps the bones of this run: Android may close a background app without asking
 });
+addEventListener('pagehide', () => save());
 addEventListener('blur', () => profile.settings.autoPause && setPaused(true));
 
 // gamepads: A / up = jump, B / down = duck, X = send a boulder (LAN), Start = pause.
@@ -3291,7 +3294,7 @@ async function openLan() {
         ui.toast(t('tourBonus', { n: 150 }), 'gold');
       }
       st.mpGames++;
-      const coop = COOP_MODES.includes(session.mode);
+      const coop = COOP_MODES.includes(em); // the mode of the race that ended (a late 'end' may come after a mode change)
       const won = !coop && results.length > 1 && results[0].id === session.me.id;
       if (won) st.mpWins++;
       if (coop) {
@@ -3323,7 +3326,7 @@ async function openLan() {
           ui.toast(t('teamsBonus', { n: 40 }), 'gold');
         }
       }
-      if (won && lanMode === 'elimination') {
+      if (won && em === 'elimination') {
         profile.coins += 100;
         ui.toast(t('elimBonus', { n: 100 }), 'gold');
       }
@@ -3685,7 +3688,7 @@ function update(rawDt) {
     updateBoss(dt);
     if (daily && player.alive && dailyValue(player.points) >= daily.target && !daily.rewarded) {
       daily.rewarded = true;
-      const reward = completeDaily();
+      const reward = completeDaily(daily.date);
       if (reward) {
         sfx.reward();
         ui.toast(t('dailyDone', { n: reward }), 'gold');

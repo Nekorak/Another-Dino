@@ -164,7 +164,7 @@ function sanitize(base, p) {
     const b = base[k];
     const v = out[k];
     if (v === undefined || v === null) out[k] = b;
-    else if (typeof b === 'number') out[k] = typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || b;
+    else if (typeof b === 'number') out[k] = (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : b;
     else if (typeof b === 'string' || typeof b === 'boolean') out[k] = typeof v === typeof b ? v : b;
     else if (Array.isArray(b)) out[k] = Array.isArray(v) ? v : b;
     else if (b && typeof b === 'object') {
@@ -190,7 +190,8 @@ function load() {
   }
   if (typeof p !== 'object' || Array.isArray(p)) return base;
   const out = sanitize(base, p);
-  out.coins = Math.max(0, Math.floor(out.coins)); // a damaged save never leaves you in debt
+  out.coins = Math.min(1e9, Math.max(0, Math.floor(out.coins))); // a damaged save never leaves you in debt
+  out.xp = Math.min(1e9, Math.max(0, Math.floor(out.xp))); // a huge XP would hang the level count
   return out;
 }
 

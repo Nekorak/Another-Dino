@@ -198,7 +198,7 @@ export class LanSession {
     this.cup = this.cupInfo();
     const tour = this.tour ? { race: this.tour.race, total: this.tour.total } : null;
     this.lobbySt = this.state;
-    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode, tour, last: this.lastEnd || null, trk: this.trackFor(), cup: this.cup });
+    this.toPeers({ t: 'lobby', players: this.lobby, st: this.state, mode: this.mode, tour, last: this.lastEnd || null, trk: this.trackFor(), cup: this.cup, rs: this.raceSeed });
     this.on.lobby(this.lobby, true);
   }
 
@@ -550,7 +550,9 @@ export class LanSession {
             this.state = 'lobby';
             this.on.end(m.last.r, m.last.tour || null, m.last.mode || this.mode, m.last.cup || null);
           }
-          if (m.st === 'lobby' && this.state === 'race') this.state = 'lobby';
+          // back to the lobby only if the host is past OUR race: a late lobby packet sent
+          // before 'go' (rs = the previous race) must not stop the race we are running
+          if (m.st === 'lobby' && this.state === 'race' && (m.rs === undefined || m.rs === this.raceSeed)) this.state = 'lobby';
           this.on.lobby(m.players, false);
           break;
         case 'all':
